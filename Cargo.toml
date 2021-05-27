@@ -1,5 +1,5 @@
 [package]
-name = "calcit_vm"
+name = "calx_vm"
 version = "0.1.0"
 authors = ["jiyinyiyong <jiyinyiyong@gmail.com>"]
 edition = "2018"
