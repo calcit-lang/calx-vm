@@ -19,12 +19,19 @@ fn main() -> Result<(), String> {
       }
     }
 
-    let vm = CalxVM::new(fns, vec![]);
+    let mut vm = CalxVM::new(fns, vec![]);
 
-    for func in vm.funcs {
+    for func in vm.funcs.to_owned() {
       println!("loaded fn: {}", func);
     }
-    Ok(())
+
+    match vm.run(0, vec![]) {
+      Ok(_) => Ok(()),
+      Err(e) => {
+        println!("VM state: {:?}", vm.stack);
+        Err(e)
+      }
+    }
   } else {
     Err(String::from("TODO not cirru code"))
   }

@@ -9,6 +9,12 @@ use cirru_parser::Cirru;
 
 use crate::primes::{Calx, CalxFunc, CalxInstr, CalxType};
 
+/// parses
+/// ```cirru
+/// fn <f-name> (i64 f64)
+///   load 1
+///   echo
+/// ```
 pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   if nodes.len() <= 3 {
     return Err(String::from("Not a function"));
@@ -238,7 +244,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             }
             Ok(vec![CalxInstr::Quit(idx)])
           }
-          "ret" => Ok(vec![CalxInstr::Ret]),
+          "return" => Ok(vec![CalxInstr::Return]),
           _ => Err(format!("unknown instruction: {}", name)),
         },
       }
@@ -298,11 +304,12 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru]) -> Result<Vec<CalxInstr>, Stri
       }
     }
   }
+  chunk.push(CalxInstr::BlockEnd);
   chunk.insert(
     0,
     CalxInstr::Block {
       looped: false,
-      from: ptr_base,
+      from: ptr_base + 1,
       to: p,
     },
   );

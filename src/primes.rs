@@ -38,7 +38,7 @@ impl fmt::Display for Calx {
       Calx::Bool(b) => f.write_str(&b.to_string()),
       Calx::I64(n) => f.write_str(&n.to_string()),
       Calx::F64(n) => f.write_str(&n.to_string()),
-      Calx::Str(s) => f.write_str(&s),
+      Calx::Str(s) => f.write_str(s),
       Calx::List(xs) => {
         f.write_str("(")?;
         let mut at_head = true;
@@ -123,13 +123,14 @@ pub enum CalxInstr {
     from: usize,
     to: usize,
   },
+  BlockEnd,
   /// TODO use function name at first
   Echo, // pop and println current value
   Call(String, usize), // during running, only use index,
   Unreachable,
   Nop,
   Quit(usize), // quit and return value
-  Ret,
+  Return,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -140,7 +141,29 @@ pub struct CalxError {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct BlockData {
+  pub looped: bool,
+  pub from: usize,
+  pub to: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
   pub locals: Vec<Calx>, // params + added locals
   pub instrs: Vec<CalxInstr>,
+  pub pointer: usize,
+  pub initial_stack_size: usize,
+  pub blocks_track: Vec<BlockData>,
+}
+
+impl CalxFrame {
+  pub fn new_empty() -> Self {
+    CalxFrame {
+      locals: vec![],
+      instrs: vec![],
+      pointer: 0,
+      initial_stack_size: 0,
+      blocks_track: vec![],
+    }
+  }
 }
