@@ -1,7 +1,10 @@
 mod cirru;
 mod primes;
+mod vm;
 
-pub use primes::Calx;
+pub use cirru::parse_function;
+pub use primes::{Calx, CalxFrame, CalxFunc};
+pub use vm::CalxVM;
 
 #[cfg(test)]
 mod tests {
