@@ -21,9 +21,11 @@ fn main() -> Result<(), String> {
 
     let vm = CalxVM::new(fns, vec![]);
 
-    println!("loaded vm: {:?}", vm);
+    for func in vm.funcs {
+      println!("loaded fn: {}", func);
+    }
     Ok(())
   } else {
-    return Err(String::from("TODO not cirru code"));
+    Err(String::from("TODO not cirru code"))
   }
 }

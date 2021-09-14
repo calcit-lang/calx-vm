@@ -8,8 +8,6 @@
 
 use std::fmt;
 
-use cirru_parser::Cirru;
-
 /// Simplied from Calcit, but trying to be basic and mutable
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Calx {
@@ -67,10 +65,25 @@ pub struct CalxFunc {
   pub instrs: Vec<CalxInstr>,
 }
 
+impl fmt::Display for CalxFunc {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str("CalxFunc (")?;
+    for p in &self.params_type {
+      write!(f, "{:?} ", p)?;
+    }
+    f.write_str(")")?;
+    for (idx, instr) in self.instrs.iter().enumerate() {
+      write!(f, "\n  {:02} {:?}", idx, instr)?;
+    }
+    f.write_str("\n")?;
+    Ok(())
+  }
+}
+
 /// learning from WASM but for dynamic data
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CalxInstr {
-  Param, // load variable from parameter
+  // Param, // load variable from parameter
   Local, // new local variable
   LocalSet(usize),
   LocalGet(usize),
@@ -82,6 +95,7 @@ pub enum CalxInstr {
   // number operations
   IntAdd,
   IntMul,
+  IntDiv,
   IntRem,
   IntNeg,
   IntShr,
@@ -93,8 +107,8 @@ pub enum CalxInstr {
   // string operations
   // list operations
   NewList,
-  ListGet(usize),
-  ListSet(usize),
+  ListGet,
+  ListSet,
   // Link
   NewLink,
   // bool operations
@@ -107,14 +121,15 @@ pub enum CalxInstr {
     // bool oo to indicate loop
     looped: bool,
     from: usize,
-    range: usize,
+    to: usize,
   },
   /// TODO use function name at first
   Echo, // pop and println current value
-  Call(usize, String), // during running, only use index,
+  Call(String, usize), // during running, only use index,
   Unreachable,
   Nop,
-  Quit, // quit and return value
+  Quit(usize), // quit and return value
+  Ret,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
