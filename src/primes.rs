@@ -86,6 +86,7 @@ pub enum CalxInstr {
   // Param, // load variable from parameter
   Local, // new local variable
   LocalSet(usize),
+  LocalTee(usize), // set and also load to stack
   LocalGet(usize),
   GlobalSet(usize),
   GlobalGet(usize),
@@ -100,6 +101,18 @@ pub enum CalxInstr {
   IntNeg,
   IntShr,
   IntShl,
+  /// equal
+  IntEq,
+  /// not equal
+  IntNe,
+  /// littler than
+  IntLt,
+  /// littler than, or equal
+  IntLe,
+  /// greater than
+  IntGt,
+  /// greater than, or equal
+  IntGe,
   Add,
   Mul,
   Div,
