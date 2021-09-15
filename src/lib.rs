@@ -1,12 +1,7 @@
-mod cirru;
+mod parser;
 mod primes;
+mod vm;
 
-pub use primes::Calx;
-
-#[cfg(test)]
-mod tests {
-  #[test]
-  fn it_works() {
-    assert_eq!(2 + 2, 4);
-  }
-}
+pub use parser::parse_function;
+pub use primes::{Calx, CalxFrame, CalxFunc};
+pub use vm::CalxVM;
