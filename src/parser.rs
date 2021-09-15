@@ -89,7 +89,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
         Cirru::Leaf(name) => match name.as_str() {
           "local.get" => {
             if xs.len() != 2 {
-              return Err(format!("list.get expected a position, {:?}", xs));
+              return Err(format!("local.get expected a position, {:?}", xs));
             }
             let idx: usize;
             match &xs[1] {
@@ -104,7 +104,22 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           }
           "local.set" => {
             if xs.len() != 2 {
-              return Err(format!("list.get expected a position, {:?}", xs));
+              return Err(format!("local.set expected a position, {:?}", xs));
+            }
+            let idx: usize;
+            match &xs[1] {
+              Cirru::Leaf(s) => {
+                idx = parse_usize(s)?;
+              }
+              Cirru::List(_) => {
+                return Err(format!("expected token, got {}", xs[1]));
+              }
+            }
+            Ok(vec![CalxInstr::LocalSet(idx)])
+          }
+          "local.tee" => {
+            if xs.len() != 2 {
+              return Err(format!("list.tee expected a position, {:?}", xs));
             }
             let idx: usize;
             match &xs[1] {
@@ -119,7 +134,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           }
           "global.get" => {
             if xs.len() != 2 {
-              return Err(format!("list.get expected a position, {:?}", xs));
+              return Err(format!("global.get expected a position, {:?}", xs));
             }
             let idx: usize;
             match &xs[1] {
@@ -134,7 +149,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           }
           "global.set" => {
             if xs.len() != 2 {
-              return Err(format!("list.get expected a position, {:?}", xs));
+              return Err(format!("global.set expected a position, {:?}", xs));
             }
             let idx: usize;
             match &xs[1] {
@@ -168,6 +183,12 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           "i.rem" => Ok(vec![CalxInstr::IntRem]),
           "i.shr" => Ok(vec![CalxInstr::IntShr]),
           "i.shl" => Ok(vec![CalxInstr::IntShl]),
+          "i.eq" => Ok(vec![CalxInstr::IntEq]),
+          "i.ne" => Ok(vec![CalxInstr::IntNe]),
+          "i.lt" => Ok(vec![CalxInstr::IntLt]),
+          "i.le" => Ok(vec![CalxInstr::IntLe]),
+          "i.gt" => Ok(vec![CalxInstr::IntGt]),
+          "i.ge" => Ok(vec![CalxInstr::IntGe]),
           "add" => Ok(vec![CalxInstr::Add]),
           "mul" => Ok(vec![CalxInstr::Mul]),
           "div" => Ok(vec![CalxInstr::Div]),
@@ -181,7 +202,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           "or" => Ok(vec![CalxInstr::Or]),
           "br-if" => {
             if xs.len() != 2 {
-              return Err(format!("list.get expected a position, {:?}", xs));
+              return Err(format!("br-if expected a position, {:?}", xs));
             }
             let idx: usize;
             match &xs[1] {
@@ -196,7 +217,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           }
           "br" => {
             if xs.len() != 2 {
-              return Err(format!("list.get expected a position, {:?}", xs));
+              return Err(format!("br expected a position, {:?}", xs));
             }
             let idx: usize;
             match &xs[1] {
@@ -209,7 +230,8 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             }
             Ok(vec![CalxInstr::Br(idx)])
           }
-          "block" => parse_block(ptr_base, xs),
+          "block" => parse_block(ptr_base, xs, false),
+          "loop" => parse_block(ptr_base, xs, true),
           "echo" => Ok(vec![CalxInstr::Echo]),
           "call" => {
             let name: String;
@@ -231,7 +253,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           "nop" => Ok(vec![CalxInstr::Nop]),
           "quit" => {
             if xs.len() != 2 {
-              return Err(format!("list.get expected a position, {:?}", xs));
+              return Err(format!("quit expected a position, {:?}", xs));
             }
             let idx: usize;
             match &xs[1] {
@@ -292,7 +314,7 @@ pub fn parse_usize(s: &str) -> Result<usize, String> {
   }
 }
 
-pub fn parse_block(ptr_base: usize, xs: &[Cirru]) -> Result<Vec<CalxInstr>, String> {
+pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<CalxInstr>, String> {
   let mut p = ptr_base + 1;
   let mut chunk: Vec<CalxInstr> = vec![];
   for (idx, line) in xs.iter().enumerate() {
@@ -308,7 +330,7 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru]) -> Result<Vec<CalxInstr>, Stri
   chunk.insert(
     0,
     CalxInstr::Block {
-      looped: false,
+      looped,
       from: ptr_base + 1,
       to: p,
     },

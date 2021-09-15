@@ -57,6 +57,15 @@ impl CalxVM {
             self.top_frame.locals[idx] = v
           }
         }
+        CalxInstr::LocalTee(idx) => {
+          let v = self.stack_pop()?;
+          if self.top_frame.locals.len() == idx {
+            self.top_frame.locals.push(v.to_owned())
+          } else {
+            self.top_frame.locals[idx] = v.to_owned()
+          }
+          self.stack.push(v);
+        }
         CalxInstr::LocalGet(idx) => {
           if idx < self.top_frame.locals.len() {
             self.stack.push(self.top_frame.locals[idx].to_owned())
@@ -139,10 +148,109 @@ impl CalxVM {
           }
         }
         CalxInstr::IntShr => {
-          // TODO
+          let bits = self.stack_pop()?;
+          let v = self.stack_pop()?;
+          match (v.to_owned(), bits.to_owned()) {
+            (Calx::I64(n), Calx::I64(b)) => {
+              self.stack.push(Calx::I64(n.checked_shr(b as u32).unwrap()))
+            }
+            (_, _) => return Err(format!("invalid number for SHR, {:?} {:?}", v, bits)),
+          }
         }
         CalxInstr::IntShl => {
-          // TODO
+          let bits = self.stack_pop()?.to_owned();
+          let v = self.stack_pop()?;
+          match (v.to_owned(), bits.to_owned()) {
+            (Calx::I64(n), Calx::I64(b)) => {
+              self.stack.push(Calx::I64(n.checked_shl(b as u32).unwrap()))
+            }
+            (_, _) => return Err(format!("invalid number for SHL, {:?} {:?}", v, bits)),
+          }
+        }
+        CalxInstr::IntEq => {
+          // reversed order
+          let v2 = self.stack_pop()?;
+          let v1 = self.stack_pop()?;
+          match (&v1, &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 == n2)),
+            (_, _) => {
+              return Err(format!(
+                "expected 2 integers to eq compare, {:?} {:?}",
+                v1, v2
+              ))
+            }
+          }
+        }
+
+        CalxInstr::IntNe => {
+          // reversed order
+          let v2 = self.stack_pop()?;
+          let v1 = self.stack_pop()?;
+          match (&v1, &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 != n2)),
+            (_, _) => {
+              return Err(format!(
+                "expected 2 integers to ne compare, {:?} {:?}",
+                v1, v2
+              ))
+            }
+          }
+        }
+        CalxInstr::IntLt => {
+          // reversed order
+          let v2 = self.stack_pop()?;
+          let v1 = self.stack_pop()?;
+          match (&v1, &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 < n2)),
+            (_, _) => {
+              return Err(format!(
+                "expected 2 integers to le compare, {:?} {:?}",
+                v1, v2
+              ))
+            }
+          }
+        }
+        CalxInstr::IntLe => {
+          // reversed order
+          let v2 = self.stack_pop()?;
+          let v1 = self.stack_pop()?;
+          match (&v1, &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 <= n2)),
+            (_, _) => {
+              return Err(format!(
+                "expected 2 integers to le compare, {:?} {:?}",
+                v1, v2
+              ))
+            }
+          }
+        }
+        CalxInstr::IntGt => {
+          // reversed order
+          let v2 = self.stack_pop()?;
+          let v1 = self.stack_pop()?;
+          match (&v1, &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 > n2)),
+            (_, _) => {
+              return Err(format!(
+                "expected 2 integers to gt compare, {:?} {:?}",
+                v1, v2
+              ))
+            }
+          }
+        }
+        CalxInstr::IntGe => {
+          // reversed order
+          let v2 = self.stack_pop()?;
+          let v1 = self.stack_pop()?;
+          match (&v1, &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 >= n2)),
+            (_, _) => {
+              return Err(format!(
+                "expected 2 integers to ge compare, {:?} {:?}",
+                v1, v2
+              ))
+            }
+          }
         }
         CalxInstr::Add => {
           // reversed order
@@ -197,11 +305,60 @@ impl CalxVM {
         CalxInstr::Or => {
           // TODO
         }
-        CalxInstr::Br(usize) => {
-          // TODO
+        CalxInstr::Br(size) => {
+          if self.top_frame.blocks_track.len() <= size {
+            return Err(format!(
+              "stack size {} eq/smaller than br size {}",
+              self.top_frame.blocks_track.len(),
+              size
+            ));
+          }
+          let mut i = size;
+          while i > 0 {
+            self.top_frame.blocks_track.pop();
+            i -= 1;
+          }
+          let block = self
+            .top_frame
+            .blocks_track
+            .last()
+            .expect("br should be used inside block");
+          if block.looped {
+            self.top_frame.pointer = block.from;
+          } else {
+            self.top_frame.pointer = block.to;
+          }
+
+          continue; // point reset, goto next loop
         }
-        CalxInstr::BrIf(usize) => {
-          // TODO
+        CalxInstr::BrIf(size) => {
+          let v = self.stack_pop()?;
+          if v == Calx::Bool(true) || v == Calx::I64(1) {
+            if self.top_frame.blocks_track.len() <= size {
+              return Err(format!(
+                "stack size {} eq/smaller than br size {}",
+                self.top_frame.blocks_track.len(),
+                size
+              ));
+            }
+            let mut i = size;
+            while i > 0 {
+              self.top_frame.blocks_track.pop();
+              i -= 1;
+            }
+            let block = self
+              .top_frame
+              .blocks_track
+              .last()
+              .expect("br should be used inside block");
+            if block.looped {
+              self.top_frame.pointer = block.from;
+            } else {
+              self.top_frame.pointer = block.to;
+            }
+
+            continue; // point reset, goto next loop
+          }
         }
         CalxInstr::Block { looped, from, to } => {
           self
