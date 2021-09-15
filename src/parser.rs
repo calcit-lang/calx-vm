@@ -12,7 +12,7 @@ use crate::primes::{Calx, CalxFunc, CalxInstr, CalxType};
 /// parses
 /// ```cirru
 /// fn <f-name> (i64 f64)
-///   load 1
+///   const 1
 ///   echo
 /// ```
 pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
@@ -44,6 +44,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
         match t.as_str() {
           "nil" => params.push(CalxType::Nil),
           "bool" => params.push(CalxType::Bool),
+          "i64" => params.push(CalxType::I64),
           "f64" => params.push(CalxType::F64),
           "list" => params.push(CalxType::List),
           "link" => params.push(CalxType::Link),
@@ -162,16 +163,16 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             }
             Ok(vec![CalxInstr::GlobalSet(idx)])
           }
-          "load" => {
+          "const" => {
             if xs.len() != 2 {
-              return Err(format!("load takes exactly 1 argument, got {:?}", xs));
+              return Err(format!("const takes exactly 1 argument, got {:?}", xs));
             }
             match &xs[1] {
               Cirru::Leaf(s) => {
                 let p1 = parse_value(s)?;
-                Ok(vec![CalxInstr::Load(p1)])
+                Ok(vec![CalxInstr::Const(p1)])
               }
-              Cirru::List(a) => Err(format!("`load` not supporting list here: {:?}", a)),
+              Cirru::List(a) => Err(format!("`const` not supporting list here: {:?}", a)),
             }
           }
           "dup" => Ok(vec![CalxInstr::Dup]),
@@ -235,19 +236,15 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           "echo" => Ok(vec![CalxInstr::Echo]),
           "call" => {
             let name: String;
-            let size: usize;
-            if xs.len() != 3 {
-              return Err(format!("call expected fn and size, {:?}", xs));
+            if xs.len() != 2 {
+              return Err(format!("call expected function name, {:?}", xs));
             }
             match &xs[1] {
               Cirru::Leaf(s) => name = s.to_owned(),
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
             }
-            match &xs[2] {
-              Cirru::Leaf(s) => size = parse_usize(s)?,
-              Cirru::List(_) => return Err(format!("expected a size, {}", xs[2])),
-            }
-            Ok(vec![CalxInstr::Call(name, size)])
+
+            Ok(vec![CalxInstr::Call(name)])
           }
           "unreachable" => Ok(vec![CalxInstr::Unreachable]),
           "nop" => Ok(vec![CalxInstr::Nop]),

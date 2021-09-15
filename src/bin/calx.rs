@@ -2,7 +2,7 @@ use std::fs;
 
 use cirru_parser::{parse, Cirru};
 
-use calx_vm::{parse_function, Calx, CalxFrame, CalxFunc, CalxVM};
+use calx_vm::{parse_function, CalxFunc, CalxVM};
 
 fn main() -> Result<(), String> {
   let contents = fs::read_to_string("examples/demo.cirru").expect("Cirru file for instructions");
@@ -21,12 +21,15 @@ fn main() -> Result<(), String> {
 
     let mut vm = CalxVM::new(fns, vec![]);
 
-    for func in vm.funcs.to_owned() {
-      println!("loaded fn: {}", func);
-    }
+    // for func in vm.funcs.to_owned() {
+    //   println!("loaded fn: {}", func);
+    // }
 
-    match vm.run(0, vec![]) {
-      Ok(_) => Ok(()),
+    match vm.run() {
+      Ok(v) => {
+        println!("Result: {}", v);
+        Ok(())
+      }
       Err(e) => {
         println!("VM state: {:?}", vm.stack);
         Err(e)

@@ -23,7 +23,7 @@ For binary op, top value puts on right.
 | `local.get $idx`  | get value at `$idx` load on stack                       |             |
 | `global.set $idx` | set global value at `$idx`                              |             |
 | `global.get $idx` | get global value at `$idx`                              |             |
-| `load $v`         | load value `$v` on stack                                |             |
+| `const $v`        | push value `$v` on stack                                |             |
 | `dup`             | duplicate top value on stack                            |             |
 | `drop`            | drop top value from stack                               |             |
 | `i.add`           | add two i64 numbers on stack into one                   |             |
@@ -55,7 +55,7 @@ For binary op, top value puts on right.
 | `loop`            | declare a loop block                                    |             |
 | (BlockEnd)        | internal mark for ending a block                        | Internal    |
 | `echo`            | pop value from stack and print                          |             |
-| `call $f $size`   | call function `$f` with `$size` params                  |             |
+| `call $f`         | call function `$f`                                      |             |
 | `unreachable`     | throw unreachable panic                                 |             |
 | `nop`             | No op                                                   |             |
 | `quit $code`      | quit program and return exit code `$code`               |             |

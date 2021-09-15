@@ -90,7 +90,7 @@ pub enum CalxInstr {
   LocalGet(usize),
   GlobalSet(usize),
   GlobalGet(usize),
-  Load(Calx),
+  Const(Calx),
   Dup,
   Drop,
   // number operations
@@ -139,7 +139,7 @@ pub enum CalxInstr {
   BlockEnd,
   /// TODO use function name at first
   Echo, // pop and println current value
-  Call(String, usize), // during running, only use index,
+  Call(String), // during running, only use index,
   Unreachable,
   Nop,
   Quit(usize), // quit and return value
