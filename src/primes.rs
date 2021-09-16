@@ -61,14 +61,15 @@ impl fmt::Display for Calx {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFunc {
   pub name: String,
-  pub params_type: Vec<CalxType>,
+  pub params_types: Vec<CalxType>,
+  pub ret_types: Vec<CalxType>,
   pub instrs: Vec<CalxInstr>,
 }
 
 impl fmt::Display for CalxFunc {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("CalxFunc (")?;
-    for p in &self.params_type {
+    for p in &self.params_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str(")")?;
@@ -90,7 +91,7 @@ pub enum CalxInstr {
   LocalGet(usize),
   GlobalSet(usize),
   GlobalGet(usize),
-  Load(Calx),
+  Const(Calx),
   Dup,
   Drop,
   // number operations
@@ -132,6 +133,8 @@ pub enum CalxInstr {
   BrIf(usize),
   Block {
     // bool oo to indicate loop
+    params_types: Vec<CalxType>,
+    ret_types: Vec<CalxType>,
     looped: bool,
     from: usize,
     to: usize,
@@ -139,7 +142,8 @@ pub enum CalxInstr {
   BlockEnd,
   /// TODO use function name at first
   Echo, // pop and println current value
-  Call(String, usize), // during running, only use index,
+  Call(String),       // during running, only use index,
+  CallImport(String), // TODO,
   Unreachable,
   Nop,
   Quit(usize), // quit and return value
@@ -156,8 +160,11 @@ pub struct CalxError {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BlockData {
   pub looped: bool,
+  pub params_types: Vec<CalxType>,
+  pub ret_types: Vec<CalxType>,
   pub from: usize,
   pub to: usize,
+  pub initial_stack_size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -167,6 +174,7 @@ pub struct CalxFrame {
   pub pointer: usize,
   pub initial_stack_size: usize,
   pub blocks_track: Vec<BlockData>,
+  pub ret_types: Vec<CalxType>,
 }
 
 impl CalxFrame {
@@ -177,6 +185,23 @@ impl CalxFrame {
       pointer: 0,
       initial_stack_size: 0,
       blocks_track: vec![],
+      ret_types: vec![],
     }
+  }
+}
+
+impl fmt::Display for CalxFrame {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str("CalxFrame ")?;
+    write!(f, "@{} (", self.initial_stack_size)?;
+    for p in &self.ret_types {
+      write!(f, "{:?} ", p)?;
+    }
+    f.write_str(")")?;
+    for (idx, instr) in self.instrs.iter().enumerate() {
+      write!(f, "\n  {:02} {:?}", idx, instr)?;
+    }
+    f.write_str("\n")?;
+    Ok(())
   }
 }

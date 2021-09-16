@@ -12,7 +12,7 @@ use crate::primes::{Calx, CalxFunc, CalxInstr, CalxType};
 /// parses
 /// ```cirru
 /// fn <f-name> (i64 f64)
-///   load 1
+///   const 1
 ///   echo
 /// ```
 pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
@@ -37,23 +37,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     return Err(String::from("invalid name"));
   }
 
-  let mut params: Vec<CalxType> = vec![];
-  if let Cirru::List(xs) = nodes[2].to_owned() {
-    for x in xs {
-      if let Cirru::Leaf(t) = x {
-        match t.as_str() {
-          "nil" => params.push(CalxType::Nil),
-          "bool" => params.push(CalxType::Bool),
-          "f64" => params.push(CalxType::F64),
-          "list" => params.push(CalxType::List),
-          "link" => params.push(CalxType::Link),
-          a => return Err(format!("Unknown type: {}", a)),
-        }
-      }
-    }
-  } else {
-    return Err(String::from("Expected params"));
-  }
+  let (params_types, ret_types) = parse_types(&nodes[2])?;
 
   let mut body: Vec<CalxInstr> = vec![];
   let mut ptr_base: usize = 0;
@@ -70,7 +54,8 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
 
   Ok(CalxFunc {
     name,
-    params_type: params,
+    params_types,
+    ret_types,
     instrs: body,
   })
 }
@@ -162,16 +147,16 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             }
             Ok(vec![CalxInstr::GlobalSet(idx)])
           }
-          "load" => {
+          "const" => {
             if xs.len() != 2 {
-              return Err(format!("load takes exactly 1 argument, got {:?}", xs));
+              return Err(format!("const takes exactly 1 argument, got {:?}", xs));
             }
             match &xs[1] {
               Cirru::Leaf(s) => {
                 let p1 = parse_value(s)?;
-                Ok(vec![CalxInstr::Load(p1)])
+                Ok(vec![CalxInstr::Const(p1)])
               }
-              Cirru::List(a) => Err(format!("`load` not supporting list here: {:?}", a)),
+              Cirru::List(a) => Err(format!("`const` not supporting list here: {:?}", a)),
             }
           }
           "dup" => Ok(vec![CalxInstr::Dup]),
@@ -235,22 +220,34 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           "echo" => Ok(vec![CalxInstr::Echo]),
           "call" => {
             let name: String;
-            let size: usize;
-            if xs.len() != 3 {
-              return Err(format!("call expected fn and size, {:?}", xs));
+            if xs.len() != 2 {
+              return Err(format!("call expected function name, {:?}", xs));
             }
             match &xs[1] {
               Cirru::Leaf(s) => name = s.to_owned(),
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
             }
-            match &xs[2] {
-              Cirru::Leaf(s) => size = parse_usize(s)?,
-              Cirru::List(_) => return Err(format!("expected a size, {}", xs[2])),
+
+            Ok(vec![CalxInstr::Call(name)])
+          }
+          "call-import" => {
+            let name: String;
+            if xs.len() != 2 {
+              return Err(format!("call expected function name, {:?}", xs));
             }
-            Ok(vec![CalxInstr::Call(name, size)])
+            match &xs[1] {
+              Cirru::Leaf(s) => name = s.to_owned(),
+              Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
+            }
+
+            Ok(vec![CalxInstr::CallImport(name)])
           }
           "unreachable" => Ok(vec![CalxInstr::Unreachable]),
           "nop" => Ok(vec![CalxInstr::Nop]),
+          ";;" => {
+            // commenOk
+            Ok(vec![])
+          }
           "quit" => {
             if xs.len() != 2 {
               return Err(format!("quit expected a position, {:?}", xs));
@@ -317,8 +314,9 @@ pub fn parse_usize(s: &str) -> Result<usize, String> {
 pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<CalxInstr>, String> {
   let mut p = ptr_base + 1;
   let mut chunk: Vec<CalxInstr> = vec![];
+  let (params_types, ret_types) = parse_types(&xs[1])?;
   for (idx, line) in xs.iter().enumerate() {
-    if idx > 0 {
+    if idx > 1 {
       let instrs = parse_instr(p, line)?;
       for y in instrs {
         p += 1;
@@ -333,7 +331,75 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<Ca
       looped,
       from: ptr_base + 1,
       to: p,
+      params_types,
+      ret_types,
     },
   );
   Ok(chunk)
+}
+
+pub fn parse_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String> {
+  match xs {
+    Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
+    Cirru::List(ys) => {
+      let mut params: Vec<CalxType> = vec![];
+      let mut returns: Vec<CalxType> = vec![];
+      let mut ret_mode = false;
+
+      for x in ys {
+        if let Cirru::Leaf(t) = x {
+          match t.as_str() {
+            "->" => {
+              ret_mode = true;
+            }
+            "nil" => {
+              if ret_mode {
+                returns.push(CalxType::Nil);
+              } else {
+                params.push(CalxType::Nil);
+              }
+            }
+            "bool" => {
+              if ret_mode {
+                returns.push(CalxType::Bool);
+              } else {
+                params.push(CalxType::Bool);
+              }
+            }
+            "i64" => {
+              if ret_mode {
+                returns.push(CalxType::I64);
+              } else {
+                params.push(CalxType::I64);
+              }
+            }
+            "f64" => {
+              if ret_mode {
+                returns.push(CalxType::F64);
+              } else {
+                params.push(CalxType::F64);
+              }
+            }
+            "list" => {
+              if ret_mode {
+                returns.push(CalxType::List);
+              } else {
+                params.push(CalxType::List);
+              }
+            }
+            "link" => {
+              if ret_mode {
+                returns.push(CalxType::Link);
+              } else {
+                params.push(CalxType::Link);
+              }
+            }
+            a => return Err(format!("Unknown type: {}", a)),
+          }
+        }
+      }
+
+      Ok((params, returns))
+    }
+  }
 }
