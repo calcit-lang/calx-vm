@@ -37,24 +37,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     return Err(String::from("invalid name"));
   }
 
-  let mut params: Vec<CalxType> = vec![];
-  if let Cirru::List(xs) = nodes[2].to_owned() {
-    for x in xs {
-      if let Cirru::Leaf(t) = x {
-        match t.as_str() {
-          "nil" => params.push(CalxType::Nil),
-          "bool" => params.push(CalxType::Bool),
-          "i64" => params.push(CalxType::I64),
-          "f64" => params.push(CalxType::F64),
-          "list" => params.push(CalxType::List),
-          "link" => params.push(CalxType::Link),
-          a => return Err(format!("Unknown type: {}", a)),
-        }
-      }
-    }
-  } else {
-    return Err(String::from("Expected params"));
-  }
+  let (params_types, ret_types) = parse_types(&nodes[2])?;
 
   let mut body: Vec<CalxInstr> = vec![];
   let mut ptr_base: usize = 0;
@@ -71,7 +54,8 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
 
   Ok(CalxFunc {
     name,
-    params_type: params,
+    params_types,
+    ret_types,
     instrs: body,
   })
 }
@@ -314,8 +298,9 @@ pub fn parse_usize(s: &str) -> Result<usize, String> {
 pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<CalxInstr>, String> {
   let mut p = ptr_base + 1;
   let mut chunk: Vec<CalxInstr> = vec![];
+  let (params_types, ret_types) = parse_types(&xs[1])?;
   for (idx, line) in xs.iter().enumerate() {
-    if idx > 0 {
+    if idx > 1 {
       let instrs = parse_instr(p, line)?;
       for y in instrs {
         p += 1;
@@ -330,7 +315,75 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<Ca
       looped,
       from: ptr_base + 1,
       to: p,
+      params_types,
+      ret_types,
     },
   );
   Ok(chunk)
+}
+
+pub fn parse_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String> {
+  match xs {
+    Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
+    Cirru::List(ys) => {
+      let mut params: Vec<CalxType> = vec![];
+      let mut returns: Vec<CalxType> = vec![];
+      let mut ret_mode = false;
+
+      for x in ys {
+        if let Cirru::Leaf(t) = x {
+          match t.as_str() {
+            "->" => {
+              ret_mode = true;
+            }
+            "nil" => {
+              if ret_mode {
+                returns.push(CalxType::Nil);
+              } else {
+                params.push(CalxType::Nil);
+              }
+            }
+            "bool" => {
+              if ret_mode {
+                returns.push(CalxType::Bool);
+              } else {
+                params.push(CalxType::Bool);
+              }
+            }
+            "i64" => {
+              if ret_mode {
+                returns.push(CalxType::I64);
+              } else {
+                params.push(CalxType::I64);
+              }
+            }
+            "f64" => {
+              if ret_mode {
+                returns.push(CalxType::F64);
+              } else {
+                params.push(CalxType::F64);
+              }
+            }
+            "list" => {
+              if ret_mode {
+                returns.push(CalxType::List);
+              } else {
+                params.push(CalxType::List);
+              }
+            }
+            "link" => {
+              if ret_mode {
+                returns.push(CalxType::Link);
+              } else {
+                params.push(CalxType::Link);
+              }
+            }
+            a => return Err(format!("Unknown type: {}", a)),
+          }
+        }
+      }
+
+      Ok((params, returns))
+    }
+  }
 }

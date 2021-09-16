@@ -61,14 +61,15 @@ impl fmt::Display for Calx {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFunc {
   pub name: String,
-  pub params_type: Vec<CalxType>,
+  pub params_types: Vec<CalxType>,
+  pub ret_types: Vec<CalxType>,
   pub instrs: Vec<CalxInstr>,
 }
 
 impl fmt::Display for CalxFunc {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("CalxFunc (")?;
-    for p in &self.params_type {
+    for p in &self.params_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str(")")?;
@@ -132,6 +133,8 @@ pub enum CalxInstr {
   BrIf(usize),
   Block {
     // bool oo to indicate loop
+    params_types: Vec<CalxType>,
+    ret_types: Vec<CalxType>,
     looped: bool,
     from: usize,
     to: usize,
@@ -156,6 +159,8 @@ pub struct CalxError {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BlockData {
   pub looped: bool,
+  pub params_types: Vec<CalxType>,
+  pub ret_types: Vec<CalxType>,
   pub from: usize,
   pub to: usize,
 }

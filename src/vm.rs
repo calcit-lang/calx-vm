@@ -371,12 +371,19 @@ impl CalxVM {
             continue; // point reset, goto next loop
           }
         }
-        CalxInstr::Block { looped, from, to } => {
-          self
-            .top_frame
-            .blocks_track
-            .push(BlockData { looped, from, to })
-        }
+        CalxInstr::Block {
+          looped,
+          from,
+          to,
+          params_types,
+          ret_types,
+        } => self.top_frame.blocks_track.push(BlockData {
+          looped,
+          params_types,
+          ret_types,
+          from,
+          to,
+        }),
         CalxInstr::BlockEnd => {
           self.top_frame.blocks_track.pop();
         }
@@ -388,7 +395,7 @@ impl CalxVM {
           match find_func(&self.funcs, &f_name) {
             Some(f) => {
               let mut locals: Vec<Calx> = vec![];
-              for _ in 0..f.params_type.len() {
+              for _ in 0..f.params_types.len() {
                 let v = self.stack_pop()?;
                 locals.insert(0, v);
               }
@@ -402,7 +409,7 @@ impl CalxVM {
               };
 
               // TODO check params type
-              println!("TODO check args: {:?}", f.params_type);
+              println!("TODO check args: {:?}", f.params_types);
 
               // start in new frame
               continue;
