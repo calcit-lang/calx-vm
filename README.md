@@ -65,8 +65,8 @@ For binary op, top value puts on right.
 For `$types`, it can be `($t1 $t2 -> $t3 $t4)`, where supported types are:
 
 - nil
-- i32
 - i64
+- f64
 - bool _TODO_
 - str _TODO_
 - list _TODO_

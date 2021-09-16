@@ -232,6 +232,10 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           }
           "unreachable" => Ok(vec![CalxInstr::Unreachable]),
           "nop" => Ok(vec![CalxInstr::Nop]),
+          ";;" => {
+            // commenOk
+            Ok(vec![])
+          }
           "quit" => {
             if xs.len() != 2 {
               return Err(format!("quit expected a position, {:?}", xs));

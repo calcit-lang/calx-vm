@@ -163,6 +163,7 @@ pub struct BlockData {
   pub ret_types: Vec<CalxType>,
   pub from: usize,
   pub to: usize,
+  pub initial_stack_size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -172,6 +173,7 @@ pub struct CalxFrame {
   pub pointer: usize,
   pub initial_stack_size: usize,
   pub blocks_track: Vec<BlockData>,
+  pub ret_types: Vec<CalxType>,
 }
 
 impl CalxFrame {
@@ -182,6 +184,23 @@ impl CalxFrame {
       pointer: 0,
       initial_stack_size: 0,
       blocks_track: vec![],
+      ret_types: vec![],
     }
+  }
+}
+
+impl fmt::Display for CalxFrame {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str("CalxFrame ")?;
+    write!(f, "@{} (", self.initial_stack_size)?;
+    for p in &self.ret_types {
+      write!(f, "{:?} ", p)?;
+    }
+    f.write_str(")")?;
+    for (idx, instr) in self.instrs.iter().enumerate() {
+      write!(f, "\n  {:02} {:?}", idx, instr)?;
+    }
+    f.write_str("\n")?;
+    Ok(())
   }
 }

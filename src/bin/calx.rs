@@ -26,13 +26,14 @@ fn main() -> Result<(), String> {
     // }
 
     match vm.run() {
-      Ok(v) => {
-        println!("Result: {}", v);
+      Ok(()) => {
+        println!("Result: {:?}", vm.stack);
         Ok(())
       }
       Err(e) => {
         println!("VM state: {:?}", vm.stack);
-        Err(e)
+        println!("{}", e);
+        Err(String::from("Failed to run"))
       }
     }
   } else {

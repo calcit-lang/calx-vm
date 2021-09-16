@@ -9,9 +9,10 @@ fn demo (-> i64)
     block (->) (const 1.) (const 2.) (neg) (add) (echo)
       block (->) (const 1.) (const 2.) (neg) (add) (echo)
   const "|======"
+  echo
   block (->) (br 0) (const 1.) (const 2.) (neg) (add) (echo)
   , (const "|demo of string") (echo)
-  block (->)
+  block (-> i64)
     const 0
     local.set 0
     const 0
@@ -32,11 +33,11 @@ fn demo (-> i64)
   local.get 0
   echo
 
-fn main ()
+fn main (-> i64)
   const "|loading program"
   echo
 
-  const 2
+  ;; const 2
   call demo
 
   return
