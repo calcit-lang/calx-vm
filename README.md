@@ -56,6 +56,7 @@ For binary op, top value puts on right.
 | (BlockEnd)           | internal mark for ending a block                        | Internal          |
 | `echo`               | pop value from stack and print                          |                   |
 | `call $f`            | call function `$f`                                      |                   |
+| `call-import $f`     | call imported function `$f`                             |                   |
 | `unreachable`        | throw unreachable panic                                 |                   |
 | `nop`                | No op                                                   |                   |
 | `quit $code`         | quit program and return exit code `$code`               |                   |

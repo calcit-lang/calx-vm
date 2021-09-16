@@ -230,6 +230,18 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
 
             Ok(vec![CalxInstr::Call(name)])
           }
+          "call-import" => {
+            let name: String;
+            if xs.len() != 2 {
+              return Err(format!("call expected function name, {:?}", xs));
+            }
+            match &xs[1] {
+              Cirru::Leaf(s) => name = s.to_owned(),
+              Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
+            }
+
+            Ok(vec![CalxInstr::CallImport(name)])
+          }
           "unreachable" => Ok(vec![CalxInstr::Unreachable]),
           "nop" => Ok(vec![CalxInstr::Nop]),
           ";;" => {

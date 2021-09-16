@@ -142,7 +142,8 @@ pub enum CalxInstr {
   BlockEnd,
   /// TODO use function name at first
   Echo, // pop and println current value
-  Call(String), // during running, only use index,
+  Call(String),       // during running, only use index,
+  CallImport(String), // TODO,
   Unreachable,
   Nop,
   Quit(usize), // quit and return value

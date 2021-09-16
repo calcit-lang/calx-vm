@@ -1,17 +1,28 @@
 use crate::primes::{BlockData, Calx, CalxFrame, CalxFunc, CalxInstr};
+use std::collections::hash_map::HashMap;
+use std::fmt;
 use std::ops::Rem;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub type CalxImportsDict = HashMap<String, (fn(xs: Vec<Calx>) -> Result<Calx, String>, usize)>;
+
+#[derive(Clone)]
 pub struct CalxVM {
   pub stack: Vec<Calx>,
   pub globals: Vec<Calx>,
   pub funcs: Vec<CalxFunc>,
   pub frames: Vec<CalxFrame>,
   pub top_frame: CalxFrame,
+  pub imports: CalxImportsDict,
+}
+
+impl std::fmt::Debug for CalxVM {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str("TODO")
+  }
 }
 
 impl CalxVM {
-  pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>) -> Self {
+  pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>, imports: CalxImportsDict) -> Self {
     let main_func = find_func(&fns, "main").expect("main function is required");
     let main_frame = CalxFrame {
       initial_stack_size: 0,
@@ -27,6 +38,7 @@ impl CalxVM {
       funcs: fns,
       frames: vec![],
       top_frame: main_frame,
+      imports,
     }
   }
 
@@ -437,6 +449,25 @@ impl CalxVM {
             None => return Err(format!("cannot find function named: {}", f_name)),
           }
         }
+        CalxInstr::CallImport(f_name) => match self.imports.to_owned().get(&f_name) {
+          None => return Err(format!("missing imported function {}", f_name)),
+          Some((f, size)) => {
+            if self.stack.len() < *size {
+              return Err(format!(
+                "imported function {} expected {} arguemtns, found {} on stack",
+                f_name,
+                size,
+                self.stack.len()
+              ));
+            }
+            let mut args: Vec<Calx> = vec![];
+            for _ in 0..*size {
+              args.insert(0, self.stack_pop()?);
+            }
+            let v = f(args)?;
+            self.stack.push(v);
+          }
+        },
         CalxInstr::Unreachable => {
           unreachable!("Unexpected from op")
         }

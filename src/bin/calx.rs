@@ -1,8 +1,14 @@
+use std::collections::hash_map::HashMap;
 use std::fs;
 
 use cirru_parser::{parse, Cirru};
 
-use calx_vm::{parse_function, CalxFunc, CalxVM};
+use calx_vm::{parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM};
+
+fn log2_calx_value(xs: Vec<Calx>) -> Result<Calx, String> {
+  println!("log: {:?}", xs);
+  Ok(Calx::Nil)
+}
 
 fn main() -> Result<(), String> {
   let contents = fs::read_to_string("examples/demo.cirru").expect("Cirru file for instructions");
@@ -19,7 +25,10 @@ fn main() -> Result<(), String> {
       }
     }
 
-    let mut vm = CalxVM::new(fns, vec![]);
+    let mut imports: CalxImportsDict = HashMap::new();
+    imports.insert(String::from("log2"), (log2_calx_value, 2));
+
+    let mut vm = CalxVM::new(fns, vec![], imports);
 
     // for func in vm.funcs.to_owned() {
     //   println!("loaded fn: {}", func);

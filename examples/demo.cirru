@@ -37,7 +37,11 @@ fn main (-> i64)
   const "|loading program"
   echo
 
-  ;; const 2
   call demo
+
+  const 2
+  const 3
+  call-import log2
+  echo
 
   return
