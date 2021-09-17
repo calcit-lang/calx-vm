@@ -164,19 +164,19 @@ impl CalxVM {
         CalxInstr::IntShr => {
           let bits = self.stack_pop()?;
           let v = self.stack_pop()?;
-          match (v.to_owned(), bits.to_owned()) {
+          match (&v, &bits) {
             (Calx::I64(n), Calx::I64(b)) => {
-              self.stack_push(Calx::I64(n.checked_shr(b as u32).unwrap()))
+              self.stack_push(Calx::I64(n.checked_shr(*b as u32).unwrap()))
             }
             (_, _) => return Err(format!("invalid number for SHR, {:?} {:?}", v, bits)),
           }
         }
         CalxInstr::IntShl => {
-          let bits = self.stack_pop()?.to_owned();
+          let bits = self.stack_pop()?;
           let v = self.stack_pop()?;
-          match (v.to_owned(), bits.to_owned()) {
+          match (&v, &bits) {
             (Calx::I64(n), Calx::I64(b)) => {
-              self.stack_push(Calx::I64(n.checked_shl(b as u32).unwrap()))
+              self.stack_push(Calx::I64(n.checked_shl(*b as u32).unwrap()))
             }
             (_, _) => return Err(format!("invalid number for SHL, {:?} {:?}", v, bits)),
           }
@@ -327,21 +327,14 @@ impl CalxVM {
               size
             ));
           }
-          let mut i = size;
-          while i > 0 {
-            self.top_frame.blocks_track.pop();
-            i -= 1;
-          }
-          let prev_block = self
-            .top_frame
-            .blocks_track
-            .last()
-            .expect("br should be used inside block");
 
-          if prev_block.looped {
-            self.top_frame.pointer = prev_block.from;
+          self.shrink_blocks_by(size);
+
+          let last_idx = self.top_frame.blocks_track.len() - 1;
+          if self.top_frame.blocks_track[last_idx].looped {
+            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
           } else {
-            self.top_frame.pointer = prev_block.to;
+            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
           }
 
           continue; // point reset, goto next loop
@@ -356,20 +349,14 @@ impl CalxVM {
                 size
               ));
             }
-            let mut i = size;
-            while i > 0 {
-              self.top_frame.blocks_track.pop();
-              i -= 1;
-            }
-            let block = self
-              .top_frame
-              .blocks_track
-              .last()
-              .expect("br should be used inside block");
-            if block.looped {
-              self.top_frame.pointer = block.from;
+
+            self.shrink_blocks_by(size);
+
+            let last_idx = self.top_frame.blocks_track.len() - 1;
+            if self.top_frame.blocks_track[last_idx].looped {
+              self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
             } else {
-              self.top_frame.pointer = block.to;
+              self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
             }
 
             continue; // point reset, goto next loop
@@ -522,6 +509,16 @@ impl CalxVM {
       Err(String::from("cannot peek parent stack"))
     } else {
       Ok(self.stack.last().unwrap().to_owned())
+    }
+  }
+
+  /// assumed that the size already checked
+  #[inline(always)]
+  fn shrink_blocks_by(&mut self, size: usize) {
+    let mut i = size;
+    while i > 0 {
+      self.top_frame.blocks_track.pop();
+      i -= 1;
     }
   }
 }
