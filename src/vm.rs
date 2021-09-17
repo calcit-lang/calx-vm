@@ -17,7 +17,7 @@ pub struct CalxVM {
 
 impl std::fmt::Debug for CalxVM {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.write_str("TODO")
+    f.write_str("CalxVM Instance")
   }
 }
 
@@ -42,21 +42,12 @@ impl CalxVM {
     }
   }
 
-  pub fn get_instr(&mut self) -> Option<CalxInstr> {
-    self
-      .top_frame
-      .instrs
-      .get(self.top_frame.pointer)
-      .map(|x| x.to_owned())
-  }
-
   pub fn run(&mut self) -> Result<(), String> {
     loop {
       // println!("Stack {:?}", self.stack);
-      let instr = self.get_instr();
       // println!("-- op {} {:?}", self.stack.len(), instr);
 
-      if instr == None {
+      if self.top_frame.pointer >= self.top_frame.instrs.len() {
         // println!("status {:?} {}", self.stack, self.top_frame);
         self.check_func_return()?;
         if self.frames.is_empty() {
@@ -68,7 +59,7 @@ impl CalxVM {
         self.top_frame.pointer += 1;
         continue;
       }
-      match instr.unwrap() {
+      match self.top_frame.instrs[self.top_frame.pointer].to_owned() {
         CalxInstr::Local => self.top_frame.locals.push(Calx::Nil),
         CalxInstr::LocalSet(idx) => {
           let v = self.stack_pop()?;
@@ -85,18 +76,18 @@ impl CalxVM {
           } else {
             self.top_frame.locals[idx] = v.to_owned()
           }
-          self.stack.push(v);
+          self.stack_push(v);
         }
         CalxInstr::LocalGet(idx) => {
           if idx < self.top_frame.locals.len() {
-            self.stack.push(self.top_frame.locals[idx].to_owned())
+            self.stack_push(self.top_frame.locals[idx].to_owned())
           } else {
             return Err(format!("invalid index for local.get {}", idx));
           }
         }
         CalxInstr::GlobalSet(idx) => {
           let v = self.stack_pop()?;
-          if self.globals.to_owned().len() == idx {
+          if self.globals.len() == idx {
             self.globals.push(v)
           } else {
             self.globals[idx] = v
@@ -104,17 +95,17 @@ impl CalxVM {
         }
         CalxInstr::GlobalGet(idx) => {
           if idx < self.globals.len() {
-            self.stack.push(self.globals[idx].to_owned())
+            self.stack_push(self.globals[idx].to_owned())
           } else {
             return Err(format!("invalid index for local.get {}", idx));
           }
         }
         CalxInstr::Const(v) => {
-          self.stack.push(v.to_owned());
+          self.stack_push(v.to_owned());
         }
         CalxInstr::Dup => {
           let v = self.stack_peek()?;
-          self.stack.push(v);
+          self.stack_push(v);
         }
         CalxInstr::Drop => {
           let _ = self.stack_pop()?;
@@ -124,7 +115,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::I64(n1 + n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64(n1 + n2)),
             (_, _) => return Err(format!("expected 2 integers to add, {:?} {:?}", v1, v2)),
           }
         }
@@ -133,7 +124,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::I64(n1 * n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64(n1 * n2)),
             (_, _) => {
               return Err(format!(
                 "expected 2 integers to multiply, {:?} {:?}",
@@ -147,7 +138,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::I64(n1 / n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64(n1 / n2)),
             (_, _) => return Err(format!("expected 2 integers to divide, {:?} {:?}", v1, v2)),
           }
         }
@@ -156,14 +147,14 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::I64((*n1).rem(n2))),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64((*n1).rem(n2))),
             (_, _) => return Err(format!("expected 2 integers to add, {:?} {:?}", v1, v2)),
           }
         }
         CalxInstr::IntNeg => {
           let v = self.stack_pop()?;
           if let Calx::I64(n) = v {
-            self.stack.push(Calx::I64(-n))
+            self.stack_push(Calx::I64(-n))
           } else {
             return Err(format!("expected int, got {}", v));
           }
@@ -173,7 +164,7 @@ impl CalxVM {
           let v = self.stack_pop()?;
           match (v.to_owned(), bits.to_owned()) {
             (Calx::I64(n), Calx::I64(b)) => {
-              self.stack.push(Calx::I64(n.checked_shr(b as u32).unwrap()))
+              self.stack_push(Calx::I64(n.checked_shr(b as u32).unwrap()))
             }
             (_, _) => return Err(format!("invalid number for SHR, {:?} {:?}", v, bits)),
           }
@@ -183,7 +174,7 @@ impl CalxVM {
           let v = self.stack_pop()?;
           match (v.to_owned(), bits.to_owned()) {
             (Calx::I64(n), Calx::I64(b)) => {
-              self.stack.push(Calx::I64(n.checked_shl(b as u32).unwrap()))
+              self.stack_push(Calx::I64(n.checked_shl(b as u32).unwrap()))
             }
             (_, _) => return Err(format!("invalid number for SHL, {:?} {:?}", v, bits)),
           }
@@ -193,7 +184,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 == n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 == n2)),
             (_, _) => {
               return Err(format!(
                 "expected 2 integers to eq compare, {:?} {:?}",
@@ -208,7 +199,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 != n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 != n2)),
             (_, _) => {
               return Err(format!(
                 "expected 2 integers to ne compare, {:?} {:?}",
@@ -222,7 +213,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 < n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 < n2)),
             (_, _) => {
               return Err(format!(
                 "expected 2 integers to le compare, {:?} {:?}",
@@ -236,7 +227,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 <= n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 <= n2)),
             (_, _) => {
               return Err(format!(
                 "expected 2 integers to le compare, {:?} {:?}",
@@ -250,7 +241,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 > n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 > n2)),
             (_, _) => {
               return Err(format!(
                 "expected 2 integers to gt compare, {:?} {:?}",
@@ -264,7 +255,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack.push(Calx::Bool(n1 >= n2)),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 >= n2)),
             (_, _) => {
               return Err(format!(
                 "expected 2 integers to ge compare, {:?} {:?}",
@@ -278,7 +269,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::F64(n1), Calx::F64(n2)) => self.stack.push(Calx::F64(n1 + n2)),
+            (Calx::F64(n1), Calx::F64(n2)) => self.stack_push(Calx::F64(n1 + n2)),
             (_, _) => return Err(format!("expected 2 numbers to +, {:?} {:?}", v1, v2)),
           }
         }
@@ -287,7 +278,7 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::F64(n1), Calx::F64(n2)) => self.stack.push(Calx::F64(n1 * n2)),
+            (Calx::F64(n1), Calx::F64(n2)) => self.stack_push(Calx::F64(n1 * n2)),
             (_, _) => return Err(format!("expected 2 numbers to multiply, {:?} {:?}", v1, v2)),
           }
         }
@@ -296,14 +287,14 @@ impl CalxVM {
           let v2 = self.stack_pop()?;
           let v1 = self.stack_pop()?;
           match (&v1, &v2) {
-            (Calx::F64(n1), Calx::F64(n2)) => self.stack.push(Calx::F64(n1 / n2)),
+            (Calx::F64(n1), Calx::F64(n2)) => self.stack_push(Calx::F64(n1 / n2)),
             (_, _) => return Err(format!("expected 2 numbers to divide, {:?} {:?}", v1, v2)),
           }
         }
         CalxInstr::Neg => {
           let v = self.stack_pop()?;
           if let Calx::F64(n) = v {
-            self.stack.push(Calx::F64(-n))
+            self.stack_push(Calx::F64(-n))
           } else {
             return Err(format!("expected float, got {}", v));
           }
@@ -465,7 +456,7 @@ impl CalxVM {
               args.insert(0, self.stack_pop()?);
             }
             let v = f(args)?;
-            self.stack.push(v);
+            self.stack_push(v);
           }
         },
         CalxInstr::Unreachable => {
@@ -506,9 +497,9 @@ impl CalxVM {
 
   #[inline(always)]
   fn stack_pop(&mut self) -> Result<Calx, String> {
-    if self.stack.to_owned().is_empty() {
+    if self.stack.is_empty() {
       Err(String::from("cannot pop from empty stack"))
-    } else if self.stack.to_owned().len() <= self.top_frame.initial_stack_size {
+    } else if self.stack.len() <= self.top_frame.initial_stack_size {
       Err(String::from("cannot pop from parent stack"))
     } else {
       let v = self.stack.pop().unwrap();
@@ -516,6 +507,12 @@ impl CalxVM {
     }
   }
 
+  #[inline(always)]
+  fn stack_push(&mut self, x: Calx) {
+    self.stack.push(x)
+  }
+
+  #[inline(always)]
   fn stack_peek(&mut self) -> Result<Calx, String> {
     if self.stack.is_empty() {
       Err(String::from("cannot peek empty stack"))

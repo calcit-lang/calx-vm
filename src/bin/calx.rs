@@ -1,5 +1,6 @@
 use std::collections::hash_map::HashMap;
 use std::fs;
+use std::time::Instant;
 
 use cirru_parser::{parse, Cirru};
 
@@ -33,10 +34,13 @@ fn main() -> Result<(), String> {
     // for func in vm.funcs.to_owned() {
     //   println!("loaded fn: {}", func);
     // }
+    let now = Instant::now();
 
     match vm.run() {
       Ok(()) => {
-        println!("Result: {:?}", vm.stack);
+        let elapsed = now.elapsed();
+
+        println!("Took {:.3?}: {:?}", elapsed, vm.stack);
         Ok(())
       }
       Err(e) => {
