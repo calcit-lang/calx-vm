@@ -3,6 +3,15 @@ name = "calx_vm"
 version = "0.1.0"
 authors = ["jiyinyiyong <jiyinyiyong@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description = "Stack-based VM, with dynamic data, for experiment"
+homepage = "https://github.com/calcit-lang/calx-vm"
+documentation = "https://docs.rs/crate/calx_vm/"
+repository = "https://github.com/calcit-lang/calx-vm.rs"
+readme = "README.md"
+exclude = [
+  "examples/*",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
