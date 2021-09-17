@@ -16,4 +16,5 @@ jobs:
         with:
           toolchain: stable
 
-      - run: cargo run
+      - run: cargo run examples/hello.cirru
+      - run: cargo run examples/sum.cirru

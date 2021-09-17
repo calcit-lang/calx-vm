@@ -4,7 +4,18 @@
 
 ### Usages
 
-TODO
+```bash
+cargo install calx-vm
+calx hello.cirru
+```
+
+it starts with a `main` function:
+
+```cirru
+fn main ()
+  const "|hello world"
+  echo
+```
 
 ### Instructions
 

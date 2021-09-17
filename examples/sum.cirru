@@ -17,7 +17,7 @@ fn demo (-> i64)
     const 0
     local.set 0
     const 0
-    loop (i64 -> i64)
+    loop (i64)
       const 1
       i.add
       dup

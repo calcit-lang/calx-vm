@@ -61,15 +61,7 @@ impl CalxVM {
       }
       match self.top_frame.instrs[self.top_frame.pointer].to_owned() {
         CalxInstr::Br(size) => {
-          if self.top_frame.blocks_track.len() <= size {
-            return Err(format!(
-              "stack size {} eq/smaller than br size {}",
-              self.top_frame.blocks_track.len(),
-              size
-            ));
-          }
-
-          self.shrink_blocks_by(size);
+          self.shrink_blocks_by(size)?;
 
           let last_idx = self.top_frame.blocks_track.len() - 1;
           if self.top_frame.blocks_track[last_idx].looped {
@@ -83,15 +75,7 @@ impl CalxVM {
         CalxInstr::BrIf(size) => {
           let v = self.stack_pop()?;
           if v == Calx::Bool(true) || v == Calx::I64(1) {
-            if self.top_frame.blocks_track.len() <= size {
-              return Err(format!(
-                "stack size {} eq/smaller than br size {}",
-                self.top_frame.blocks_track.len(),
-                size
-              ));
-            }
-
-            self.shrink_blocks_by(size);
+            self.shrink_blocks_by(size)?;
 
             let last_idx = self.top_frame.blocks_track.len() - 1;
             if self.top_frame.blocks_track[last_idx].looped {
@@ -514,12 +498,22 @@ impl CalxVM {
 
   /// assumed that the size already checked
   #[inline(always)]
-  fn shrink_blocks_by(&mut self, size: usize) {
+  fn shrink_blocks_by(&mut self, size: usize) -> Result<(), String> {
+    if self.top_frame.blocks_track.len() <= size {
+      return Err(format!(
+        "stack size {} eq/smaller than br size {}",
+        self.top_frame.blocks_track.len(),
+        size
+      ));
+    }
+
     let mut i = size;
     while i > 0 {
       self.top_frame.blocks_track.pop();
       i -= 1;
     }
+
+    Ok(())
   }
 }
 

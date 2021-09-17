@@ -327,6 +327,11 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<Ca
     }
   }
   chunk.push(CalxInstr::BlockEnd);
+
+  if looped && !ret_types.is_empty() {
+    println!("return types for loop actuall not checked: {:?}", ret_types);
+  }
+
   chunk.insert(
     0,
     CalxInstr::Block {
