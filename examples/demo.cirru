@@ -25,7 +25,7 @@ fn demo (-> i64)
       i.add
       local.set 0
       dup
-      const 100000
+      const 1000000
       i.ge
       br-if 1
       br 0

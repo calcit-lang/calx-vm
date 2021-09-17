@@ -60,6 +60,84 @@ impl CalxVM {
         continue;
       }
       match self.top_frame.instrs[self.top_frame.pointer].to_owned() {
+        CalxInstr::Br(size) => {
+          if self.top_frame.blocks_track.len() <= size {
+            return Err(format!(
+              "stack size {} eq/smaller than br size {}",
+              self.top_frame.blocks_track.len(),
+              size
+            ));
+          }
+
+          self.shrink_blocks_by(size);
+
+          let last_idx = self.top_frame.blocks_track.len() - 1;
+          if self.top_frame.blocks_track[last_idx].looped {
+            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
+          } else {
+            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
+          }
+
+          continue; // point reset, goto next loop
+        }
+        CalxInstr::BrIf(size) => {
+          let v = self.stack_pop()?;
+          if v == Calx::Bool(true) || v == Calx::I64(1) {
+            if self.top_frame.blocks_track.len() <= size {
+              return Err(format!(
+                "stack size {} eq/smaller than br size {}",
+                self.top_frame.blocks_track.len(),
+                size
+              ));
+            }
+
+            self.shrink_blocks_by(size);
+
+            let last_idx = self.top_frame.blocks_track.len() - 1;
+            if self.top_frame.blocks_track[last_idx].looped {
+              self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
+            } else {
+              self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
+            }
+
+            continue; // point reset, goto next loop
+          }
+        }
+        CalxInstr::Block {
+          looped,
+          from,
+          to,
+          params_types,
+          ret_types,
+        } => {
+          if self.stack.len() < params_types.len() {
+            return Err(format!(
+              "no enough data on stack {:?} for {:?}",
+              self.stack, params_types
+            ));
+          }
+          self.top_frame.blocks_track.push(BlockData {
+            looped,
+            ret_types,
+            from,
+            to,
+            initial_stack_size: self.stack.len() - params_types.len(),
+          });
+          println!("TODO check params type: {:?}", params_types);
+        }
+        CalxInstr::BlockEnd => {
+          let last_block = self.top_frame.blocks_track.pop().unwrap();
+          if self.stack.len() != last_block.initial_stack_size + last_block.ret_types.len() {
+            return Err(format!(
+              "block-end {:?} expected initial size {} plus {:?}, got stack size {}, in\n {}",
+              last_block,
+              last_block.initial_stack_size,
+              last_block.ret_types,
+              self.stack.len(),
+              self.top_frame
+            ));
+          }
+        }
         CalxInstr::Local => self.top_frame.locals.push(Calx::Nil),
         CalxInstr::LocalSet(idx) => {
           let v = self.stack_pop()?;
@@ -88,6 +166,15 @@ impl CalxVM {
             return Err(format!("invalid index for local.get {}", idx));
           }
         }
+        CalxInstr::Return => {
+          self.check_func_return()?;
+          if self.frames.is_empty() {
+            return Ok(());
+          } else {
+            // let prev_frame = self.top_frame;
+            self.top_frame = self.frames.pop().unwrap();
+          }
+        }
         CalxInstr::LocalNew => self.top_frame.locals.push(Calx::Nil),
         CalxInstr::GlobalSet(idx) => {
           let v = self.stack_pop()?;
@@ -105,9 +192,7 @@ impl CalxVM {
           }
         }
         CalxInstr::GlobalNew => self.globals.push(Calx::Nil),
-        CalxInstr::Const(v) => {
-          self.stack_push(v.to_owned());
-        }
+        CalxInstr::Const(v) => self.stack_push(v.to_owned()),
         CalxInstr::Dup => {
           let v = self.stack_peek()?;
           self.stack_push(v);
@@ -322,89 +407,6 @@ impl CalxVM {
         CalxInstr::Or => {
           // TODO
         }
-        CalxInstr::Br(size) => {
-          if self.top_frame.blocks_track.len() <= size {
-            return Err(format!(
-              "stack size {} eq/smaller than br size {}",
-              self.top_frame.blocks_track.len(),
-              size
-            ));
-          }
-
-          self.shrink_blocks_by(size);
-
-          let last_idx = self.top_frame.blocks_track.len() - 1;
-          if self.top_frame.blocks_track[last_idx].looped {
-            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
-          } else {
-            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
-          }
-
-          continue; // point reset, goto next loop
-        }
-        CalxInstr::BrIf(size) => {
-          let v = self.stack_pop()?;
-          if v == Calx::Bool(true) || v == Calx::I64(1) {
-            if self.top_frame.blocks_track.len() <= size {
-              return Err(format!(
-                "stack size {} eq/smaller than br size {}",
-                self.top_frame.blocks_track.len(),
-                size
-              ));
-            }
-
-            self.shrink_blocks_by(size);
-
-            let last_idx = self.top_frame.blocks_track.len() - 1;
-            if self.top_frame.blocks_track[last_idx].looped {
-              self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
-            } else {
-              self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
-            }
-
-            continue; // point reset, goto next loop
-          }
-        }
-        CalxInstr::Block {
-          looped,
-          from,
-          to,
-          params_types,
-          ret_types,
-        } => {
-          if self.stack.len() < params_types.len() {
-            return Err(format!(
-              "no enough data on stack {:?} for {:?}",
-              self.stack, params_types
-            ));
-          }
-          self.top_frame.blocks_track.push(BlockData {
-            looped,
-            params_types: params_types.to_owned(),
-            ret_types,
-            from,
-            to,
-            initial_stack_size: self.stack.len() - params_types.len(),
-          });
-          println!("TODO check params type: {:?}", params_types);
-        }
-        CalxInstr::BlockEnd => {
-          let last_block = self.top_frame.blocks_track.pop().unwrap();
-          if self.stack.len() != last_block.initial_stack_size + last_block.ret_types.len() {
-            return Err(format!(
-              "block-end {:?} expected initial size {} plus {:?}, got stack size {}, in\n {}",
-              last_block,
-              last_block.initial_stack_size,
-              last_block.ret_types,
-              self.stack.len(),
-              self.top_frame
-            ));
-          }
-        }
-        CalxInstr::Echo => {
-          let v = self.stack_pop()?;
-          println!("{}", v);
-        }
         CalxInstr::Call(f_name) => {
           match find_func(&self.funcs, &f_name) {
             Some(f) => {
@@ -458,14 +460,9 @@ impl CalxVM {
           // Noop
         }
         CalxInstr::Quit(code) => std::process::exit(code as i32),
-        CalxInstr::Return => {
-          self.check_func_return()?;
-          if self.frames.is_empty() {
-            return Ok(());
-          } else {
-            // let prev_frame = self.top_frame;
-            self.top_frame = self.frames.pop().unwrap();
-          }
+        CalxInstr::Echo => {
+          let v = self.stack_pop()?;
+          println!("{}", v);
         }
       }
 

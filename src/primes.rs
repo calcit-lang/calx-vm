@@ -162,7 +162,6 @@ pub struct CalxError {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BlockData {
   pub looped: bool,
-  pub params_types: Vec<CalxType>,
   pub ret_types: Vec<CalxType>,
   pub from: usize,
   pub to: usize,
