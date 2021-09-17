@@ -71,8 +71,8 @@ impl CalxVM {
         }
         CalxInstr::LocalTee(idx) => {
           let v = self.stack_pop()?;
-          if self.top_frame.locals.len() == idx {
-            self.top_frame.locals.push(v.to_owned())
+          if self.top_frame.locals.len() >= idx {
+            return Err(format!("out of bound in local.set {}", idx));
           } else {
             self.top_frame.locals[idx] = v.to_owned()
           }
@@ -85,10 +85,11 @@ impl CalxVM {
             return Err(format!("invalid index for local.get {}", idx));
           }
         }
+        CalxInstr::LocalNew => self.stack_push(Calx::Nil),
         CalxInstr::GlobalSet(idx) => {
           let v = self.stack_pop()?;
-          if self.globals.len() == idx {
-            self.globals.push(v)
+          if self.globals.len() >= idx {
+            return Err(format!("out of bound in global.set {}", idx));
           } else {
             self.globals[idx] = v
           }
@@ -100,6 +101,7 @@ impl CalxVM {
             return Err(format!("invalid index for local.get {}", idx));
           }
         }
+        CalxInstr::GlobalNew => self.globals.push(Calx::Nil),
         CalxInstr::Const(v) => {
           self.stack_push(v.to_owned());
         }
