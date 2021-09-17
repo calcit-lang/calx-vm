@@ -13,6 +13,7 @@ fn demo (-> i64)
   block (->) (br 0) (const 1.) (const 2.) (neg) (add) (echo)
   , (const "|demo of string") (echo)
   block (-> i64)
+    local.new
     const 0
     local.set 0
     const 0
