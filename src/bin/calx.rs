@@ -21,6 +21,14 @@ fn main() -> Result<(), String> {
         .takes_value(false),
     )
     .arg(
+      Arg::new("DISABLE_PRE")
+        .short('D')
+        .long("disable-pre")
+        .value_name("disable-pre")
+        .about("disabled preprocess")
+        .takes_value(false),
+    )
+    .arg(
       Arg::new("SOURCE")
         .about("A *.cirru file for loading code")
         .required(true)
@@ -30,6 +38,7 @@ fn main() -> Result<(), String> {
 
   let source = matches.value_of("SOURCE").unwrap();
   let show_code = matches.is_present("SHOW_CODE");
+  let disable_pre = matches.is_present("DISABLE_PRE");
 
   let contents = fs::read_to_string(source).expect("Cirru file for instructions");
   let code = parse(&contents).expect("Some Cirru content");
@@ -51,12 +60,25 @@ fn main() -> Result<(), String> {
     imports.insert(String::from("log3"), (log_calx_value, 3));
 
     let mut vm = CalxVM::new(fns, vec![], imports);
+
+    // if show_code {
+    //   for func in vm.funcs.to_owned() {
+    //     println!("loaded fn: {}", func);
+    //   }
+    // }
+
+    let now = Instant::now();
+    if !disable_pre {
+      vm.preprocess()?;
+    } else {
+      println!("Preprocess disabled.")
+    }
+
     if show_code {
       for func in vm.funcs.to_owned() {
         println!("loaded fn: {}", func);
       }
     }
-    let now = Instant::now();
 
     match vm.run() {
       Ok(()) => {

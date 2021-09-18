@@ -68,8 +68,12 @@ pub struct CalxFunc {
 
 impl fmt::Display for CalxFunc {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.write_str("CalxFunc (")?;
+    write!(f, "CalxFunc {} (", self.name)?;
     for p in &self.params_types {
+      write!(f, "{:?} ", p)?;
+    }
+    f.write_str("-> ")?;
+    for p in &self.ret_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str(")")?;
@@ -85,7 +89,6 @@ impl fmt::Display for CalxFunc {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CalxInstr {
   // Param, // load variable from parameter
-  Local, // new local variable
   LocalSet(usize),
   LocalTee(usize), // set and also load to stack
   LocalGet(usize),
@@ -133,6 +136,8 @@ pub enum CalxInstr {
   // control stuctures
   Br(usize),
   BrIf(usize),
+  Jmp(usize),   // internal
+  JmpIf(usize), // internal
   Block {
     params_types: Vec<CalxType>,
     ret_types: Vec<CalxType>,
@@ -141,7 +146,7 @@ pub enum CalxInstr {
     from: usize,
     to: usize,
   },
-  BlockEnd,
+  BlockEnd(bool),
   /// pop and println current value
   Echo,
   /// TODO use function name at first, during running, only use index,

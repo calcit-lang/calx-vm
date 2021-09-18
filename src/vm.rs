@@ -60,6 +60,17 @@ impl CalxVM {
         continue;
       }
       match self.top_frame.instrs[self.top_frame.pointer].to_owned() {
+        CalxInstr::Jmp(line) => {
+          self.top_frame.pointer = line;
+          continue; // point reset, goto next loop
+        }
+        CalxInstr::JmpIf(line) => {
+          let v = self.stack_pop()?;
+          if v == Calx::Bool(true) || v == Calx::I64(1) {
+            self.top_frame.pointer = line;
+            continue; // point reset, goto next loop
+          }
+        }
         CalxInstr::Br(size) => {
           self.shrink_blocks_by(size)?;
 
@@ -109,7 +120,10 @@ impl CalxVM {
           });
           println!("TODO check params type: {:?}", params_types);
         }
-        CalxInstr::BlockEnd => {
+        CalxInstr::BlockEnd(looped) => {
+          if looped {
+            return Err(self.gen_err(String::from("loop end expected to be branched")));
+          }
           let last_block = self.top_frame.blocks_track.pop().unwrap();
           if self.stack.len() != last_block.initial_stack_size + last_block.ret_types.len() {
             return Err(self.gen_err(format!(
@@ -122,7 +136,6 @@ impl CalxVM {
             )));
           }
         }
-        CalxInstr::Local => self.top_frame.locals.push(Calx::Nil),
         CalxInstr::LocalSet(idx) => {
           let v = self.stack_pop()?;
           if idx >= self.top_frame.locals.len() {
@@ -480,6 +493,150 @@ impl CalxVM {
     }
   }
 
+  pub fn preprocess(&mut self) -> Result<(), String> {
+    for i in 0..self.funcs.len() {
+      let mut stack_size = 0;
+      let mut ops: Vec<CalxInstr> = vec![];
+      let mut blocks_track: Vec<BlockData> = vec![];
+
+      // println!("\nFUNC {} {}", self.funcs[i].name, stack_size);
+
+      for j in 0..self.funcs[i].instrs.len() {
+        // println!("* {:?}", self.funcs[i].instrs[j].to_owned());
+        match self.funcs[i].instrs[j].to_owned() {
+          CalxInstr::Block {
+            looped,
+            params_types,
+            ret_types,
+            from,
+            to,
+          } => {
+            if stack_size < params_types.len() {
+              return Err(format!(
+                "insufficient params {} for block: {:?}",
+                stack_size, params_types
+              ));
+            }
+            blocks_track.push(BlockData {
+              looped,
+              ret_types,
+              from,
+              to,
+              initial_stack_size: stack_size,
+            });
+            ops.push(CalxInstr::Nop);
+          }
+          CalxInstr::Br(size) => {
+            if size > blocks_track.len() {
+              return Err(format!("br {} too large", size));
+            }
+
+            let target_block = blocks_track[blocks_track.len() - size - 1].to_owned();
+            if target_block.looped {
+              // not checking
+              ops.push(CalxInstr::Jmp(target_block.from))
+            } else {
+              ops.push(CalxInstr::Jmp(target_block.to))
+            }
+          }
+          CalxInstr::BrIf(size) => {
+            if blocks_track.is_empty() {
+              return Err(format!("cannot branch with no blocks, {}", size));
+            }
+            if size > blocks_track.len() {
+              return Err(format!("br {} too large", size));
+            }
+
+            let target_block = blocks_track[blocks_track.len() - size - 1].to_owned();
+            if target_block.looped {
+              // not checking
+              ops.push(CalxInstr::JmpIf(target_block.from))
+            } else {
+              ops.push(CalxInstr::JmpIf(target_block.to))
+            }
+            stack_size -= 1
+          }
+          CalxInstr::BlockEnd(looped) => {
+            // println!("checking: {:?}", blocks_track);
+            if blocks_track.is_empty() {
+              return Err(format!("invalid block end, {:?}", blocks_track));
+            }
+
+            let prev_block = blocks_track.pop().unwrap();
+            if looped {
+              // nothing, branched during runtime
+            } else if stack_size != prev_block.initial_stack_size + prev_block.ret_types.len() {
+              return Err(format!(
+                "not match {} and {} + {:?} at block end",
+                stack_size, prev_block.initial_stack_size, prev_block.ret_types
+              ));
+            }
+
+            ops.push(CalxInstr::Nop)
+          }
+          CalxInstr::Call(f_name) => match find_func(&self.funcs, &f_name) {
+            Some(f) => {
+              if stack_size < f.params_types.len() {
+                return Err(format!(
+                  "insufficient size to call: {} {:?}",
+                  stack_size, f.params_types
+                ));
+              }
+              stack_size = stack_size - f.params_types.len() + f.ret_types.len();
+            }
+            None => return Err(format!("cannot find function named: {}", f_name)),
+          },
+          CalxInstr::CallImport(f_name) => match &self.imports.get(&f_name) {
+            Some((_f, size)) => {
+              if stack_size < *size {
+                return Err(format!(
+                  "insufficient size to call import: {} {:?}",
+                  stack_size, size
+                ));
+              }
+              stack_size = stack_size - size + 1;
+            }
+            None => return Err(format!("missing imported function {}", f_name)),
+          },
+          CalxInstr::Return => {
+            if stack_size != self.funcs[i].ret_types.len() {
+              return Err(format!(
+                "invalid return size {} of {:?} in {}",
+                stack_size, self.funcs[i].ret_types, self.funcs[i].name
+              ));
+            }
+            ops.push(CalxInstr::Return);
+          }
+          a => {
+            // checks
+            let (params_size, ret_size) = instr_stack_arity(&a);
+            if stack_size < params_size {
+              return Err(format!(
+                "insufficient stack {} to call {:?} of {}",
+                stack_size, a, params_size
+              ));
+            }
+            stack_size = stack_size - params_size + ret_size;
+            // println!(
+            //   "  sizes: {:?} {} {} -> {}",
+            //   a, params_size, ret_size, stack_size
+            // );
+            ops.push(a.to_owned());
+          }
+        }
+      }
+      if stack_size != self.funcs[i].ret_types.len() {
+        return Err(format!(
+          "invalid return size {} of {:?} in {}",
+          stack_size, self.funcs[i].ret_types, self.funcs[i].name
+        ));
+      }
+
+      self.funcs[i].instrs = ops;
+    }
+    Ok(())
+  }
+
   #[inline(always)]
   fn check_func_return(&mut self) -> Result<(), CalxError> {
     if self.stack.len() != self.top_frame.initial_stack_size + self.top_frame.ret_types.len() {
@@ -560,4 +717,62 @@ pub fn find_func(funcs: &[CalxFunc], name: &str) -> Option<CalxFunc> {
     }
   }
   None
+}
+
+/// notice that some of the instrs are special and need to handle manually
+pub fn instr_stack_arity(op: &CalxInstr) -> (usize, usize) {
+  match op {
+    CalxInstr::LocalSet(_) => (1, 0),
+    CalxInstr::LocalTee(_) => (1, 1), // TODO need check
+    CalxInstr::LocalGet(_) => (0, 1),
+    CalxInstr::LocalNew => (0, 0),
+    CalxInstr::GlobalSet(_) => (1, 0),
+    CalxInstr::GlobalGet(_) => (0, 1),
+    CalxInstr::GlobalNew => (0, 0),
+    CalxInstr::Const(_) => (0, 1),
+    CalxInstr::Dup => (1, 2),
+    CalxInstr::Drop => (1, 0),
+    CalxInstr::IntAdd => (2, 1),
+    CalxInstr::IntMul => (2, 1),
+    CalxInstr::IntDiv => (2, 1),
+    CalxInstr::IntRem => (2, 1),
+    CalxInstr::IntNeg => (1, 1),
+    CalxInstr::IntShr => (2, 1),
+    CalxInstr::IntShl => (2, 1),
+    CalxInstr::IntEq => (2, 1),
+    CalxInstr::IntNe => (2, 1),
+    CalxInstr::IntLt => (2, 1),
+    CalxInstr::IntLe => (2, 1),
+    CalxInstr::IntGt => (2, 1),
+    CalxInstr::IntGe => (2, 1),
+    CalxInstr::Add => (2, 1),
+    CalxInstr::Mul => (2, 1),
+    CalxInstr::Div => (2, 1),
+    CalxInstr::Neg => (1, 1),
+    // string operations
+    // list operations
+    CalxInstr::NewList => (0, 1),
+    CalxInstr::ListGet => (2, 1),
+    CalxInstr::ListSet => (3, 0),
+    // Link
+    CalxInstr::NewLink => (0, 1),
+    // bool operations
+    CalxInstr::And => (2, 1),
+    CalxInstr::Or => (2, 1),
+    // control stuctures
+    CalxInstr::Br(_) => (0, 0),
+    CalxInstr::BrIf(_) => (1, 0),
+    CalxInstr::Jmp(_) => (0, 0),
+    CalxInstr::JmpIf(_) => (1, 0),
+    CalxInstr::Block { .. } => (0, 0),
+    CalxInstr::BlockEnd(_) => (0, 0),
+    CalxInstr::Echo => (1, 0),
+    CalxInstr::Call(_) => (0, 0),       // TODO
+    CalxInstr::CallImport(_) => (0, 0), // import
+    CalxInstr::Unreachable => (0, 0),   // TODO
+    CalxInstr::Nop => (0, 0),
+    CalxInstr::Quit(_) => (0, 0),
+    CalxInstr::Return => (0, 0), // TODO
+    CalxInstr::Assert(_) => (1, 0),
+  }
 }
