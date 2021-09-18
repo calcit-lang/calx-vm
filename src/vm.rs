@@ -84,8 +84,8 @@ impl CalxVM {
           continue; // point reset, goto next loop
         }
         CalxInstr::BrIf(size) => {
-          let v = self.stack_pop()?;
-          if v == Calx::Bool(true) || v == Calx::I64(1) {
+          let last_idx = self.stack.len() - 1;
+          if self.stack[last_idx] == Calx::Bool(true) || self.stack[last_idx] == Calx::I64(1) {
             self.shrink_blocks_by(size)?;
 
             let last_idx = self.top_frame.blocks_track.len() - 1;
@@ -191,8 +191,7 @@ impl CalxVM {
         CalxInstr::GlobalNew => self.globals.push(Calx::Nil),
         CalxInstr::Const(v) => self.stack_push(v.to_owned()),
         CalxInstr::Dup => {
-          let v = self.stack_peek()?;
-          self.stack_push(v);
+          self.stack_push(self.stack[self.stack.len() - 1].to_owned());
         }
         CalxInstr::Drop => {
           let _ = self.stack_pop()?;
@@ -200,24 +199,27 @@ impl CalxVM {
         CalxInstr::IntAdd => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64(n1 + n2)),
+          let last_idx = self.stack.len() - 1;
+          match (&(self.stack[last_idx]), &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64(n1 + n2),
             (_, _) => {
-              return Err(self.gen_err(format!("expected 2 integers to add, {:?} {:?}", v1, v2)))
+              return Err(self.gen_err(format!(
+                "expected 2 integers to add, {:?} {:?}",
+                self.stack[last_idx], v2
+              )))
             }
           }
         }
         CalxInstr::IntMul => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64(n1 * n2)),
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64(n1 * n2),
             (_, _) => {
               return Err(self.gen_err(format!(
                 "expected 2 integers to multiply, {:?} {:?}",
-                v1, v2
+                self.stack[last_idx], v2
               )))
             }
           }
@@ -225,67 +227,80 @@ impl CalxVM {
         CalxInstr::IntDiv => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64(n1 / n2)),
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64(n1 / n2),
             (_, _) => {
-              return Err(self.gen_err(format!("expected 2 integers to divide, {:?} {:?}", v1, v2)))
+              return Err(self.gen_err(format!(
+                "expected 2 integers to divide, {:?} {:?}",
+                self.stack[last_idx], v2
+              )))
             }
           }
         }
         CalxInstr::IntRem => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::I64((*n1).rem(n2))),
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64((*n1).rem(n2)),
             (_, _) => {
-              return Err(self.gen_err(format!("expected 2 integers to add, {:?} {:?}", v1, v2)))
+              return Err(self.gen_err(format!(
+                "expected 2 integers to add, {:?} {:?}",
+                self.stack[last_idx], v2
+              )))
             }
           }
         }
         CalxInstr::IntNeg => {
-          let v = self.stack_pop()?;
-          if let Calx::I64(n) = v {
-            self.stack_push(Calx::I64(-n))
+          let last_idx = self.stack.len() - 1;
+          if let Calx::I64(n) = self.stack[last_idx] {
+            self.stack[last_idx] = Calx::I64(-n)
           } else {
-            return Err(self.gen_err(format!("expected int, got {}", v)));
+            return Err(self.gen_err(format!("expected int, got {}", self.stack[last_idx])));
           }
         }
         CalxInstr::IntShr => {
           let bits = self.stack_pop()?;
-          let v = self.stack_pop()?;
-          match (&v, &bits) {
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &bits) {
             (Calx::I64(n), Calx::I64(b)) => {
-              self.stack_push(Calx::I64(n.checked_shr(*b as u32).unwrap()))
+              self.stack[last_idx] = Calx::I64(n.checked_shr(*b as u32).unwrap())
             }
             (_, _) => {
-              return Err(self.gen_err(format!("invalid number for SHR, {:?} {:?}", v, bits)))
+              return Err(self.gen_err(format!(
+                "invalid number for SHR, {:?} {:?}",
+                self.stack[last_idx], bits
+              )))
             }
           }
         }
         CalxInstr::IntShl => {
           let bits = self.stack_pop()?;
-          let v = self.stack_pop()?;
-          match (&v, &bits) {
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &bits) {
             (Calx::I64(n), Calx::I64(b)) => {
-              self.stack_push(Calx::I64(n.checked_shl(*b as u32).unwrap()))
+              self.stack[last_idx] = Calx::I64(n.checked_shl(*b as u32).unwrap())
             }
             (_, _) => {
-              return Err(self.gen_err(format!("invalid number for SHL, {:?} {:?}", v, bits)))
+              return Err(self.gen_err(format!(
+                "invalid number for SHL, {:?} {:?}",
+                self.stack[last_idx], bits
+              )))
             }
           }
         }
         CalxInstr::IntEq => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 == n2)),
+          let last_idx = self.stack.len() - 1;
+
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 == n2),
             (_, _) => {
               return Err(self.gen_err(format!(
                 "expected 2 integers to eq compare, {:?} {:?}",
-                v1, v2
+                self.stack[last_idx], v2
               )))
             }
           }
@@ -294,13 +309,13 @@ impl CalxVM {
         CalxInstr::IntNe => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 != n2)),
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 != n2),
             (_, _) => {
               return Err(self.gen_err(format!(
                 "expected 2 integers to ne compare, {:?} {:?}",
-                v1, v2
+                self.stack[last_idx], v2
               )))
             }
           }
@@ -308,13 +323,13 @@ impl CalxVM {
         CalxInstr::IntLt => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 < n2)),
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 < n2),
             (_, _) => {
               return Err(self.gen_err(format!(
                 "expected 2 integers to le compare, {:?} {:?}",
-                v1, v2
+                self.stack[last_idx], v2
               )))
             }
           }
@@ -322,13 +337,13 @@ impl CalxVM {
         CalxInstr::IntLe => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 <= n2)),
+          let last_idx = self.stack.len() - 1;
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 <= n2),
             (_, _) => {
               return Err(self.gen_err(format!(
                 "expected 2 integers to le compare, {:?} {:?}",
-                v1, v2
+                self.stack[last_idx], v2
               )))
             }
           }
@@ -336,13 +351,14 @@ impl CalxVM {
         CalxInstr::IntGt => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 > n2)),
+          let last_idx = self.stack.len() - 1;
+
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 > n2),
             (_, _) => {
               return Err(self.gen_err(format!(
                 "expected 2 integers to gt compare, {:?} {:?}",
-                v1, v2
+                self.stack[last_idx], v2
               )))
             }
           }
@@ -350,13 +366,14 @@ impl CalxVM {
         CalxInstr::IntGe => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::I64(n1), Calx::I64(n2)) => self.stack_push(Calx::Bool(n1 >= n2)),
+          let last_idx = self.stack.len() - 1;
+
+          match (&self.stack[last_idx], &v2) {
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 >= n2),
             (_, _) => {
               return Err(self.gen_err(format!(
                 "expected 2 integers to ge compare, {:?} {:?}",
-                v1, v2
+                self.stack[last_idx], v2
               )))
             }
           }
@@ -364,44 +381,54 @@ impl CalxVM {
         CalxInstr::Add => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::F64(n1), Calx::F64(n2)) => self.stack_push(Calx::F64(n1 + n2)),
+          let last_idx = self.stack.len() - 1;
+
+          match (&self.stack[last_idx], &v2) {
+            (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 + n2),
             (_, _) => {
-              return Err(self.gen_err(format!("expected 2 numbers to +, {:?} {:?}", v1, v2)))
+              return Err(self.gen_err(format!(
+                "expected 2 numbers to +, {:?} {:?}",
+                self.stack[last_idx], v2
+              )))
             }
           }
         }
         CalxInstr::Mul => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::F64(n1), Calx::F64(n2)) => self.stack_push(Calx::F64(n1 * n2)),
+          let last_idx = self.stack.len() - 1;
+
+          match (&self.stack[last_idx], &v2) {
+            (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 * n2),
             (_, _) => {
-              return Err(
-                self.gen_err(format!("expected 2 numbers to multiply, {:?} {:?}", v1, v2)),
-              )
+              return Err(self.gen_err(format!(
+                "expected 2 numbers to multiply, {:?} {:?}",
+                self.stack[last_idx], v2
+              )))
             }
           }
         }
         CalxInstr::Div => {
           // reversed order
           let v2 = self.stack_pop()?;
-          let v1 = self.stack_pop()?;
-          match (&v1, &v2) {
-            (Calx::F64(n1), Calx::F64(n2)) => self.stack_push(Calx::F64(n1 / n2)),
+          let last_idx = self.stack.len() - 1;
+
+          match (&self.stack[last_idx], &v2) {
+            (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 / n2),
             (_, _) => {
-              return Err(self.gen_err(format!("expected 2 numbers to divide, {:?} {:?}", v1, v2)))
+              return Err(self.gen_err(format!(
+                "expected 2 numbers to divide, {:?} {:?}",
+                self.stack[last_idx], v2
+              )))
             }
           }
         }
         CalxInstr::Neg => {
-          let v = self.stack_pop()?;
-          if let Calx::F64(n) = v {
-            self.stack_push(Calx::F64(-n))
+          let last_idx = self.stack.len() - 1;
+          if let Calx::F64(n) = self.stack[last_idx] {
+            self.stack[last_idx] = Calx::F64(-n)
           } else {
-            return Err(self.gen_err(format!("expected float, got {}", v)));
+            return Err(self.gen_err(format!("expected float, got {}", self.stack[last_idx])));
           }
         }
         CalxInstr::NewList => {
@@ -666,17 +693,6 @@ impl CalxVM {
   #[inline(always)]
   fn stack_push(&mut self, x: Calx) {
     self.stack.push(x)
-  }
-
-  #[inline(always)]
-  fn stack_peek(&mut self) -> Result<Calx, CalxError> {
-    if self.stack.is_empty() {
-      Err(self.gen_err(String::from("cannot peek empty stack")))
-    } else if self.stack.len() <= self.top_frame.initial_stack_size {
-      Err(self.gen_err(String::from("cannot peek parent stack")))
-    } else {
-      Ok(self.stack.last().unwrap().to_owned())
-    }
   }
 
   /// assumed that the size already checked
