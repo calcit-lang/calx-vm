@@ -134,22 +134,25 @@ pub enum CalxInstr {
   Br(usize),
   BrIf(usize),
   Block {
-    // bool oo to indicate loop
     params_types: Vec<CalxType>,
     ret_types: Vec<CalxType>,
+    /// bool to indicate loop
     looped: bool,
     from: usize,
     to: usize,
   },
   BlockEnd,
-  /// TODO use function name at first
-  Echo, // pop and println current value
-  Call(String),       // during running, only use index,
-  CallImport(String), // TODO,
+  /// pop and println current value
+  Echo,
+  /// TODO use function name at first, during running, only use index,
+  Call(String),
+  CallImport(String),
   Unreachable,
   Nop,
   Quit(usize), // quit and return value
   Return,
+  /// TODO might also be a foreign function instead
+  Assert(String),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

@@ -466,6 +466,14 @@ impl CalxVM {
           let v = self.stack_pop()?;
           println!("{}", v);
         }
+        CalxInstr::Assert(message) => {
+          let v = self.stack_pop()?;
+          if v == Calx::Bool(true) || v == Calx::I64(1) {
+            // Ok
+          } else {
+            return Err(self.gen_err(format!("Failed assertion: {}", message)));
+          }
+        }
       }
 
       self.top_frame.pointer += 1;

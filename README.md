@@ -74,6 +74,7 @@ For binary op, top value puts on right.
 | `quit $code`         | quit program and return exit code `$code`               |                   |
 | `return`             |                                                         | TODO              |
 | `fn $types $body`    |                                                         | Global definition |
+| `assert`             | `quit(1)` if not `true`                                 | for testing       |
 
 For `$types`, it can be `($t1 $t2 -> $t3 $t4)`, where supported types are:
 
