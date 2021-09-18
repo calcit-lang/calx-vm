@@ -155,8 +155,28 @@ pub enum CalxInstr {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxError {
   pub message: String,
-  pub instrs: Vec<CalxInstr>,
-  pub recent_stack: Vec<CalxInstr>, // maybe partial of stack
+  pub stack: Vec<Calx>,
+  pub top_frame: CalxFrame,
+  pub blocks: Vec<BlockData>,
+  pub globals: Vec<Calx>,
+}
+
+impl fmt::Display for CalxError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}\n{:?}\n{}", self.message, self.stack, self.top_frame)
+  }
+}
+
+impl CalxError {
+  pub fn new_raw(s: String) -> Self {
+    CalxError {
+      message: s,
+      stack: vec![],
+      top_frame: CalxFrame::new_empty(),
+      blocks: vec![],
+      globals: vec![],
+    }
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -194,11 +214,11 @@ impl CalxFrame {
 impl fmt::Display for CalxFrame {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("CalxFrame ")?;
-    write!(f, "@{} (", self.initial_stack_size)?;
+    write!(f, "_{} (", self.initial_stack_size)?;
     for p in &self.ret_types {
       write!(f, "{:?} ", p)?;
     }
-    f.write_str(")")?;
+    write!(f, ") @{}", self.pointer)?;
     for (idx, instr) in self.instrs.iter().enumerate() {
       write!(f, "\n  {:02} {:?}", idx, instr)?;
     }

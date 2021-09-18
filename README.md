@@ -28,7 +28,6 @@ For binary op, top value puts on right.
 
 | Code                 | Usage                                                   | Note              |
 | -------------------- | ------------------------------------------------------- | ----------------- |
-| `local`              | new local variable                                      | (not ready)       |
 | `local.set $idx`     | set value at `$idx`                                     |                   |
 | `local.tee $idx`     | set value at `$idx`, and also load it                   |                   |
 | `local.get $idx`     | get value at `$idx` load on stack                       |                   |
