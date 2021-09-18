@@ -117,6 +117,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             }
             Ok(vec![CalxInstr::LocalSet(idx)])
           }
+          "local.new" => Ok(vec![CalxInstr::LocalNew]),
           "global.get" => {
             if xs.len() != 2 {
               return Err(format!("global.get expected a position, {:?}", xs));
@@ -147,6 +148,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             }
             Ok(vec![CalxInstr::GlobalSet(idx)])
           }
+          "global.new" => Ok(vec![CalxInstr::GlobalNew]),
           "const" => {
             if xs.len() != 2 {
               return Err(format!("const takes exactly 1 argument, got {:?}", xs));
@@ -325,6 +327,11 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<Ca
     }
   }
   chunk.push(CalxInstr::BlockEnd);
+
+  if looped && !ret_types.is_empty() {
+    println!("return types for loop actuall not checked: {:?}", ret_types);
+  }
+
   chunk.insert(
     0,
     CalxInstr::Block {

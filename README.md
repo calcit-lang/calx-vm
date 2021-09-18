@@ -4,7 +4,18 @@
 
 ### Usages
 
-TODO
+```bash
+cargo install calx-vm
+calx hello.cirru
+```
+
+it starts with a `main` function:
+
+```cirru
+fn main ()
+  const "|hello world"
+  echo
+```
 
 ### Instructions
 
@@ -21,8 +32,10 @@ For binary op, top value puts on right.
 | `local.set $idx`     | set value at `$idx`                                     |                   |
 | `local.tee $idx`     | set value at `$idx`, and also load it                   |                   |
 | `local.get $idx`     | get value at `$idx` load on stack                       |                   |
+| `local.new`          | increase size of array of locals                        |                   |
 | `global.set $idx`    | set global value at `$idx`                              |                   |
 | `global.get $idx`    | get global value at `$idx`                              |                   |
+| `local.new`          | increase size of array of globals                       |                   |
 | `const $v`           | push value `$v` on stack                                |                   |
 | `dup`                | duplicate top value on stack                            |                   |
 | `drop`               | drop top value from stack                               |                   |

@@ -13,10 +13,11 @@ fn demo (-> i64)
   block (->) (br 0) (const 1.) (const 2.) (neg) (add) (echo)
   , (const "|demo of string") (echo)
   block (-> i64)
+    local.new
     const 0
     local.set 0
     const 0
-    loop (i64 -> i64)
+    loop (i64)
       const 1
       i.add
       dup
@@ -24,7 +25,7 @@ fn demo (-> i64)
       i.add
       local.set 0
       dup
-      const 100000
+      const 1000000
       i.ge
       br-if 1
       br 0
