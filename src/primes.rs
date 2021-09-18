@@ -68,8 +68,12 @@ pub struct CalxFunc {
 
 impl fmt::Display for CalxFunc {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.write_str("CalxFunc (")?;
+    write!(f, "CalxFunc {} (", self.name)?;
     for p in &self.params_types {
+      write!(f, "{:?} ", p)?;
+    }
+    f.write_str("-> ")?;
+    for p in &self.ret_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str(")")?;
@@ -85,7 +89,6 @@ impl fmt::Display for CalxFunc {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CalxInstr {
   // Param, // load variable from parameter
-  Local, // new local variable
   LocalSet(usize),
   LocalTee(usize), // set and also load to stack
   LocalGet(usize),
@@ -133,30 +136,55 @@ pub enum CalxInstr {
   // control stuctures
   Br(usize),
   BrIf(usize),
+  Jmp(usize),   // internal
+  JmpIf(usize), // internal
   Block {
-    // bool oo to indicate loop
     params_types: Vec<CalxType>,
     ret_types: Vec<CalxType>,
+    /// bool to indicate loop
     looped: bool,
     from: usize,
     to: usize,
   },
-  BlockEnd,
-  /// TODO use function name at first
-  Echo, // pop and println current value
-  Call(String),       // during running, only use index,
-  CallImport(String), // TODO,
+  BlockEnd(bool),
+  /// pop and println current value
+  Echo,
+  /// TODO use function name at first, during running, only use index,
+  Call(String),
+  CallImport(String),
   Unreachable,
   Nop,
   Quit(usize), // quit and return value
   Return,
+  /// TODO might also be a foreign function instead
+  Assert(String),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxError {
   pub message: String,
-  pub instrs: Vec<CalxInstr>,
-  pub recent_stack: Vec<CalxInstr>, // maybe partial of stack
+  pub stack: Vec<Calx>,
+  pub top_frame: CalxFrame,
+  pub blocks: Vec<BlockData>,
+  pub globals: Vec<Calx>,
+}
+
+impl fmt::Display for CalxError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}\n{:?}\n{}", self.message, self.stack, self.top_frame)
+  }
+}
+
+impl CalxError {
+  pub fn new_raw(s: String) -> Self {
+    CalxError {
+      message: s,
+      stack: vec![],
+      top_frame: CalxFrame::new_empty(),
+      blocks: vec![],
+      globals: vec![],
+    }
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -194,11 +222,11 @@ impl CalxFrame {
 impl fmt::Display for CalxFrame {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("CalxFrame ")?;
-    write!(f, "@{} (", self.initial_stack_size)?;
+    write!(f, "_{} (", self.initial_stack_size)?;
     for p in &self.ret_types {
       write!(f, "{:?} ", p)?;
     }
-    f.write_str(")")?;
+    write!(f, ") @{}", self.pointer)?;
     for (idx, instr) in self.instrs.iter().enumerate() {
       write!(f, "\n  {:02} {:?}", idx, instr)?;
     }

@@ -14,7 +14,11 @@ jobs:
         with:
           toolchain: stable
 
-      - run: cargo test
+      - run: cargo run examples/hello.cirru
+      - run: cargo run examples/sum.cirru
+      - run: cargo run examples/assert.cirru
+
+      # - run: cargo test
 
       - uses: katyo/publish-crates@v1
         with:

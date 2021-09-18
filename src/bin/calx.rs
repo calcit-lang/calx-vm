@@ -5,7 +5,7 @@ use std::time::Instant;
 use cirru_parser::{parse, Cirru};
 use clap::{App, Arg};
 
-use calx_vm::{parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM};
+use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxImportsDict, CalxVM};
 
 fn main() -> Result<(), String> {
   let matches = App::new("Calx VM")
@@ -17,7 +17,15 @@ fn main() -> Result<(), String> {
         .short('S')
         .long("show-code")
         .value_name("show-code")
-        .about("Sets a custom config file")
+        .about("display processed instructions of functions")
+        .takes_value(false),
+    )
+    .arg(
+      Arg::new("DISABLE_PRE")
+        .short('D')
+        .long("disable-pre")
+        .value_name("disable-pre")
+        .about("disabled preprocess")
         .takes_value(false),
     )
     .arg(
@@ -30,6 +38,7 @@ fn main() -> Result<(), String> {
 
   let source = matches.value_of("SOURCE").unwrap();
   let show_code = matches.is_present("SHOW_CODE");
+  let disable_pre = matches.is_present("DISABLE_PRE");
 
   let contents = fs::read_to_string(source).expect("Cirru file for instructions");
   let code = parse(&contents).expect("Some Cirru content");
@@ -41,20 +50,35 @@ fn main() -> Result<(), String> {
         let f = parse_function(&ys)?;
         fns.push(f);
       } else {
-        panic!("TODO");
+        panic!("expected top level expressions");
       }
     }
 
     let mut imports: CalxImportsDict = HashMap::new();
-    imports.insert(String::from("log2"), (log2_calx_value, 2));
+    imports.insert(String::from("log"), (log_calx_value, 1));
+    imports.insert(String::from("log2"), (log_calx_value, 2));
+    imports.insert(String::from("log3"), (log_calx_value, 3));
 
     let mut vm = CalxVM::new(fns, vec![], imports);
+
+    // if show_code {
+    //   for func in vm.funcs.to_owned() {
+    //     println!("loaded fn: {}", func);
+    //   }
+    // }
+
+    let now = Instant::now();
+    if !disable_pre {
+      vm.preprocess()?;
+    } else {
+      println!("Preprocess disabled.")
+    }
+
     if show_code {
       for func in vm.funcs.to_owned() {
         println!("loaded fn: {}", func);
       }
     }
-    let now = Instant::now();
 
     match vm.run() {
       Ok(()) => {
@@ -66,7 +90,7 @@ fn main() -> Result<(), String> {
       Err(e) => {
         println!("VM state: {:?}", vm.stack);
         println!("{}", e);
-        Err(String::from("Failed to run"))
+        Err(String::from("Failed to run."))
       }
     }
   } else {
@@ -74,7 +98,7 @@ fn main() -> Result<(), String> {
   }
 }
 
-fn log2_calx_value(xs: Vec<Calx>) -> Result<Calx, String> {
+fn log_calx_value(xs: Vec<Calx>) -> Result<Calx, CalxError> {
   println!("log: {:?}", xs);
   Ok(Calx::Nil)
 }

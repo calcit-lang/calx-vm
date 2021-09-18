@@ -266,6 +266,19 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             Ok(vec![CalxInstr::Quit(idx)])
           }
           "return" => Ok(vec![CalxInstr::Return]),
+
+          "assert" => {
+            let message: String;
+            if xs.len() != 2 {
+              return Err(format!("assert expected an extra message, {:?}", xs));
+            }
+            match &xs[1] {
+              Cirru::Leaf(s) => message = s.to_owned(),
+              Cirru::List(_) => return Err(format!("assert expected a message, got {:?}", xs[1])),
+            }
+
+            Ok(vec![CalxInstr::Assert(message)])
+          }
           _ => Err(format!("unknown instruction: {}", name)),
         },
       }
@@ -326,7 +339,7 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<Ca
       }
     }
   }
-  chunk.push(CalxInstr::BlockEnd);
+  chunk.push(CalxInstr::BlockEnd(looped));
 
   if looped && !ret_types.is_empty() {
     println!("return types for loop actuall not checked: {:?}", ret_types);
