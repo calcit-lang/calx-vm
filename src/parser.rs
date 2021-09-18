@@ -43,11 +43,14 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   let mut ptr_base: usize = 0;
   for (idx, line) in nodes.iter().enumerate() {
     if idx >= 3 {
-      let instrs = parse_instr(ptr_base, line)?;
+      for expanded in extract_nested(line)? {
+        // println!("expanded {}", expanded);
+        let instrs = parse_instr(ptr_base, &expanded)?;
 
-      for instr in instrs {
-        ptr_base += 1;
-        body.push(instr);
+        for instr in instrs {
+          ptr_base += 1;
+          body.push(instr);
+        }
       }
     }
   }
@@ -421,5 +424,48 @@ pub fn parse_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String>
 
       Ok((params, returns))
     }
+  }
+}
+
+/// rather stupid function to extract nested calls before current call
+/// TODO better have some tests
+pub fn extract_nested(xs: &Cirru) -> Result<Vec<Cirru>, String> {
+  match xs {
+    Cirru::Leaf(x) => Err(format!("not extracting leaf: {}", x)),
+    Cirru::List(ys) => match ys.get(0) {
+      None => Err(String::from("unexpected empty expression")),
+      Some(Cirru::List(zs)) => Err(format!("unexpected nested instruction name: {:?}", zs)),
+      Some(Cirru::Leaf(zs)) => match zs.as_str() {
+        "block" | "loop" => {
+          let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_string())];
+          for (idx, y) in ys.iter().enumerate() {
+            if idx > 0 {
+              for e in extract_nested(y)? {
+                chunk.push(e);
+              }
+            }
+          }
+          Ok(vec![Cirru::List(chunk)])
+        }
+        _ => {
+          let mut pre: Vec<Cirru> = vec![];
+          let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_string())];
+          for (idx, y) in ys.iter().enumerate() {
+            if idx > 0 {
+              match y {
+                Cirru::Leaf(_) => chunk.push(y.to_owned()),
+                Cirru::List(_) => {
+                  for e in extract_nested(y)? {
+                    pre.push(e);
+                  }
+                }
+              }
+            }
+          }
+          pre.push(Cirru::List(chunk));
+          Ok(pre)
+        }
+      },
+    },
   }
 }

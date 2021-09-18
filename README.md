@@ -29,6 +29,44 @@ calx -S hello.cirru
 calx -D hello.cirru
 ```
 
+### Syntax Sugar
+
+Code of:
+
+```cirru
+fn main ()
+  i.add
+    const 1
+    i.mul
+      const 2
+      const 3
+
+  echo
+    dup
+
+  assert "|expected 7"
+    i.eq
+      const 7
+```
+
+is desugared to:
+
+```cirru
+fn main ()
+  const 2
+  const 3
+  i.mul
+  const 1
+  i.add
+
+  dup
+  echo
+
+  const 7
+  i.eq
+  assert "|expected 7"
+```
+
 ### Instructions
 
 Highly inspired by:
