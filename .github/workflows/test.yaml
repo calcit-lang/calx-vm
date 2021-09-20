@@ -16,6 +16,7 @@ jobs:
         with:
           toolchain: stable
 
-      - run: cargo run examples/hello.cirru
-      - run: cargo run examples/sum.cirru
-      - run: cargo run examples/assert.cirru
+      - run: cargo run -- -S examples/hello.cirru
+      - run: cargo run -- -S examples/sum.cirru
+      - run: cargo run -- -S examples/assert.cirru
+      - run: cargo run -- -S examples/nested.cirru

@@ -41,60 +41,56 @@ fn main() -> Result<(), String> {
   let disable_pre = matches.is_present("DISABLE_PRE");
 
   let contents = fs::read_to_string(source).expect("Cirru file for instructions");
-  let code = parse(&contents).expect("Some Cirru content");
+  let xs = parse(&contents).expect("Some Cirru content");
 
-  if let Cirru::List(xs) = code {
-    let mut fns: Vec<CalxFunc> = vec![];
-    for x in xs {
-      if let Cirru::List(ys) = x {
-        let f = parse_function(&ys)?;
-        fns.push(f);
-      } else {
-        panic!("expected top level expressions");
-      }
-    }
-
-    let mut imports: CalxImportsDict = HashMap::new();
-    imports.insert(String::from("log"), (log_calx_value, 1));
-    imports.insert(String::from("log2"), (log_calx_value, 2));
-    imports.insert(String::from("log3"), (log_calx_value, 3));
-
-    let mut vm = CalxVM::new(fns, vec![], imports);
-
-    // if show_code {
-    //   for func in vm.funcs.to_owned() {
-    //     println!("loaded fn: {}", func);
-    //   }
-    // }
-
-    let now = Instant::now();
-    if !disable_pre {
-      vm.preprocess()?;
+  let mut fns: Vec<CalxFunc> = vec![];
+  for x in xs {
+    if let Cirru::List(ys) = x {
+      let f = parse_function(&ys)?;
+      fns.push(f);
     } else {
-      println!("Preprocess disabled.")
+      panic!("expected top level expressions");
     }
+  }
 
-    if show_code {
-      for func in vm.funcs.to_owned() {
-        println!("loaded fn: {}", func);
-      }
-    }
+  let mut imports: CalxImportsDict = HashMap::new();
+  imports.insert(String::from("log"), (log_calx_value, 1));
+  imports.insert(String::from("log2"), (log_calx_value, 2));
+  imports.insert(String::from("log3"), (log_calx_value, 3));
 
-    match vm.run() {
-      Ok(()) => {
-        let elapsed = now.elapsed();
+  let mut vm = CalxVM::new(fns, vec![], imports);
 
-        println!("Took {:.3?}: {:?}", elapsed, vm.stack);
-        Ok(())
-      }
-      Err(e) => {
-        println!("VM state: {:?}", vm.stack);
-        println!("{}", e);
-        Err(String::from("Failed to run."))
-      }
-    }
+  // if show_code {
+  //   for func in vm.funcs.to_owned() {
+  //     println!("loaded fn: {}", func);
+  //   }
+  // }
+
+  let now = Instant::now();
+  if !disable_pre {
+    vm.preprocess()?;
   } else {
-    Err(String::from("TODO not cirru code"))
+    println!("Preprocess disabled.")
+  }
+
+  if show_code {
+    for func in vm.funcs.to_owned() {
+      println!("loaded fn: {}", func);
+    }
+  }
+
+  match vm.run() {
+    Ok(()) => {
+      let elapsed = now.elapsed();
+
+      println!("Took {:.3?}: {:?}", elapsed, vm.stack);
+      Ok(())
+    }
+    Err(e) => {
+      println!("VM state: {:?}", vm.stack);
+      println!("{}", e);
+      Err(String::from("Failed to run."))
+    }
   }
 }
 
