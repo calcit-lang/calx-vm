@@ -610,6 +610,7 @@ impl CalxVM {
                 ));
               }
               stack_size = stack_size - f.params_types.len() + f.ret_types.len();
+              ops.push(CalxInstr::Call(f_name))
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
@@ -622,6 +623,7 @@ impl CalxVM {
                 ));
               }
               stack_size = stack_size - size + 1;
+              ops.push(CalxInstr::CallImport(f_name))
             }
             None => return Err(format!("missing imported function {}", f_name)),
           },
