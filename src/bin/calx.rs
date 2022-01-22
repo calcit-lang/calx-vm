@@ -17,7 +17,7 @@ fn main() -> Result<(), String> {
         .short('S')
         .long("show-code")
         .value_name("show-code")
-        .about("display processed instructions of functions")
+        .help("display processed instructions of functions")
         .takes_value(false),
     )
     .arg(
@@ -25,15 +25,10 @@ fn main() -> Result<(), String> {
         .short('D')
         .long("disable-pre")
         .value_name("disable-pre")
-        .about("disabled preprocess")
+        .help("disabled preprocess")
         .takes_value(false),
     )
-    .arg(
-      Arg::new("SOURCE")
-        .about("A *.cirru file for loading code")
-        .required(true)
-        .index(1),
-    )
+    .arg(Arg::new("SOURCE").help("A *.cirru file for loading code").required(true).index(1))
     .get_matches();
 
   let source = matches.value_of("SOURCE").unwrap();

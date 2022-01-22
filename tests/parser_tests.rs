@@ -7,113 +7,68 @@ use calx_vm::extract_nested;
 #[test]
 fn test_extracting() -> Result<(), String> {
   assert_eq!(
-    Cirru::List(extract_nested(&Cirru::List(vec![
-      Cirru::Leaf(String::from("a")),
-      Cirru::Leaf(String::from("b"))
-    ]))?),
-    Cirru::List(vec!(Cirru::List(vec![
-      Cirru::Leaf(String::from("a")),
-      Cirru::Leaf(String::from("b"))
-    ])))
+    Cirru::List(extract_nested(&Cirru::List(vec![Cirru::leaf("a"), Cirru::leaf("b")]))?),
+    Cirru::List(vec!(Cirru::List(vec![Cirru::leaf("a"), Cirru::leaf("b")])))
   );
 
   assert_eq!(
     Cirru::List(extract_nested(&Cirru::List(vec![
-      Cirru::Leaf(String::from("a")),
-      Cirru::Leaf(String::from("b")),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d")),
-      ])
+      Cirru::leaf("a"),
+      Cirru::leaf("b"),
+      Cirru::List(vec![Cirru::leaf("c"), Cirru::leaf("d"),])
     ]))?),
     Cirru::List(vec!(
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d"))
-      ]),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("a")),
-        Cirru::Leaf(String::from("b"))
-      ])
+      Cirru::List(vec![Cirru::leaf("c"), Cirru::leaf("d")]),
+      Cirru::List(vec![Cirru::leaf("a"), Cirru::leaf("b")])
     ))
   );
 
   assert_eq!(
     Cirru::List(extract_nested(&Cirru::List(vec![
-      Cirru::Leaf(String::from("a")),
-      Cirru::Leaf(String::from("b")),
+      Cirru::leaf("a"),
+      Cirru::leaf("b"),
       Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d")),
-        Cirru::List(vec![
-          Cirru::Leaf(String::from("e")),
-          Cirru::Leaf(String::from("f")),
-        ])
+        Cirru::leaf("c"),
+        Cirru::leaf("d"),
+        Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f"),])
       ])
     ]))?),
     Cirru::List(vec!(
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("e")),
-        Cirru::Leaf(String::from("f"))
-      ]),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d"))
-      ]),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("a")),
-        Cirru::Leaf(String::from("b"))
-      ])
+      Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f")]),
+      Cirru::List(vec![Cirru::leaf("c"), Cirru::leaf("d")]),
+      Cirru::List(vec![Cirru::leaf("a"), Cirru::leaf("b")])
     ))
   );
 
   assert_eq!(
     Cirru::List(extract_nested(&Cirru::List(vec![
-      Cirru::Leaf(String::from("block")),
+      Cirru::leaf("block"),
       Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d")),
-        Cirru::List(vec![
-          Cirru::Leaf(String::from("e")),
-          Cirru::Leaf(String::from("f")),
-        ])
+        Cirru::leaf("c"),
+        Cirru::leaf("d"),
+        Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f"),])
       ])
     ]))?),
     Cirru::List(vec!(Cirru::List(vec![
-      Cirru::Leaf(String::from("block")),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("e")),
-        Cirru::Leaf(String::from("f"))
-      ]),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d"))
-      ])
+      Cirru::leaf("block"),
+      Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f")]),
+      Cirru::List(vec![Cirru::leaf("c"), Cirru::leaf("d")])
     ]),))
   );
 
   assert_eq!(
     Cirru::List(extract_nested(&Cirru::List(vec![
-      Cirru::Leaf(String::from("loop")),
+      Cirru::leaf("loop"),
       Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d")),
-        Cirru::List(vec![
-          Cirru::Leaf(String::from("e")),
-          Cirru::Leaf(String::from("f")),
-        ])
+        Cirru::leaf("c"),
+        Cirru::leaf("d"),
+        Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f"),])
       ])
     ]))?),
     Cirru::List(vec!(Cirru::List(vec![
-      Cirru::Leaf(String::from("loop")),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("e")),
-        Cirru::Leaf(String::from("f"))
-      ]),
-      Cirru::List(vec![
-        Cirru::Leaf(String::from("c")),
-        Cirru::Leaf(String::from("d"))
-      ])
+      Cirru::leaf("loop"),
+      Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f")]),
+      Cirru::List(vec![Cirru::leaf("c"), Cirru::leaf("d")])
     ]),))
   );
 
