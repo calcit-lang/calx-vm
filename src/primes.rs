@@ -60,7 +60,7 @@ impl fmt::Display for Calx {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFunc {
-  pub name: String,
+  pub name: Box<str>,
   pub params_types: Vec<CalxType>,
   pub ret_types: Vec<CalxType>,
   pub instrs: Vec<CalxInstr>,
@@ -150,14 +150,14 @@ pub enum CalxInstr {
   /// pop and println current value
   Echo,
   /// TODO use function name at first, during running, only use index,
-  Call(String),
-  CallImport(String),
+  Call(Box<str>),
+  CallImport(Box<str>),
   Unreachable,
   Nop,
   Quit(usize), // quit and return value
   Return,
   /// TODO might also be a foreign function instead
-  Assert(String),
+  Assert(Box<str>),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

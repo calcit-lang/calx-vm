@@ -10,13 +10,26 @@ jobs:
   build_and_test:
     name: Test
     runs-on: ubuntu-latest
+
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          components: clippy
+          override: true
 
       - run: cargo run -- -S examples/hello.cirru
       - run: cargo run -- -S examples/sum.cirru
       - run: cargo run -- -S examples/assert.cirru
       - run: cargo run -- -S examples/nested.cirru
+
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features

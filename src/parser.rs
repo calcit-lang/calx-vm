@@ -21,7 +21,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   }
 
   if let Cirru::Leaf(x) = nodes[0].to_owned() {
-    if x == "fn" {
+    if &*x == "fn" {
       // ok
     } else {
       return Err(String::from("invalid"));
@@ -30,7 +30,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     return Err(String::from("invalid"));
   }
 
-  let name: String;
+  let name: Box<str>;
   if let Cirru::Leaf(x) = nodes[1].to_owned() {
     name = x;
   } else {
@@ -74,7 +74,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
 
       match i0 {
         Cirru::List(_) => Err(format!("expected instruction name in a string, got {}", i0)),
-        Cirru::Leaf(name) => match name.as_str() {
+        Cirru::Leaf(name) => match &*name {
           "local.get" => {
             if xs.len() != 2 {
               return Err(format!("local.get expected a position, {:?}", xs));
@@ -224,7 +224,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           "loop" => parse_block(ptr_base, xs, true),
           "echo" => Ok(vec![CalxInstr::Echo]),
           "call" => {
-            let name: String;
+            let name: Box<str>;
             if xs.len() != 2 {
               return Err(format!("call expected function name, {:?}", xs));
             }
@@ -236,7 +236,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             Ok(vec![CalxInstr::Call(name)])
           }
           "call-import" => {
-            let name: String;
+            let name: Box<str>;
             if xs.len() != 2 {
               return Err(format!("call expected function name, {:?}", xs));
             }
@@ -271,7 +271,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
           "return" => Ok(vec![CalxInstr::Return]),
 
           "assert" => {
-            let message: String;
+            let message: Box<str>;
             if xs.len() != 2 {
               return Err(format!("assert expected an extra message, {:?}", xs));
             }
@@ -371,7 +371,7 @@ pub fn parse_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String>
 
       for x in ys {
         if let Cirru::Leaf(t) = x {
-          match t.as_str() {
+          match &**t {
             "->" => {
               ret_mode = true;
             }
@@ -435,9 +435,9 @@ pub fn extract_nested(xs: &Cirru) -> Result<Vec<Cirru>, String> {
     Cirru::List(ys) => match ys.get(0) {
       None => Err(String::from("unexpected empty expression")),
       Some(Cirru::List(zs)) => Err(format!("unexpected nested instruction name: {:?}", zs)),
-      Some(Cirru::Leaf(zs)) => match zs.as_str() {
+      Some(Cirru::Leaf(zs)) => match &**zs {
         "block" | "loop" => {
-          let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_string())];
+          let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_owned())];
           for (idx, y) in ys.iter().enumerate() {
             if idx > 0 {
               for e in extract_nested(y)? {
@@ -449,7 +449,7 @@ pub fn extract_nested(xs: &Cirru) -> Result<Vec<Cirru>, String> {
         }
         _ => {
           let mut pre: Vec<Cirru> = vec![];
-          let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_string())];
+          let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_owned())];
           for (idx, y) in ys.iter().enumerate() {
             if idx > 0 {
               match y {
