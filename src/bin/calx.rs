@@ -3,12 +3,12 @@ use std::fs;
 use std::time::Instant;
 
 use cirru_parser::{parse, Cirru};
-use clap::{App, Arg};
+use clap::{Arg, Command};
 
 use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxImportsDict, CalxVM};
 
 fn main() -> Result<(), String> {
-  let matches = App::new("Calx VM")
+  let matches = Command::new("Calx VM")
     .version("0.1.0")
     .author("Jon Chen <jiyinyiyong@gmail.com>")
     .about("A toy VM")
@@ -69,7 +69,7 @@ fn main() -> Result<(), String> {
   }
 
   if show_code {
-    for func in vm.funcs.to_owned() {
+    for func in &vm.funcs {
       println!("loaded fn: {}", func);
     }
   }
