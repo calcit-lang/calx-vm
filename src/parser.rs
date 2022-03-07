@@ -30,12 +30,11 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     return Err(String::from("invalid"));
   }
 
-  let name: Box<str>;
-  if let Cirru::Leaf(x) = nodes[1].to_owned() {
-    name = x;
+  let name: Box<str> = if let Cirru::Leaf(x) = nodes[1].to_owned() {
+    x
   } else {
     return Err(String::from("invalid name"));
-  }
+  };
 
   let (params_types, ret_types) = parse_types(&nodes[2])?;
 
@@ -79,45 +78,36 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             if xs.len() != 2 {
               return Err(format!("local.get expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::LocalGet(idx)])
           }
           "local.set" => {
             if xs.len() != 2 {
               return Err(format!("local.set expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::LocalSet(idx)])
           }
           "local.tee" => {
             if xs.len() != 2 {
               return Err(format!("list.tee expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::LocalSet(idx)])
           }
           "local.new" => Ok(vec![CalxInstr::LocalNew]),
@@ -125,30 +115,24 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             if xs.len() != 2 {
               return Err(format!("global.get expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::GlobalGet(idx)])
           }
           "global.set" => {
             if xs.len() != 2 {
               return Err(format!("global.set expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::GlobalSet(idx)])
           }
           "global.new" => Ok(vec![CalxInstr::GlobalNew]),
@@ -194,56 +178,48 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             if xs.len() != 2 {
               return Err(format!("br-if expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::BrIf(idx)])
           }
           "br" => {
             if xs.len() != 2 {
               return Err(format!("br expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::Br(idx)])
           }
           "block" => parse_block(ptr_base, xs, false),
           "loop" => parse_block(ptr_base, xs, true),
           "echo" => Ok(vec![CalxInstr::Echo]),
           "call" => {
-            let name: Box<str>;
             if xs.len() != 2 {
               return Err(format!("call expected function name, {:?}", xs));
             }
-            match &xs[1] {
-              Cirru::Leaf(s) => name = s.to_owned(),
+            let name: Box<str> = match &xs[1] {
+              Cirru::Leaf(s) => s.to_owned(),
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
-            }
+            };
 
             Ok(vec![CalxInstr::Call(name)])
           }
           "call-import" => {
-            let name: Box<str>;
             if xs.len() != 2 {
               return Err(format!("call expected function name, {:?}", xs));
             }
-            match &xs[1] {
-              Cirru::Leaf(s) => name = s.to_owned(),
+            let name: Box<str> = match &xs[1] {
+              Cirru::Leaf(s) => s.to_owned(),
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
-            }
+            };
 
             Ok(vec![CalxInstr::CallImport(name)])
           }
@@ -257,28 +233,24 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             if xs.len() != 2 {
               return Err(format!("quit expected a position, {:?}", xs));
             }
-            let idx: usize;
-            match &xs[1] {
-              Cirru::Leaf(s) => {
-                idx = parse_usize(s)?;
-              }
+            let idx: usize = match &xs[1] {
+              Cirru::Leaf(s) => parse_usize(s)?,
               Cirru::List(_) => {
                 return Err(format!("expected token, got {}", xs[1]));
               }
-            }
+            };
             Ok(vec![CalxInstr::Quit(idx)])
           }
           "return" => Ok(vec![CalxInstr::Return]),
 
           "assert" => {
-            let message: Box<str>;
             if xs.len() != 2 {
               return Err(format!("assert expected an extra message, {:?}", xs));
             }
-            match &xs[1] {
-              Cirru::Leaf(s) => message = s.to_owned(),
+            let message: Box<str> = match &xs[1] {
+              Cirru::Leaf(s) => s.to_owned(),
               Cirru::List(_) => return Err(format!("assert expected a message, got {:?}", xs[1])),
-            }
+            };
 
             Ok(vec![CalxInstr::Assert(message)])
           }
