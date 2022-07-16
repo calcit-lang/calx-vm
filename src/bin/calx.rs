@@ -28,24 +28,67 @@ fn main() -> Result<(), String> {
         .help("disabled preprocess")
         .takes_value(false),
     )
+    .arg(
+      Arg::new("EMIT_BINARY")
+        .long("emit-binary")
+        .value_name("emit-binary")
+        .help("emit binary, rather than running")
+        .takes_value(true),
+    )
+    .arg(
+      Arg::new("EVALUATE_BINARY")
+        .long("eval-binary")
+        .value_name("eval-binary")
+        .help("evaluate program from binary")
+        .takes_value(false),
+    )
     .arg(Arg::new("SOURCE").help("A *.cirru file for loading code").required(true).index(1))
     .get_matches();
 
   let source = matches.value_of("SOURCE").unwrap();
   let show_code = matches.is_present("SHOW_CODE");
   let disable_pre = matches.is_present("DISABLE_PRE");
-
-  let contents = fs::read_to_string(source).expect("Cirru file for instructions");
-  let xs = parse(&contents).expect("Some Cirru content");
+  let emit_binary = matches.is_present("EMIT_BINARY");
+  let eval_binary = matches.is_present("EVALUATE_BINARY");
 
   let mut fns: Vec<CalxFunc> = vec![];
-  for x in xs {
-    if let Cirru::List(ys) = x {
-      let f = parse_function(&ys)?;
-      fns.push(f);
-    } else {
-      panic!("expected top level expressions");
+
+  if eval_binary {
+    let code = fs::read(source).expect("read binar from source file");
+    fns = bincode::decode_from_slice(&code, bincode::config::standard())
+      .expect("decode functions from binary")
+      .0;
+  } else {
+    let contents = fs::read_to_string(source).expect("Cirru file for instructions");
+    let xs = parse(&contents).expect("Some Cirru content");
+
+    for x in xs {
+      if let Cirru::List(ys) = x {
+        let f = parse_function(&ys)?;
+        fns.push(f);
+      } else {
+        panic!("expected top level expressions");
+      }
     }
+  }
+
+  if emit_binary {
+    let mut slice = [0u8; 10000];
+    let length = match bincode::encode_into_slice(&fns, &mut slice, bincode::config::standard()) {
+      Ok(l) => {
+        println!("encoded binary length: {}", l);
+        l
+      }
+      Err(e) => panic!("failed on default length of 10000: {}", e),
+    };
+    let slice = &slice[..length];
+    let target_file = matches.value_of("EMIT_BINARY").unwrap();
+    match fs::write(target_file, slice) {
+      Ok(_) => println!("wrote binary to {}", target_file),
+      Err(e) => panic!("failed to write binary to {}: {}", target_file, e),
+    };
+    return Ok(());
+    // println!("Bytes written: {:?}", slice);
   }
 
   let mut imports: CalxImportsDict = HashMap::new();

@@ -55,7 +55,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   }
 
   Ok(CalxFunc {
-    name,
+    name: name.to_string(),
     params_types,
     ret_types,
     instrs: body,
@@ -210,7 +210,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
             };
 
-            Ok(vec![CalxInstr::Call(name)])
+            Ok(vec![CalxInstr::Call((*name).to_owned())])
           }
           "call-import" => {
             if xs.len() != 2 {
@@ -221,7 +221,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
             };
 
-            Ok(vec![CalxInstr::CallImport(name)])
+            Ok(vec![CalxInstr::CallImport((*name).to_owned())])
           }
           "unreachable" => Ok(vec![CalxInstr::Unreachable]),
           "nop" => Ok(vec![CalxInstr::Nop]),
@@ -252,7 +252,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
               Cirru::List(_) => return Err(format!("assert expected a message, got {:?}", xs[1])),
             };
 
-            Ok(vec![CalxInstr::Assert(message)])
+            Ok(vec![CalxInstr::Assert((*message).to_owned())])
           }
           _ => Err(format!("unknown instruction: {}", name)),
         },

@@ -6,10 +6,11 @@
  * (I'm not equiped enough for building a bytecode VM yet...)
  */
 
+use bincode::{Decode, Encode};
 use std::fmt;
 
 /// Simplied from Calcit, but trying to be basic and mutable
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
 pub enum Calx {
   Nil,
   Bool(bool),
@@ -18,10 +19,10 @@ pub enum Calx {
   Str(String),
   List(Vec<Calx>),
   // to simultate linked structures
-  Link(Box<Calx>, Box<Calx>, Box<Calx>),
+  // Link(Box<Calx>, Box<Calx>, Box<Calx>),
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
 pub enum CalxType {
   Nil,
   Bool,
@@ -52,15 +53,14 @@ impl fmt::Display for Calx {
         }
         f.write_str(")")?;
         Ok(())
-      }
-      Calx::Link(..) => f.write_str("TODO LINK"),
+      } // Calx::Link(..) => f.write_str("TODO LINK"),
     }
   }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
 pub struct CalxFunc {
-  pub name: Box<str>,
+  pub name: String,
   pub params_types: Vec<CalxType>,
   pub ret_types: Vec<CalxType>,
   pub instrs: Vec<CalxInstr>,
@@ -86,7 +86,7 @@ impl fmt::Display for CalxFunc {
 }
 
 /// learning from WASM but for dynamic data
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
 pub enum CalxInstr {
   // Param, // load variable from parameter
   LocalSet(usize),
@@ -150,14 +150,14 @@ pub enum CalxInstr {
   /// pop and println current value
   Echo,
   /// TODO use function name at first, during running, only use index,
-  Call(Box<str>),
-  CallImport(Box<str>),
+  Call(String),
+  CallImport(String),
   Unreachable,
   Nop,
   Quit(usize), // quit and return value
   Return,
   /// TODO might also be a foreign function instead
-  Assert(Box<str>),
+  Assert(String),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

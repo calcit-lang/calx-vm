@@ -29,6 +29,10 @@ calx -S hello.cirru
 calx -D hello.cirru
 ```
 
+`--emit-binary filename` for encode functions into a binary file.
+
+`--eval-binary` for reading a binary input file to run.
+
 ### Syntax Sugar
 
 Code of:
