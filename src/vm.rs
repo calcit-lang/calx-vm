@@ -1,4 +1,4 @@
-use crate::primes::{BlockData, Calx, CalxError, CalxFrame, CalxFunc, CalxInstr};
+use crate::primes::{BlockData, Calx, CalxError, CalxFrame, CalxFunc, CalxInstr, CalxType};
 use std::collections::hash_map::HashMap;
 use std::fmt;
 use std::ops::Rem;
@@ -118,7 +118,7 @@ impl CalxVM {
             to,
             initial_stack_size: self.stack.len() - params_types.len(),
           });
-          println!("TODO check params type: {:?}", params_types);
+          self.check_stack_for_block(&params_types)?;
         }
         CalxInstr::BlockEnd(looped) => {
           if looped {
@@ -391,9 +391,6 @@ impl CalxVM {
                 ret_types: f.ret_types,
               };
 
-              // TODO check params type
-              println!("TODO check args: {:?}", f.params_types);
-
               // start in new frame
               continue;
             }
@@ -575,6 +572,20 @@ impl CalxVM {
       }
 
       self.funcs[i].instrs = ops;
+    }
+    Ok(())
+  }
+
+  /// checks is given parameters on stack top
+  fn check_stack_for_block(&self, params: &[CalxType]) -> Result<(), CalxError> {
+    if self.stack.len() < params.len() {
+      return Err(self.gen_err(format!("stack size does not match given params: {:?} {:?}", self.stack, params)));
+    }
+    for (idx, t) in params.iter().enumerate() {
+      if self.stack[self.stack.len() - params.len() - 1 + idx].typed_as(t.to_owned()) {
+        continue;
+      }
+      return Err(self.gen_err(format!("stack type does not match given params: {:?} {:?}", self.stack, params)));
     }
     Ok(())
   }

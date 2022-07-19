@@ -271,9 +271,7 @@ fn parse_local_idx(x: &Cirru, collector: &mut LocalsCollector) -> Result<usize, 
       }
       None => Err(String::from("invalid empty name")),
     },
-    Cirru::List(_) => {
-      return Err(format!("expected token, got {}", x));
-    }
+    Cirru::List(_) => Err(format!("expected token, got {}", x)),
   }
 }
 
@@ -358,7 +356,7 @@ pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Ve
             if &**t == "->" {
               ret_mode = true;
             } else {
-              let ty = parse_type_name(&**t)?;
+              let ty = parse_type_name(t)?;
               if ret_mode {
                 returns.push(ty);
               } else {
@@ -382,7 +380,7 @@ pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Ve
               Cirru::List(_) => return Err(format!("invalid syntax, expected name, got {:?}", x)),
             };
             let ty = match &zs[1] {
-              Cirru::Leaf(s) => parse_type_name(&**s)?,
+              Cirru::Leaf(s) => parse_type_name(s)?,
               Cirru::List(_) => return Err(format!("invalid syntax, expected type, got {:?}", x)),
             };
             collector.track(&name_str);
@@ -410,7 +408,7 @@ pub fn parse_block_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), S
           if &**t == "->" {
             ret_mode = true;
           } else {
-            let ty = parse_type_name(&**t)?;
+            let ty = parse_type_name(t)?;
             if ret_mode {
               returns.push(ty);
             } else {

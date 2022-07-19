@@ -19,12 +19,28 @@ pub enum Calx {
   // Link(Box<Calx>, Box<Calx>, Box<Calx>),
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
+impl Calx {
+  // for runtime type checking
+  pub fn typed_as(&self, t: CalxType) -> bool {
+    match self {
+      Calx::Nil => t == CalxType::Nil,
+      Calx::Bool(_) => t == CalxType::Bool,
+      Calx::I64(_) => t == CalxType::I64,
+      Calx::F64(_) => t == CalxType::F64,
+      Calx::Str(_) => t == CalxType::Str,
+      Calx::List(_) => t == CalxType::List,
+      // Calx::Link(_, _, _) => t == CalxType::Link,
+    }
+  }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Decode, Encode)]
 pub enum CalxType {
   Nil,
   Bool,
   I64,
   F64,
+  Str,
   List,
   Link,
 }
@@ -193,7 +209,7 @@ impl CalxError {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub struct BlockData {
   pub looped: bool,
   pub ret_types: Vec<CalxType>,
