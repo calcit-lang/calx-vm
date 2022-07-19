@@ -1,6 +1,8 @@
-/*! Parser Cirru into Calx instructions
+/*! Parse Cirru into Calx instructions
  *
  */
+
+mod locals;
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -8,6 +10,8 @@ use regex::Regex;
 use cirru_parser::Cirru;
 
 use crate::primes::{Calx, CalxFunc, CalxInstr, CalxType};
+
+use self::locals::LocalsCollector;
 
 /// parses
 /// ```cirru
@@ -36,15 +40,17 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     return Err(String::from("invalid name"));
   };
 
-  let (params_types, ret_types) = parse_types(&nodes[2])?;
-
   let mut body: Vec<CalxInstr> = vec![];
+  let mut locals_collector: LocalsCollector = LocalsCollector::new();
+
+  let (params_types, ret_types) = parse_fn_types(&nodes[2], &mut locals_collector)?;
+
   let mut ptr_base: usize = 0;
   for (idx, line) in nodes.iter().enumerate() {
     if idx >= 3 {
       for expanded in extract_nested(line)? {
         // println!("expanded {}", expanded);
-        let instrs = parse_instr(ptr_base, &expanded)?;
+        let instrs = parse_instr(ptr_base, &expanded, &mut locals_collector)?;
 
         for instr in instrs {
           ptr_base += 1;
@@ -58,11 +64,12 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     name: name.to_string(),
     params_types,
     ret_types,
+    local_names: locals_collector.locals,
     instrs: body,
   })
 }
 
-pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, String> {
+pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxInstr>, String> {
   match node {
     Cirru::Leaf(_) => Err(format!("expected expr of instruction, {}", node)),
     Cirru::List(xs) => {
@@ -78,36 +85,21 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             if xs.len() != 2 {
               return Err(format!("local.get expected a position, {:?}", xs));
             }
-            let idx: usize = match &xs[1] {
-              Cirru::Leaf(s) => parse_usize(s)?,
-              Cirru::List(_) => {
-                return Err(format!("expected token, got {}", xs[1]));
-              }
-            };
+            let idx: usize = parse_local_idx(&xs[1], collector)?;
             Ok(vec![CalxInstr::LocalGet(idx)])
           }
           "local.set" => {
             if xs.len() != 2 {
               return Err(format!("local.set expected a position, {:?}", xs));
             }
-            let idx: usize = match &xs[1] {
-              Cirru::Leaf(s) => parse_usize(s)?,
-              Cirru::List(_) => {
-                return Err(format!("expected token, got {}", xs[1]));
-              }
-            };
+            let idx: usize = parse_local_idx(&xs[1], collector)?;
             Ok(vec![CalxInstr::LocalSet(idx)])
           }
           "local.tee" => {
             if xs.len() != 2 {
               return Err(format!("list.tee expected a position, {:?}", xs));
             }
-            let idx: usize = match &xs[1] {
-              Cirru::Leaf(s) => parse_usize(s)?,
-              Cirru::List(_) => {
-                return Err(format!("expected token, got {}", xs[1]));
-              }
-            };
+            let idx: usize = parse_local_idx(&xs[1], collector)?;
             Ok(vec![CalxInstr::LocalSet(idx)])
           }
           "local.new" => Ok(vec![CalxInstr::LocalNew]),
@@ -198,8 +190,8 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru) -> Result<Vec<CalxInstr>, Stri
             };
             Ok(vec![CalxInstr::Br(idx)])
           }
-          "block" => parse_block(ptr_base, xs, false),
-          "loop" => parse_block(ptr_base, xs, true),
+          "block" => parse_block(ptr_base, xs, false, collector),
+          "loop" => parse_block(ptr_base, xs, true, collector),
           "echo" => Ok(vec![CalxInstr::Echo]),
           "call" => {
             if xs.len() != 2 {
@@ -267,6 +259,24 @@ lazy_static! {
   static ref USIZE_PATTERN: Regex = Regex::new("^\\d+$").unwrap();
 }
 
+fn parse_local_idx(x: &Cirru, collector: &mut LocalsCollector) -> Result<usize, String> {
+  match x {
+    Cirru::Leaf(s) => match s.chars().next() {
+      Some(c) => {
+        if c == '$' {
+          Ok(collector.track(s))
+        } else {
+          parse_usize(s)
+        }
+      }
+      None => Err(String::from("invalid empty name")),
+    },
+    Cirru::List(_) => {
+      return Err(format!("expected token, got {}", x));
+    }
+  }
+}
+
 pub fn parse_value(s: &str) -> Result<Calx, String> {
   match s {
     "nil" => Ok(Calx::Nil),
@@ -301,13 +311,13 @@ pub fn parse_usize(s: &str) -> Result<usize, String> {
   }
 }
 
-pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<CalxInstr>, String> {
+pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut LocalsCollector) -> Result<Vec<CalxInstr>, String> {
   let mut p = ptr_base + 1;
   let mut chunk: Vec<CalxInstr> = vec![];
-  let (params_types, ret_types) = parse_types(&xs[1])?;
+  let (params_types, ret_types) = parse_block_types(&xs[1])?;
   for (idx, line) in xs.iter().enumerate() {
     if idx > 1 {
-      let instrs = parse_instr(p, line)?;
+      let instrs = parse_instr(p, line, collector)?;
       for y in instrs {
         p += 1;
         chunk.push(y);
@@ -333,7 +343,61 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool) -> Result<Vec<Ca
   Ok(chunk)
 }
 
-pub fn parse_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String> {
+/// parameters might be named, need to check, by default use integers
+pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Vec<CalxType>, Vec<CalxType>), String> {
+  match xs {
+    Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
+    Cirru::List(ys) => {
+      let mut params: Vec<CalxType> = vec![];
+      let mut returns: Vec<CalxType> = vec![];
+      let mut ret_mode = false;
+
+      for x in ys {
+        match x {
+          Cirru::Leaf(t) => {
+            if &**t == "->" {
+              ret_mode = true;
+            } else {
+              let ty = parse_type_name(&**t)?;
+              if ret_mode {
+                returns.push(ty);
+              } else {
+                // track names in collector, if NOT named, use a string of index
+                let name = format!("${}", params.len());
+                collector.track(&name);
+                params.push(ty);
+              }
+            }
+          }
+
+          Cirru::List(zs) => {
+            if ret_mode {
+              return Err(format!("invalid syntax, return values should not have names, got {:?}", x));
+            }
+            if zs.len() != 2 {
+              return Err(format!("invalid syntax, expected name and type, got {:?}", x));
+            }
+            let name_str = match &zs[0] {
+              Cirru::Leaf(s) => s.to_owned(),
+              Cirru::List(_) => return Err(format!("invalid syntax, expected name, got {:?}", x)),
+            };
+            let ty = match &zs[1] {
+              Cirru::Leaf(s) => parse_type_name(&**s)?,
+              Cirru::List(_) => return Err(format!("invalid syntax, expected type, got {:?}", x)),
+            };
+            collector.track(&name_str);
+            params.push(ty);
+          }
+        }
+      }
+
+      Ok((params, returns))
+    }
+  }
+}
+
+/// does not need names in block
+pub fn parse_block_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String> {
   match xs {
     Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
     Cirru::List(ys) => {
@@ -343,59 +407,33 @@ pub fn parse_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String>
 
       for x in ys {
         if let Cirru::Leaf(t) = x {
-          match &**t {
-            "->" => {
-              ret_mode = true;
+          if &**t == "->" {
+            ret_mode = true;
+          } else {
+            let ty = parse_type_name(&**t)?;
+            if ret_mode {
+              returns.push(ty);
+            } else {
+              params.push(ty);
             }
-            "nil" => {
-              if ret_mode {
-                returns.push(CalxType::Nil);
-              } else {
-                params.push(CalxType::Nil);
-              }
-            }
-            "bool" => {
-              if ret_mode {
-                returns.push(CalxType::Bool);
-              } else {
-                params.push(CalxType::Bool);
-              }
-            }
-            "i64" => {
-              if ret_mode {
-                returns.push(CalxType::I64);
-              } else {
-                params.push(CalxType::I64);
-              }
-            }
-            "f64" => {
-              if ret_mode {
-                returns.push(CalxType::F64);
-              } else {
-                params.push(CalxType::F64);
-              }
-            }
-            "list" => {
-              if ret_mode {
-                returns.push(CalxType::List);
-              } else {
-                params.push(CalxType::List);
-              }
-            }
-            "link" => {
-              if ret_mode {
-                returns.push(CalxType::Link);
-              } else {
-                params.push(CalxType::Link);
-              }
-            }
-            a => return Err(format!("Unknown type: {}", a)),
           }
         }
       }
 
       Ok((params, returns))
     }
+  }
+}
+
+fn parse_type_name(x: &str) -> Result<CalxType, String> {
+  match x {
+    "nil" => Ok(CalxType::Nil),
+    "bool" => Ok(CalxType::Bool),
+    "i64" => Ok(CalxType::I64),
+    "f64" => Ok(CalxType::F64),
+    "list" => Ok(CalxType::List),
+    "link" => Ok(CalxType::Link),
+    a => Err(format!("Unknown type: {}", a)),
   }
 }
 
