@@ -5,7 +5,7 @@ use std::time::Instant;
 use cirru_parser::{parse, Cirru};
 use clap::{Arg, Command};
 
-use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxImportsDict, CalxVM};
+use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM};
 
 fn main() -> Result<(), String> {
   let matches = Command::new("Calx VM")
@@ -117,11 +117,11 @@ fn main() -> Result<(), String> {
     }
   }
 
-  match vm.run() {
-    Ok(()) => {
+  match vm.run(vec![Calx::I64(1)]) {
+    Ok(ret) => {
       let elapsed = now.elapsed();
 
-      println!("Took {:.3?}: {:?}", elapsed, vm.stack);
+      println!("Took {:.3?}: {:?}", elapsed, ret);
       Ok(())
     }
     Err(e) => {
@@ -130,9 +130,4 @@ fn main() -> Result<(), String> {
       Err(String::from("Failed to run."))
     }
   }
-}
-
-fn log_calx_value(xs: Vec<Calx>) -> Result<Calx, CalxError> {
-  println!("log: {:?}", xs);
-  Ok(Calx::Nil)
 }

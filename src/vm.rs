@@ -42,7 +42,10 @@ impl CalxVM {
     }
   }
 
-  pub fn run(&mut self) -> Result<(), CalxError> {
+  pub fn run(&mut self, args: Vec<Calx>) -> Result<Calx, CalxError> {
+    // assign function parameters
+    self.top_frame.locals = args;
+    self.stack.clear();
     loop {
       // println!("Stack {:?}", self.stack);
       // println!("-- op {} {:?}", self.stack.len(), instr);
@@ -51,7 +54,7 @@ impl CalxVM {
         // println!("status {:?} {}", self.stack, self.top_frame);
         self.check_func_return()?;
         if self.frames.is_empty() {
-          return Ok(());
+          return Ok(self.stack.pop().unwrap_or(Calx::Nil));
         } else {
           // let prev_frame = self.top_frame;
           self.top_frame = self.frames.pop().unwrap();
@@ -160,7 +163,10 @@ impl CalxVM {
         CalxInstr::Return => {
           self.check_func_return()?;
           if self.frames.is_empty() {
-            return Ok(());
+            return match self.stack.pop() {
+              Some(x) => Ok(x),
+              None => Err(self.gen_err("return without value".to_owned())),
+            };
           } else {
             // let prev_frame = self.top_frame;
             self.top_frame = self.frames.pop().unwrap();
