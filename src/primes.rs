@@ -1,9 +1,6 @@
 /*!
- * Calx is a simplied VM from Calcit, but not lower level enough.
- * Data in Calx is mutable, and has basic types and structures, such as Lists.
- * Calx uses a mixed form of prefix and postix instructions.
- *
- * (I'm not equiped enough for building a bytecode VM yet...)
+ * Calx is a simplied VM, with dynamic data types, and WASM-inspired control flows.
+ * It is a toy project, but trying to speed up calculations for Calcit.
  */
 
 use bincode::{Decode, Encode};
@@ -133,6 +130,7 @@ pub enum CalxInstr {
   // bool operations
   And,
   Or,
+  Not,
   // control stuctures
   Br(usize),
   BrIf(usize),
@@ -234,3 +232,16 @@ impl fmt::Display for CalxFrame {
     Ok(())
   }
 }
+
+/// binary format for saving calx program
+/// TODO this is not a valid file format that requires magic code
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
+pub struct CalxBinaryProgram {
+  /// updates as instructions update
+  pub edition: String,
+  pub fns: Vec<CalxFunc>,
+}
+
+/// TODO not sure whether bincode remains compatible after new instruction added
+/// use string for some semantics
+pub const CALX_BINARY_EDITION: &str = "0.1";

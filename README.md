@@ -80,6 +80,8 @@ Highly inspired by:
 
 For binary op, top value puts on right.
 
+Calx Binary Edition `0.1`:
+
 | Code                 | Usage                                                    | Note              |
 | -------------------- | -------------------------------------------------------- | ----------------- |
 | `local.set $idx`     | set value at `$idx`                                      |                   |
@@ -115,6 +117,7 @@ For binary op, top value puts on right.
 | `link.new`           |                                                          | TODO              |
 | `and`                |                                                          | TODO              |
 | `or`                 |                                                          | TODO              |
+| `not`                |                                                          | TODO              |
 | `br $n`              | branch `$n` level of block, 0 means end of current block |                   |
 | `br-if $n`           | like `br $n` but detects top value on stack first        | Internal          |
 | (JMP `$l`)           | jump to line `$l`                                        | Internal          |

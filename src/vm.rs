@@ -370,6 +370,9 @@ impl CalxVM {
         CalxInstr::Or => {
           // TODO
         }
+        CalxInstr::Not => {
+          // TODO
+        }
         CalxInstr::Call(f_name) => {
           match find_func(&self.funcs, &f_name) {
             Some(f) => {
@@ -687,6 +690,7 @@ pub fn instr_stack_arity(op: &CalxInstr) -> (usize, usize) {
     // bool operations
     CalxInstr::And => (2, 1),
     CalxInstr::Or => (2, 1),
+    CalxInstr::Not => (1, 1),
     // control stuctures
     CalxInstr::Br(_) => (0, 0),
     CalxInstr::BrIf(_) => (1, 0),
