@@ -1,4 +1,4 @@
-use crate::primes::{BlockData, Calx, CalxError, CalxFrame, CalxFunc, CalxInstr};
+use crate::primes::{BlockData, Calx, CalxError, CalxFrame, CalxFunc, CalxInstr, CalxType};
 use std::collections::hash_map::HashMap;
 use std::fmt;
 use std::ops::Rem;
@@ -42,7 +42,10 @@ impl CalxVM {
     }
   }
 
-  pub fn run(&mut self) -> Result<(), CalxError> {
+  pub fn run(&mut self, args: Vec<Calx>) -> Result<Calx, CalxError> {
+    // assign function parameters
+    self.top_frame.locals = args;
+    self.stack.clear();
     loop {
       // println!("Stack {:?}", self.stack);
       // println!("-- op {} {:?}", self.stack.len(), instr);
@@ -51,7 +54,7 @@ impl CalxVM {
         // println!("status {:?} {}", self.stack, self.top_frame);
         self.check_func_return()?;
         if self.frames.is_empty() {
-          return Ok(());
+          return Ok(self.stack.pop().unwrap_or(Calx::Nil));
         } else {
           // let prev_frame = self.top_frame;
           self.top_frame = self.frames.pop().unwrap();
@@ -115,7 +118,7 @@ impl CalxVM {
             to,
             initial_stack_size: self.stack.len() - params_types.len(),
           });
-          println!("TODO check params type: {:?}", params_types);
+          self.check_stack_for_block(&params_types)?;
         }
         CalxInstr::BlockEnd(looped) => {
           if looped {
@@ -160,7 +163,10 @@ impl CalxVM {
         CalxInstr::Return => {
           self.check_func_return()?;
           if self.frames.is_empty() {
-            return Ok(());
+            return match self.stack.pop() {
+              Some(x) => Ok(x),
+              None => Err(self.gen_err("return without value".to_owned())),
+            };
           } else {
             // let prev_frame = self.top_frame;
             self.top_frame = self.frames.pop().unwrap();
@@ -364,6 +370,9 @@ impl CalxVM {
         CalxInstr::Or => {
           // TODO
         }
+        CalxInstr::Not => {
+          // TODO
+        }
         CalxInstr::Call(f_name) => {
           match find_func(&self.funcs, &f_name) {
             Some(f) => {
@@ -381,9 +390,6 @@ impl CalxVM {
                 instrs: f.instrs,
                 ret_types: f.ret_types,
               };
-
-              // TODO check params type
-              println!("TODO check args: {:?}", f.params_types);
 
               // start in new frame
               continue;
@@ -570,6 +576,20 @@ impl CalxVM {
     Ok(())
   }
 
+  /// checks is given parameters on stack top
+  fn check_stack_for_block(&self, params: &[CalxType]) -> Result<(), CalxError> {
+    if self.stack.len() < params.len() {
+      return Err(self.gen_err(format!("stack size does not match given params: {:?} {:?}", self.stack, params)));
+    }
+    for (idx, t) in params.iter().enumerate() {
+      if self.stack[self.stack.len() - params.len() - 1 + idx].typed_as(t.to_owned()) {
+        continue;
+      }
+      return Err(self.gen_err(format!("stack type does not match given params: {:?} {:?}", self.stack, params)));
+    }
+    Ok(())
+  }
+
   #[inline(always)]
   fn check_func_return(&mut self) -> Result<(), CalxError> {
     if self.stack.len() != self.top_frame.initial_stack_size + self.top_frame.ret_types.len() {
@@ -681,6 +701,7 @@ pub fn instr_stack_arity(op: &CalxInstr) -> (usize, usize) {
     // bool operations
     CalxInstr::And => (2, 1),
     CalxInstr::Or => (2, 1),
+    CalxInstr::Not => (1, 1),
     // control stuctures
     CalxInstr::Br(_) => (0, 0),
     CalxInstr::BrIf(_) => (1, 0),

@@ -18,6 +18,8 @@ jobs:
       - run: cargo run -- -S examples/sum.cirru
       - run: cargo run -- -S examples/assert.cirru
       - run: cargo run -- -S examples/nested.cirru
+      - run: cargo run -- -S examples/named.cirru
+      - run: cargo run -- --emit-binary target/a.calx examples/named.cirru && cargo run -- --eval-binary target/a.calx
 
       # - run: cargo test
 

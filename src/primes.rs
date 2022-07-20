@@ -1,9 +1,6 @@
 /*!
- * Calx is a simplied VM from Calcit, but not lower level enough.
- * Data in Calx is mutable, and has basic types and structures, such as Lists.
- * Calx uses a mixed form of prefix and postix instructions.
- *
- * (I'm not equiped enough for building a bytecode VM yet...)
+ * Calx is a simplied VM, with dynamic data types, and WASM-inspired control flows.
+ * It is a toy project, but trying to speed up calculations for Calcit.
  */
 
 use bincode::{Decode, Encode};
@@ -22,12 +19,28 @@ pub enum Calx {
   // Link(Box<Calx>, Box<Calx>, Box<Calx>),
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
+impl Calx {
+  // for runtime type checking
+  pub fn typed_as(&self, t: CalxType) -> bool {
+    match self {
+      Calx::Nil => t == CalxType::Nil,
+      Calx::Bool(_) => t == CalxType::Bool,
+      Calx::I64(_) => t == CalxType::I64,
+      Calx::F64(_) => t == CalxType::F64,
+      Calx::Str(_) => t == CalxType::Str,
+      Calx::List(_) => t == CalxType::List,
+      // Calx::Link(_, _, _) => t == CalxType::Link,
+    }
+  }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Decode, Encode)]
 pub enum CalxType {
   Nil,
   Bool,
   I64,
   F64,
+  Str,
   List,
   Link,
 }
@@ -64,6 +77,7 @@ pub struct CalxFunc {
   pub params_types: Vec<CalxType>,
   pub ret_types: Vec<CalxType>,
   pub instrs: Vec<CalxInstr>,
+  pub local_names: Vec<String>,
 }
 
 impl fmt::Display for CalxFunc {
@@ -77,6 +91,13 @@ impl fmt::Display for CalxFunc {
       write!(f, "{:?} ", p)?;
     }
     f.write_str(")")?;
+    if !self.local_names.is_empty() {
+      f.write_str("\n  local_names:")?;
+      for (idx, l) in self.local_names.iter().enumerate() {
+        write!(f, " {}_{}", idx, l)?;
+      }
+      f.write_str(" .")?;
+    }
     for (idx, instr) in self.instrs.iter().enumerate() {
       write!(f, "\n  {:02} {:?}", idx, instr)?;
     }
@@ -133,6 +154,7 @@ pub enum CalxInstr {
   // bool operations
   And,
   Or,
+  Not,
   // control stuctures
   Br(usize),
   BrIf(usize),
@@ -187,7 +209,7 @@ impl CalxError {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub struct BlockData {
   pub looped: bool,
   pub ret_types: Vec<CalxType>,
@@ -234,3 +256,16 @@ impl fmt::Display for CalxFrame {
     Ok(())
   }
 }
+
+/// binary format for saving calx program
+/// TODO this is not a valid file format that requires magic code
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
+pub struct CalxBinaryProgram {
+  /// updates as instructions update
+  pub edition: String,
+  pub fns: Vec<CalxFunc>,
+}
+
+/// TODO not sure whether bincode remains compatible after new instruction added
+/// use string for some semantics
+pub const CALX_BINARY_EDITION: &str = "0.1";

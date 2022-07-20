@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly
           components: clippy
           override: true
 
@@ -28,6 +28,13 @@ jobs:
       - run: cargo run -- -S examples/sum.cirru
       - run: cargo run -- -S examples/assert.cirru
       - run: cargo run -- -S examples/nested.cirru
+      - run: cargo run -- -S examples/named.cirru
+      - run: cargo run -- --emit-binary target/a.calx examples/named.cirru && cargo run -- --eval-binary target/a.calx
+
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
 
       - uses: actions-rs/clippy-check@v1
         with:

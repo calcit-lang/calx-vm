@@ -14,7 +14,7 @@ fn blocks (-> i64)
   , (const "|demo of string") (echo)
   const 0
 
-fn sum ()
+fn sum (-> i64)
   local.new
   block (-> i64)
     const 0
@@ -48,6 +48,7 @@ fn sum ()
   const "|check sum"
   echo
   local.get 0
+  dup
   echo
 
 fn echos (-> i64)
@@ -64,5 +65,6 @@ fn echos (-> i64)
   return
 
 
-fn main ()
+fn main (-> i64)
   call sum
+  return

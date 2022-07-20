@@ -5,7 +5,7 @@ use std::time::Instant;
 use cirru_parser::{parse, Cirru};
 use clap::{Arg, Command};
 
-use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxImportsDict, CalxVM};
+use calx_vm::{log_calx_value, parse_function, Calx, CalxBinaryProgram, CalxFunc, CalxImportsDict, CalxVM, CALX_BINARY_EDITION};
 
 fn main() -> Result<(), String> {
   let matches = Command::new("Calx VM")
@@ -55,9 +55,18 @@ fn main() -> Result<(), String> {
 
   if eval_binary {
     let code = fs::read(source).expect("read binar from source file");
-    fns = bincode::decode_from_slice(&code, bincode::config::standard())
+    let program: CalxBinaryProgram = bincode::decode_from_slice(&code, bincode::config::standard())
       .expect("decode functions from binary")
       .0;
+    if program.edition == CALX_BINARY_EDITION {
+      println!("Calx Edition: {}", program.edition);
+      fns = program.fns;
+    } else {
+      return Err(format!(
+        "Runner uses binary edition {}, binary encoded in {}",
+        CALX_BINARY_EDITION, program.edition
+      ));
+    }
   } else {
     let contents = fs::read_to_string(source).expect("Cirru file for instructions");
     let xs = parse(&contents).expect("Some Cirru content");
@@ -74,7 +83,11 @@ fn main() -> Result<(), String> {
 
   if emit_binary {
     let mut slice = [0u8; 10000];
-    let length = match bincode::encode_into_slice(&fns, &mut slice, bincode::config::standard()) {
+    let program = CalxBinaryProgram {
+      edition: CALX_BINARY_EDITION.to_string(),
+      fns,
+    };
+    let length = match bincode::encode_into_slice(&program, &mut slice, bincode::config::standard()) {
       Ok(l) => {
         println!("encoded binary length: {}", l);
         l
@@ -117,11 +130,11 @@ fn main() -> Result<(), String> {
     }
   }
 
-  match vm.run() {
-    Ok(()) => {
+  match vm.run(vec![Calx::I64(1)]) {
+    Ok(ret) => {
       let elapsed = now.elapsed();
 
-      println!("Took {:.3?}: {:?}", elapsed, vm.stack);
+      println!("Took {:.3?}: {:?}", elapsed, ret);
       Ok(())
     }
     Err(e) => {
@@ -130,9 +143,4 @@ fn main() -> Result<(), String> {
       Err(String::from("Failed to run."))
     }
   }
-}
-
-fn log_calx_value(xs: Vec<Calx>) -> Result<Calx, CalxError> {
-  println!("log: {:?}", xs);
-  Ok(Calx::Nil)
 }
