@@ -204,6 +204,17 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
 
             Ok(vec![CalxInstr::Call((*name).to_owned())])
           }
+          "return-call" => {
+            if xs.len() != 2 {
+              return Err(format!("return-call expected function name, {:?}", xs));
+            }
+            let name: Box<str> = match &xs[1] {
+              Cirru::Leaf(s) => s.to_owned(),
+              Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
+            };
+
+            Ok(vec![CalxInstr::ReturnCall((*name).to_owned())])
+          }
           "call-import" => {
             if xs.len() != 2 {
               return Err(format!("call expected function name, {:?}", xs));
