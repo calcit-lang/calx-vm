@@ -321,6 +321,7 @@ impl CalxVM {
 
           match (&self.stack[last_idx], &v2) {
             (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 + n2),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64(n1 + n2),
             (_, _) => return Err(self.gen_err(format!("expected 2 numbers to +, {:?} {:?}", self.stack[last_idx], v2))),
           }
         }
@@ -331,6 +332,7 @@ impl CalxVM {
 
           match (&self.stack[last_idx], &v2) {
             (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 * n2),
+            (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64(n1 * n2),
             (_, _) => return Err(self.gen_err(format!("expected 2 numbers to multiply, {:?} {:?}", self.stack[last_idx], v2))),
           }
         }
@@ -374,6 +376,7 @@ impl CalxVM {
           // TODO
         }
         CalxInstr::Call(f_name) => {
+          // println!("frame size: {}", self.frames.len());
           match find_func(&self.funcs, &f_name) {
             Some(f) => {
               let mut locals: Vec<Calx> = vec![];
@@ -382,6 +385,39 @@ impl CalxVM {
                 locals.insert(0, v);
               }
               self.frames.push(self.top_frame.to_owned());
+              self.top_frame = CalxFrame {
+                blocks_track: vec![],
+                initial_stack_size: self.stack.len(),
+                locals,
+                pointer: 0,
+                instrs: f.instrs,
+                ret_types: f.ret_types,
+              };
+
+              // start in new frame
+              continue;
+            }
+            None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
+          }
+        }
+        CalxInstr::ReturnCall(f_name) => {
+          // println!("frame size: {}", self.frames.len());
+          match find_func(&self.funcs, &f_name) {
+            Some(f) => {
+              // println!("examine stack: {:?}", self.stack);
+              let mut locals: Vec<Calx> = vec![];
+              for _ in 0..f.params_types.len() {
+                let v = self.stack_pop()?;
+                locals.insert(0, v);
+              }
+              let prev_frame = self.top_frame.to_owned();
+              if prev_frame.initial_stack_size != self.stack.len() {
+                return Err(self.gen_err(format!(
+                  "expected constant initial stack size: {}, got: {}",
+                  prev_frame.initial_stack_size,
+                  self.stack.len()
+                )));
+              }
               self.top_frame = CalxFrame {
                 blocks_track: vec![],
                 initial_stack_size: self.stack.len(),
@@ -451,7 +487,7 @@ impl CalxVM {
       // println!("\nFUNC {} {}", self.funcs[i].name, stack_size);
 
       for j in 0..self.funcs[i].instrs.len() {
-        // println!("* {:?}", self.funcs[i].instrs[j].to_owned());
+        // println!("{} * {:?}", stack_size, self.funcs[i].instrs[j].to_owned());
         match self.funcs[i].instrs[j].to_owned() {
           CalxInstr::Block {
             looped,
@@ -527,6 +563,16 @@ impl CalxVM {
               }
               stack_size = stack_size - f.params_types.len() + f.ret_types.len();
               ops.push(CalxInstr::Call(f_name))
+            }
+            None => return Err(format!("cannot find function named: {}", f_name)),
+          },
+          CalxInstr::ReturnCall(f_name) => match find_func(&self.funcs, &f_name) {
+            Some(f) => {
+              if stack_size < f.params_types.len() {
+                return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
+              }
+              stack_size = stack_size - f.params_types.len() + f.ret_types.len();
+              ops.push(CalxInstr::ReturnCall(f_name))
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
@@ -711,6 +757,7 @@ pub fn instr_stack_arity(op: &CalxInstr) -> (usize, usize) {
     CalxInstr::BlockEnd(_) => (0, 0),
     CalxInstr::Echo => (1, 0),
     CalxInstr::Call(_) => (0, 0),       // TODO
+    CalxInstr::ReturnCall(_) => (0, 0), // TODO
     CalxInstr::CallImport(_) => (0, 0), // import
     CalxInstr::Unreachable => (0, 0),   // TODO
     CalxInstr::Nop => (0, 0),

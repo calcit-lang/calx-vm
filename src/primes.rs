@@ -171,8 +171,10 @@ pub enum CalxInstr {
   BlockEnd(bool),
   /// pop and println current value
   Echo,
-  /// TODO use function name at first, during running, only use index,
+  /// TODO use function name at first, during running, index can be faster
   Call(String),
+  /// for tail recursion
+  ReturnCall(String),
   CallImport(String),
   Unreachable,
   Nop,

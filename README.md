@@ -127,6 +127,7 @@ Calx Binary Edition `0.1`:
 | (BlockEnd)           | internal mark for ending a block                         | Internal                               |
 | `echo`               | pop value from stack and print                           |                                        |
 | `call $f`            | call function `$f`                                       |                                        |
+| `return-call $f`     | tail call function `$f`                                  |                                        |
 | `call-import $f`     | call imported function `$f`                              |                                        |
 | `unreachable`        | throw unreachable panic                                  |                                        |
 | `nop`                | No op                                                    |                                        |
