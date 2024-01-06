@@ -1,8 +1,8 @@
 [package]
 name = "calx_vm"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["jiyinyiyong <jiyinyiyong@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 description = "Stack-based VM, with dynamic data, for experiment"
 homepage = "https://github.com/calcit-lang/calx-vm"
@@ -16,11 +16,11 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cirru_parser = "0.1.23"
-regex = "1.6.0"
+cirru_parser = "0.1.25"
+regex = "1.10.2"
 lazy_static = "1.4.0"
-clap = "3.2.12"
-bincode = "2.0.0-rc.1"
+clap = { version = "4.4.13", features = ["derive"] }
+bincode = "2.0.0-rc.3"
 
 [profile.release]
 debug = true
