@@ -9,16 +9,18 @@ jobs:
     name: Publish to cargo
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - uses: actions/checkout@v4
 
-      - run: cargo run -- -S examples/hello.cirru
-      - run: cargo run -- -S examples/sum.cirru
-      - run: cargo run -- -S examples/assert.cirru
-      - run: cargo run -- -S examples/nested.cirru
-      - run: cargo run -- -S examples/named.cirru
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          components: clippy
+
+      - run: cargo run -- -s examples/hello.cirru
+      - run: cargo run -- -s examples/sum.cirru
+      - run: cargo run -- -s examples/assert.cirru
+      - run: cargo run -- -s examples/nested.cirru
+      - run: cargo run -- -s examples/named.cirru
       - run: cargo run -- examples/recur.cirru
       - run: cargo run -- --emit-binary target/a.calx examples/named.cirru && cargo run -- --eval-binary target/a.calx
 

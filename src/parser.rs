@@ -451,7 +451,7 @@ fn parse_type_name(x: &str) -> Result<CalxType, String> {
 pub fn extract_nested(xs: &Cirru) -> Result<Vec<Cirru>, String> {
   match xs {
     Cirru::Leaf(x) => Err(format!("not extracting leaf: {}", x)),
-    Cirru::List(ys) => match ys.get(0) {
+    Cirru::List(ys) => match ys.first() {
       None => Err(String::from("unexpected empty expression")),
       Some(Cirru::List(zs)) => Err(format!("unexpected nested instruction name: {:?}", zs)),
       Some(Cirru::Leaf(zs)) => match &**zs {

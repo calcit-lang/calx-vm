@@ -3,53 +3,37 @@ use std::fs;
 use std::time::Instant;
 
 use cirru_parser::{parse, Cirru};
-use clap::{Arg, Command};
+use clap::{arg, Parser};
 
 use calx_vm::{log_calx_value, parse_function, Calx, CalxBinaryProgram, CalxFunc, CalxImportsDict, CalxVM, CALX_BINARY_EDITION};
 
-fn main() -> Result<(), String> {
-  let matches = Command::new("Calx VM")
-    .version("0.1.0")
-    .author("Jon Chen <jiyinyiyong@gmail.com>")
-    .about("A toy VM")
-    .arg(
-      Arg::new("SHOW_CODE")
-        .short('S')
-        .long("show-code")
-        .value_name("show-code")
-        .help("display processed instructions of functions")
-        .takes_value(false),
-    )
-    .arg(
-      Arg::new("DISABLE_PRE")
-        .short('D')
-        .long("disable-pre")
-        .value_name("disable-pre")
-        .help("disabled preprocess")
-        .takes_value(false),
-    )
-    .arg(
-      Arg::new("EMIT_BINARY")
-        .long("emit-binary")
-        .value_name("emit-binary")
-        .help("emit binary, rather than running")
-        .takes_value(true),
-    )
-    .arg(
-      Arg::new("EVALUATE_BINARY")
-        .long("eval-binary")
-        .value_name("eval-binary")
-        .help("evaluate program from binary")
-        .takes_value(false),
-    )
-    .arg(Arg::new("SOURCE").help("A *.cirru file for loading code").required(true).index(1))
-    .get_matches();
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(name = "Calx VM")]
+#[command(author = "Jon Chen <jiyinyiyong@gmail.com>")]
+#[command(version = "0.1.4")]
+#[command(about = "A toy VM", long_about = None)]
+struct Args {
+  #[arg(short, long, value_name = "SHOW_CODE")]
+  show_code: bool,
+  #[arg(short, long, value_name = "DISABLE_PRE")]
+  disable_pre: bool,
+  #[arg(short, long, value_name = "EMIT_BINARY")]
+  emit_binary: Option<String>,
+  #[arg(long, value_name = "EVAL_BINARY")]
+  eval_binary: bool,
+  #[arg(value_name = "SOURCE")]
+  source: String,
+}
 
-  let source = matches.value_of("SOURCE").unwrap();
-  let show_code = matches.is_present("SHOW_CODE");
-  let disable_pre = matches.is_present("DISABLE_PRE");
-  let emit_binary = matches.is_present("EMIT_BINARY");
-  let eval_binary = matches.is_present("EVALUATE_BINARY");
+fn main() -> Result<(), String> {
+  let args = Args::parse();
+
+  let source = args.source;
+  let show_code = args.show_code;
+  let disable_pre = args.disable_pre;
+  let emit_binary = args.emit_binary;
+  let eval_binary = args.eval_binary;
 
   let mut fns: Vec<CalxFunc> = vec![];
 
@@ -81,7 +65,7 @@ fn main() -> Result<(), String> {
     }
   }
 
-  if emit_binary {
+  if emit_binary.is_some() {
     let mut slice = [0u8; 10000];
     let program = CalxBinaryProgram {
       edition: CALX_BINARY_EDITION.to_string(),
@@ -95,7 +79,7 @@ fn main() -> Result<(), String> {
       Err(e) => panic!("failed on default length of 10000: {}", e),
     };
     let slice = &slice[..length];
-    let target_file = matches.value_of("EMIT_BINARY").unwrap();
+    let target_file = &emit_binary.unwrap();
     match fs::write(target_file, slice) {
       Ok(_) => println!("wrote binary to {}", target_file),
       Err(e) => panic!("failed to write binary to {}: {}", target_file, e),
