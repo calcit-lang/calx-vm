@@ -92,6 +92,7 @@ fn main() -> Result<(), String> {
 
   let now = Instant::now();
   if !disable_pre {
+    println!("start preprocessing");
     vm.preprocess()?;
   } else {
     println!("Preprocess disabled.")
@@ -103,6 +104,7 @@ fn main() -> Result<(), String> {
     }
   }
 
+  println!("start running");
   match vm.run(vec![Calx::I64(1)]) {
     Ok(ret) => {
       let elapsed = now.elapsed();

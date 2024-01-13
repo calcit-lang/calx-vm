@@ -113,6 +113,7 @@ impl CalxVM {
           }
           self.top_frame.blocks_track.push(BlockData {
             looped,
+            params_types: params_types.to_owned(),
             ret_types,
             from,
             to,
@@ -501,6 +502,7 @@ impl CalxVM {
             }
             blocks_track.push(BlockData {
               looped,
+              params_types,
               ret_types,
               from,
               to,
@@ -547,10 +549,10 @@ impl CalxVM {
             let prev_block = blocks_track.pop().unwrap();
             if looped {
               // nothing, branched during runtime
-            } else if stack_size != prev_block.initial_stack_size + prev_block.ret_types.len() {
+            } else if stack_size != prev_block.initial_stack_size + prev_block.ret_types.len() - prev_block.params_types.len() {
               return Err(format!(
-                "not match {} and {} + {:?} at block end",
-                stack_size, prev_block.initial_stack_size, prev_block.ret_types
+                "stack size is {stack_size}, initial size is {}, return types is {:?} at block end",
+                prev_block.initial_stack_size, prev_block.ret_types
               ));
             }
 
@@ -589,7 +591,7 @@ impl CalxVM {
           CalxInstr::Return => {
             if stack_size != self.funcs[i].ret_types.len() {
               return Err(format!(
-                "invalid return size {} of {:?} in {}",
+                "invalid return size {} for {:?} in {}",
                 stack_size, self.funcs[i].ret_types, self.funcs[i].name
               ));
             }
