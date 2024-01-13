@@ -11,7 +11,7 @@ use calx_vm::{log_calx_value, parse_function, Calx, CalxBinaryProgram, CalxFunc,
 #[derive(Parser, Debug)]
 #[command(name = "Calx VM")]
 #[command(author = "Jon Chen <jiyinyiyong@gmail.com>")]
-#[command(version = "0.1.4")]
+#[command(version = "0.1.6")]
 #[command(about = "A toy VM", long_about = None)]
 struct Args {
   #[arg(short, long, value_name = "SHOW_CODE")]
@@ -66,26 +66,15 @@ fn main() -> Result<(), String> {
   }
 
   if emit_binary.is_some() {
-    let mut slice = [0u8; 10000];
     let program = CalxBinaryProgram {
       edition: CALX_BINARY_EDITION.to_string(),
       fns,
     };
-    let length = match bincode::encode_into_slice(&program, &mut slice, bincode::config::standard()) {
-      Ok(l) => {
-        println!("encoded binary length: {}", l);
-        l
-      }
-      Err(e) => panic!("failed on default length of 10000: {}", e),
-    };
-    let slice = &slice[..length];
+    let buf = bincode::encode_to_vec(program, bincode::config::standard()).map_err(|e| e.to_string())?;
     let target_file = &emit_binary.unwrap();
-    match fs::write(target_file, slice) {
-      Ok(_) => println!("wrote binary to {}", target_file),
-      Err(e) => panic!("failed to write binary to {}: {}", target_file, e),
-    };
+    fs::write(target_file, buf).map_err(|e| e.to_string())?;
+    println!("wrote binary to {}", target_file);
     return Ok(());
-    // println!("Bytes written: {:?}", slice);
   }
 
   let mut imports: CalxImportsDict = HashMap::new();
