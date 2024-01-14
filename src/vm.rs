@@ -63,20 +63,21 @@ impl CalxVM {
         self.top_frame.pointer += 1;
         continue;
       }
-      match self.top_frame.instrs[self.top_frame.pointer].to_owned() {
+      let instrs = self.top_frame.instrs.to_owned();
+      match &instrs[self.top_frame.pointer] {
         CalxInstr::Jmp(line) => {
-          self.top_frame.pointer = line;
+          self.top_frame.pointer = line.to_owned();
           continue; // point reset, goto next loop
         }
         CalxInstr::JmpIf(line) => {
           let v = self.stack_pop()?;
           if v == Calx::Bool(true) || v == Calx::I64(1) {
-            self.top_frame.pointer = line;
+            self.top_frame.pointer = line.to_owned();
             continue; // point reset, goto next loop
           }
         }
         CalxInstr::Br(size) => {
-          self.shrink_blocks_by(size)?;
+          self.shrink_blocks_by(*size)?;
 
           let last_idx = self.top_frame.blocks_track.len() - 1;
           if self.top_frame.blocks_track[last_idx].looped {
@@ -90,7 +91,7 @@ impl CalxVM {
         CalxInstr::BrIf(size) => {
           let last_idx = self.stack.len() - 1;
           if self.stack[last_idx] == Calx::Bool(true) || self.stack[last_idx] == Calx::I64(1) {
-            self.shrink_blocks_by(size)?;
+            self.shrink_blocks_by(*size)?;
 
             let last_idx = self.top_frame.blocks_track.len() - 1;
             if self.top_frame.blocks_track[last_idx].looped {
@@ -113,17 +114,17 @@ impl CalxVM {
             return Err(self.gen_err(format!("no enough data on stack {:?} for {:?}", self.stack, params_types)));
           }
           self.top_frame.blocks_track.push(BlockData {
-            looped,
+            looped: looped.to_owned(),
             params_types: params_types.to_owned(),
-            ret_types,
-            from,
-            to,
+            ret_types: ret_types.to_owned(),
+            from: from.to_owned(),
+            to: to.to_owned(),
             initial_stack_size: self.stack.len() - params_types.len(),
           });
-          self.check_stack_for_block(&params_types)?;
+          self.check_stack_for_block(params_types)?;
         }
         CalxInstr::BlockEnd(looped) => {
-          if looped {
+          if *looped {
             return Err(self.gen_err(String::from("loop end expected to be branched")));
           }
           let last_block = self.top_frame.blocks_track.pop().unwrap();
@@ -140,24 +141,24 @@ impl CalxVM {
         }
         CalxInstr::LocalSet(idx) => {
           let v = self.stack_pop()?;
-          if idx >= self.top_frame.locals.len() {
+          if *idx >= self.top_frame.locals.len() {
             return Err(self.gen_err(format!("out of bound in local.set {} for {:?}", idx, self.top_frame.locals)));
           } else {
-            self.top_frame.locals[idx] = v
+            self.top_frame.locals[*idx] = v
           }
         }
         CalxInstr::LocalTee(idx) => {
           let v = self.stack_pop()?;
-          if idx >= self.top_frame.locals.len() {
+          if *idx >= self.top_frame.locals.len() {
             return Err(self.gen_err(format!("out of bound in local.tee {}", idx)));
           } else {
-            self.top_frame.locals[idx] = v.to_owned()
+            self.top_frame.locals[*idx] = v.to_owned()
           }
           self.stack_push(v);
         }
         CalxInstr::LocalGet(idx) => {
-          if idx < self.top_frame.locals.len() {
-            self.stack_push(self.top_frame.locals[idx].to_owned())
+          if *idx < self.top_frame.locals.len() {
+            self.stack_push(self.top_frame.locals[*idx].to_owned())
           } else {
             return Err(self.gen_err(format!("invalid index for local.get {}", idx)));
           }
@@ -177,15 +178,15 @@ impl CalxVM {
         CalxInstr::LocalNew => self.top_frame.locals.push(Calx::Nil),
         CalxInstr::GlobalSet(idx) => {
           let v = self.stack_pop()?;
-          if self.globals.len() >= idx {
+          if self.globals.len() >= *idx {
             return Err(self.gen_err(format!("out of bound in global.set {}", idx)));
           } else {
-            self.globals[idx] = v
+            self.globals[*idx] = v
           }
         }
         CalxInstr::GlobalGet(idx) => {
-          if idx < self.globals.len() {
-            self.stack_push(self.globals[idx].to_owned())
+          if *idx < self.globals.len() {
+            self.stack_push(self.globals[*idx].to_owned())
           } else {
             return Err(self.gen_err(format!("invalid index for global.get {}", idx)));
           }
@@ -379,7 +380,7 @@ impl CalxVM {
         }
         CalxInstr::Call(f_name) => {
           // println!("frame size: {}", self.frames.len());
-          match find_func(&self.funcs, &f_name) {
+          match find_func(&self.funcs, f_name) {
             Some(f) => {
               let instrs = f.instrs.to_owned();
               let ret_types = f.ret_types.to_owned();
@@ -406,7 +407,7 @@ impl CalxVM {
         }
         CalxInstr::ReturnCall(f_name) => {
           // println!("frame size: {}", self.frames.len());
-          match find_func(&self.funcs, &f_name) {
+          match find_func(&self.funcs, f_name) {
             Some(f) => {
               // println!("examine stack: {:?}", self.stack);
               let instrs = f.instrs.to_owned();
@@ -439,7 +440,7 @@ impl CalxVM {
             None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
           }
         }
-        CalxInstr::CallImport(f_name) => match self.imports.to_owned().get(&*f_name) {
+        CalxInstr::CallImport(f_name) => match self.imports.to_owned().get(f_name) {
           None => return Err(self.gen_err(format!("missing imported function {}", f_name))),
           Some((f, size)) => {
             if self.stack.len() < *size {
@@ -465,7 +466,7 @@ impl CalxVM {
         CalxInstr::Nop => {
           // Noop
         }
-        CalxInstr::Quit(code) => std::process::exit(code as i32),
+        CalxInstr::Quit(code) => std::process::exit(*code as i32),
         CalxInstr::Echo => {
           let v = self.stack_pop()?;
           println!("{}", v);
