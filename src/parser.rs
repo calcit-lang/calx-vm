@@ -4,6 +4,8 @@
 
 mod locals;
 
+use std::rc::Rc;
+
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -63,9 +65,9 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   Ok(CalxFunc {
     name: name.to_string(),
     params_types,
-    ret_types,
-    local_names: locals_collector.locals,
-    instrs: body,
+    ret_types: Rc::new(ret_types),
+    local_names: Rc::new(locals_collector.locals),
+    instrs: Rc::new(body),
   })
 }
 

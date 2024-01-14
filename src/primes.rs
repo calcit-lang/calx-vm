@@ -4,7 +4,7 @@
  */
 
 use bincode::{Decode, Encode};
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 /// Simplied from Calcit, but trying to be basic and mutable
 #[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
@@ -75,9 +75,9 @@ impl fmt::Display for Calx {
 pub struct CalxFunc {
   pub name: String,
   pub params_types: Vec<CalxType>,
-  pub ret_types: Vec<CalxType>,
-  pub instrs: Vec<CalxInstr>,
-  pub local_names: Vec<String>,
+  pub ret_types: Rc<Vec<CalxType>>,
+  pub instrs: Rc<Vec<CalxInstr>>,
+  pub local_names: Rc<Vec<String>>,
 }
 
 impl fmt::Display for CalxFunc {
@@ -87,7 +87,7 @@ impl fmt::Display for CalxFunc {
       write!(f, "{:?} ", p)?;
     }
     f.write_str("-> ")?;
-    for p in &self.ret_types {
+    for p in &*self.ret_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str(")")?;
@@ -224,22 +224,22 @@ pub struct BlockData {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
   pub locals: Vec<Calx>, // params + added locals
-  pub instrs: Vec<CalxInstr>,
+  pub instrs: Rc<Vec<CalxInstr>>,
   pub pointer: usize,
   pub initial_stack_size: usize,
   pub blocks_track: Vec<BlockData>,
-  pub ret_types: Vec<CalxType>,
+  pub ret_types: Rc<Vec<CalxType>>,
 }
 
 impl CalxFrame {
   pub fn new_empty() -> Self {
     CalxFrame {
       locals: vec![],
-      instrs: vec![],
+      instrs: Rc::new(vec![]),
       pointer: 0,
       initial_stack_size: 0,
       blocks_track: vec![],
-      ret_types: vec![],
+      ret_types: Rc::new(vec![]),
     }
   }
 }
@@ -248,7 +248,7 @@ impl fmt::Display for CalxFrame {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("CalxFrame ")?;
     write!(f, "_{} (", self.initial_stack_size)?;
-    for p in &self.ret_types {
+    for p in &*self.ret_types {
       write!(f, "{:?} ", p)?;
     }
     write!(f, ") @{}", self.pointer)?;

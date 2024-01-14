@@ -1,7 +1,8 @@
 use crate::primes::{BlockData, Calx, CalxError, CalxFrame, CalxFunc, CalxInstr, CalxType};
 use std::collections::hash_map::HashMap;
-use std::fmt;
 use std::ops::Rem;
+use std::rc::Rc;
+use std::{fmt, vec};
 
 pub type CalxImportsDict = HashMap<String, (fn(xs: Vec<Calx>) -> Result<Calx, CalxError>, usize)>;
 
@@ -23,14 +24,15 @@ impl std::fmt::Debug for CalxVM {
 
 impl CalxVM {
   pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>, imports: CalxImportsDict) -> Self {
-    let main_func = find_func(&fns, "main").expect("main function is required");
+    let mut fns = fns.to_owned();
+    let main_func = find_func(&mut fns, "main").expect("main function is required");
     let main_frame = CalxFrame {
       initial_stack_size: 0,
       blocks_track: vec![],
-      instrs: main_func.instrs,
+      instrs: main_func.instrs.to_owned(),
       pointer: 0,
       locals: vec![],
-      ret_types: main_func.ret_types,
+      ret_types: main_func.ret_types.to_owned(),
     };
     CalxVM {
       stack: vec![],
@@ -378,8 +380,10 @@ impl CalxVM {
         }
         CalxInstr::Call(f_name) => {
           // println!("frame size: {}", self.frames.len());
-          match find_func(&self.funcs, &f_name) {
+          match find_func(&mut self.funcs, &f_name) {
             Some(f) => {
+              let instrs = f.instrs.to_owned();
+              let ret_types = f.ret_types.to_owned();
               let mut locals: Vec<Calx> = vec![];
               for _ in 0..f.params_types.len() {
                 let v = self.stack_pop()?;
@@ -391,8 +395,8 @@ impl CalxVM {
                 initial_stack_size: self.stack.len(),
                 locals,
                 pointer: 0,
-                instrs: f.instrs,
-                ret_types: f.ret_types,
+                instrs,
+                ret_types,
               };
 
               // start in new frame
@@ -403,9 +407,11 @@ impl CalxVM {
         }
         CalxInstr::ReturnCall(f_name) => {
           // println!("frame size: {}", self.frames.len());
-          match find_func(&self.funcs, &f_name) {
+          match find_func(&mut self.funcs, &f_name) {
             Some(f) => {
               // println!("examine stack: {:?}", self.stack);
+              let instrs = f.instrs.to_owned();
+              let ret_types = f.ret_types.to_owned();
               let mut locals: Vec<Calx> = vec![];
               for _ in 0..f.params_types.len() {
                 let v = self.stack_pop()?;
@@ -424,8 +430,8 @@ impl CalxVM {
                 initial_stack_size: self.stack.len(),
                 locals,
                 pointer: 0,
-                instrs: f.instrs,
-                ret_types: f.ret_types,
+                instrs,
+                ret_types,
               };
 
               // start in new frame
@@ -558,7 +564,7 @@ impl CalxVM {
 
             ops.push(CalxInstr::Nop)
           }
-          CalxInstr::Call(f_name) => match find_func(&self.funcs, &f_name) {
+          CalxInstr::Call(f_name) => match find_func(&mut self.funcs, &f_name) {
             Some(f) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
@@ -568,7 +574,7 @@ impl CalxVM {
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxInstr::ReturnCall(f_name) => match find_func(&self.funcs, &f_name) {
+          CalxInstr::ReturnCall(f_name) => match find_func(&mut self.funcs, &f_name) {
             Some(f) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
@@ -619,7 +625,7 @@ impl CalxVM {
         ));
       }
 
-      self.funcs[i].instrs = ops;
+      self.funcs[i].instrs = Rc::new(ops);
     }
     Ok(())
   }
@@ -700,13 +706,8 @@ impl CalxVM {
   }
 }
 
-pub fn find_func(funcs: &[CalxFunc], name: &str) -> Option<CalxFunc> {
-  for x in funcs {
-    if &*x.name == name {
-      return Some(x.to_owned());
-    }
-  }
-  None
+pub fn find_func<'a>(funcs: &'a mut [CalxFunc], name: &str) -> Option<&'a mut CalxFunc> {
+  funcs.iter_mut().find(|x| &*x.name == name)
 }
 
 /// notice that some of the instrs are special and need to handle manually
