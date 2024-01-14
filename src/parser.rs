@@ -347,8 +347,8 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
       looped,
       from: ptr_base + 1,
       to: p,
-      params_types,
-      ret_types,
+      params_types: Rc::new(params_types),
+      ret_types: Rc::new(ret_types),
     },
   );
   Ok(chunk)

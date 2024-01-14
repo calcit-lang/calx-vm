@@ -161,8 +161,8 @@ pub enum CalxInstr {
   Jmp(usize),   // internal
   JmpIf(usize), // internal
   Block {
-    params_types: Vec<CalxType>,
-    ret_types: Vec<CalxType>,
+    params_types: Rc<Vec<CalxType>>,
+    ret_types: Rc<Vec<CalxType>>,
     /// bool to indicate loop
     looped: bool,
     from: usize,
@@ -214,8 +214,8 @@ impl CalxError {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub struct BlockData {
   pub looped: bool,
-  pub params_types: Vec<CalxType>,
-  pub ret_types: Vec<CalxType>,
+  pub params_types: Rc<Vec<CalxType>>,
+  pub ret_types: Rc<Vec<CalxType>>,
   pub from: usize,
   pub to: usize,
   pub initial_stack_size: usize,
