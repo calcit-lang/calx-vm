@@ -5,13 +5,13 @@ fn main ()
   echo
 
 fn fibo (($x i64) -> i64)
-  block (-> i64)
+  block (->)
     local.get $x
-    dup
     const 3
     i.lt
     br-if 0
 
+    local.get $x
     const -1
     i.add
     call fibo
@@ -25,6 +25,5 @@ fn fibo (($x i64) -> i64)
 
     return
 
-  drop
   const 1
   return

@@ -184,6 +184,68 @@ pub enum CalxInstr {
   Assert(String),
 }
 
+impl CalxInstr {
+  /// notice that some of the instrs are special and need to handle manually
+  pub fn stack_arity(&self) -> (usize, usize) {
+    match self {
+      CalxInstr::LocalSet(_) => (1, 0),
+      CalxInstr::LocalTee(_) => (1, 1), // TODO need check
+      CalxInstr::LocalGet(_) => (0, 1),
+      CalxInstr::LocalNew => (0, 0),
+      CalxInstr::GlobalSet(_) => (1, 0),
+      CalxInstr::GlobalGet(_) => (0, 1),
+      CalxInstr::GlobalNew => (0, 0),
+      CalxInstr::Const(_) => (0, 1),
+      CalxInstr::Dup => (1, 2),
+      CalxInstr::Drop => (1, 0),
+      CalxInstr::IntAdd => (2, 1),
+      CalxInstr::IntMul => (2, 1),
+      CalxInstr::IntDiv => (2, 1),
+      CalxInstr::IntRem => (2, 1),
+      CalxInstr::IntNeg => (1, 1),
+      CalxInstr::IntShr => (2, 1),
+      CalxInstr::IntShl => (2, 1),
+      CalxInstr::IntEq => (2, 1),
+      CalxInstr::IntNe => (2, 1),
+      CalxInstr::IntLt => (2, 1),
+      CalxInstr::IntLe => (2, 1),
+      CalxInstr::IntGt => (2, 1),
+      CalxInstr::IntGe => (2, 1),
+      CalxInstr::Add => (2, 1),
+      CalxInstr::Mul => (2, 1),
+      CalxInstr::Div => (2, 1),
+      CalxInstr::Neg => (1, 1),
+      // string operations
+      // list operations
+      CalxInstr::NewList => (0, 1),
+      CalxInstr::ListGet => (2, 1),
+      CalxInstr::ListSet => (3, 0),
+      // Link
+      CalxInstr::NewLink => (0, 1),
+      // bool operations
+      CalxInstr::And => (2, 1),
+      CalxInstr::Or => (2, 1),
+      CalxInstr::Not => (1, 1),
+      // control stuctures
+      CalxInstr::Br(_) => (0, 0),
+      CalxInstr::BrIf(_) => (1, 0),
+      CalxInstr::Jmp(_) => (0, 0),
+      CalxInstr::JmpIf(_) => (1, 0),
+      CalxInstr::Block { .. } => (0, 0),
+      CalxInstr::BlockEnd(_) => (0, 0),
+      CalxInstr::Echo => (1, 0),
+      CalxInstr::Call(_) => (0, 0),       // TODO
+      CalxInstr::ReturnCall(_) => (0, 0), // TODO
+      CalxInstr::CallImport(_) => (0, 0), // import
+      CalxInstr::Unreachable => (0, 0),   // TODO
+      CalxInstr::Nop => (0, 0),
+      CalxInstr::Quit(_) => (0, 0),
+      CalxInstr::Return => (0, 0), // TODO
+      CalxInstr::Assert(_) => (1, 0),
+    }
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxError {
   pub message: String,
@@ -204,7 +266,7 @@ impl CalxError {
     CalxError {
       message: s,
       stack: vec![],
-      top_frame: CalxFrame::new_empty(),
+      top_frame: CalxFrame::default(),
       blocks: vec![],
       globals: vec![],
     }
@@ -224,6 +286,7 @@ pub struct BlockData {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
   pub locals: Vec<Calx>, // params + added locals
+  /** store return values */
   pub instrs: Rc<Vec<CalxInstr>>,
   pub pointer: usize,
   pub initial_stack_size: usize,
@@ -231,8 +294,8 @@ pub struct CalxFrame {
   pub ret_types: Rc<Vec<CalxType>>,
 }
 
-impl CalxFrame {
-  pub fn new_empty() -> Self {
+impl Default for CalxFrame {
+  fn default() -> Self {
     CalxFrame {
       locals: vec![],
       instrs: Rc::new(vec![]),

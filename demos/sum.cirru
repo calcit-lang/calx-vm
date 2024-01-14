@@ -13,6 +13,7 @@ fn blocks (-> i64)
   block (->) (br 0) (const 1.) (const 2.) (neg) (add) (echo)
   , (const "|demo of string") (echo)
   const 0
+  return
 
 fn sum (-> i64)
   local.new
@@ -50,6 +51,7 @@ fn sum (-> i64)
   local.get 0
   dup
   echo
+  return
 
 fn echos (-> i64)
   const "|loading program"

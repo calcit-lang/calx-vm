@@ -10,6 +10,7 @@ fn f-add (($a i64) ($b i64) -> i64)
     local.get $c
   dup
   echo
+  return
 
 fn main ()
   const 1

@@ -164,15 +164,30 @@ impl CalxVM {
           }
         }
         CalxInstr::Return => {
+          // return values are moved to a temp space
+          let mut ret_stack: Vec<Calx> = vec![];
+
+          let ret_size = self.top_frame.ret_types.len();
+          for _ in 0..ret_size {
+            let v = self.stack_pop()?;
+            ret_stack.insert(0, v);
+          }
+
           self.check_func_return()?;
+
           if self.frames.is_empty() {
-            return match self.stack.pop() {
-              Some(x) => Ok(x),
+            // top frame return, just return value
+            return match ret_stack.first() {
+              Some(x) => Ok(x.to_owned()),
               None => Err(self.gen_err("return without value".to_owned())),
             };
           } else {
             // let prev_frame = self.top_frame;
             self.top_frame = self.frames.pop().unwrap();
+            // push return values back
+            for v in ret_stack {
+              self.stack_push(v);
+            }
           }
         }
         CalxInstr::LocalNew => self.top_frame.locals.push(Calx::Nil),
@@ -485,16 +500,27 @@ impl CalxVM {
     }
   }
 
-  pub fn preprocess(&mut self) -> Result<(), String> {
+  pub fn preprocess(&mut self, verbose: bool) -> Result<(), String> {
     for i in 0..self.funcs.len() {
       let mut stack_size = 0;
       let mut ops: Vec<CalxInstr> = vec![];
       let mut blocks_track: Vec<BlockData> = vec![];
 
-      // println!("\nFUNC {} {}", self.funcs[i].name, stack_size);
+      let f = &self.funcs[i];
+
+      if verbose {
+        println!(
+          "\nFUNC {}\n  initial stack size: {}\n  ret_size {}",
+          f.name,
+          stack_size,
+          f.ret_types.len()
+        );
+      }
 
       for j in 0..self.funcs[i].instrs.len() {
-        // println!("{} * {:?}", stack_size, self.funcs[i].instrs[j].to_owned());
+        if verbose {
+          println!("{} * {:?}", stack_size, self.funcs[i].instrs[j].to_owned());
+        }
         let instrs = &self.funcs[i].instrs;
         match &instrs[j] {
           CalxInstr::Block {
@@ -596,7 +622,9 @@ impl CalxVM {
             None => return Err(format!("missing imported function {}", f_name)),
           },
           CalxInstr::Return => {
-            if stack_size != self.funcs[i].ret_types.len() {
+            let ret_size = self.funcs[i].ret_types.len();
+            stack_size -= ret_size;
+            if stack_size != 0 {
               return Err(format!(
                 "invalid return size {} for {:?} in {}",
                 stack_size, self.funcs[i].ret_types, self.funcs[i].name
@@ -606,7 +634,7 @@ impl CalxVM {
           }
           a => {
             // checks
-            let (params_size, ret_size) = instr_stack_arity(a);
+            let (params_size, ret_size) = a.stack_arity();
             if stack_size < params_size {
               return Err(format!("insufficient stack {} to call {:?} of {}", stack_size, a, params_size));
             }
@@ -619,9 +647,9 @@ impl CalxVM {
           }
         }
       }
-      if stack_size != self.funcs[i].ret_types.len() {
+      if stack_size != 0 {
         return Err(format!(
-          "invalid return size {} of {:?} in {}",
+          "invalid final size {} of {:?} in {}",
           stack_size, self.funcs[i].ret_types, self.funcs[i].name
         ));
       }
@@ -646,8 +674,8 @@ impl CalxVM {
   }
 
   #[inline(always)]
-  fn check_func_return(&mut self) -> Result<(), CalxError> {
-    if self.stack.len() != self.top_frame.initial_stack_size + self.top_frame.ret_types.len() {
+  fn check_func_return(&self) -> Result<(), CalxError> {
+    if self.stack.len() != self.top_frame.initial_stack_size {
       return Err(self.gen_err(format!(
         "stack size {} does not fit initial size {} plus {:?}",
         self.stack.len(),
@@ -709,64 +737,4 @@ impl CalxVM {
 
 pub fn find_func<'a>(funcs: &'a [CalxFunc], name: &str) -> Option<&'a CalxFunc> {
   funcs.iter().find(|x| &*x.name == name)
-}
-
-/// notice that some of the instrs are special and need to handle manually
-pub fn instr_stack_arity(op: &CalxInstr) -> (usize, usize) {
-  match op {
-    CalxInstr::LocalSet(_) => (1, 0),
-    CalxInstr::LocalTee(_) => (1, 1), // TODO need check
-    CalxInstr::LocalGet(_) => (0, 1),
-    CalxInstr::LocalNew => (0, 0),
-    CalxInstr::GlobalSet(_) => (1, 0),
-    CalxInstr::GlobalGet(_) => (0, 1),
-    CalxInstr::GlobalNew => (0, 0),
-    CalxInstr::Const(_) => (0, 1),
-    CalxInstr::Dup => (1, 2),
-    CalxInstr::Drop => (1, 0),
-    CalxInstr::IntAdd => (2, 1),
-    CalxInstr::IntMul => (2, 1),
-    CalxInstr::IntDiv => (2, 1),
-    CalxInstr::IntRem => (2, 1),
-    CalxInstr::IntNeg => (1, 1),
-    CalxInstr::IntShr => (2, 1),
-    CalxInstr::IntShl => (2, 1),
-    CalxInstr::IntEq => (2, 1),
-    CalxInstr::IntNe => (2, 1),
-    CalxInstr::IntLt => (2, 1),
-    CalxInstr::IntLe => (2, 1),
-    CalxInstr::IntGt => (2, 1),
-    CalxInstr::IntGe => (2, 1),
-    CalxInstr::Add => (2, 1),
-    CalxInstr::Mul => (2, 1),
-    CalxInstr::Div => (2, 1),
-    CalxInstr::Neg => (1, 1),
-    // string operations
-    // list operations
-    CalxInstr::NewList => (0, 1),
-    CalxInstr::ListGet => (2, 1),
-    CalxInstr::ListSet => (3, 0),
-    // Link
-    CalxInstr::NewLink => (0, 1),
-    // bool operations
-    CalxInstr::And => (2, 1),
-    CalxInstr::Or => (2, 1),
-    CalxInstr::Not => (1, 1),
-    // control stuctures
-    CalxInstr::Br(_) => (0, 0),
-    CalxInstr::BrIf(_) => (1, 0),
-    CalxInstr::Jmp(_) => (0, 0),
-    CalxInstr::JmpIf(_) => (1, 0),
-    CalxInstr::Block { .. } => (0, 0),
-    CalxInstr::BlockEnd(_) => (0, 0),
-    CalxInstr::Echo => (1, 0),
-    CalxInstr::Call(_) => (0, 0),       // TODO
-    CalxInstr::ReturnCall(_) => (0, 0), // TODO
-    CalxInstr::CallImport(_) => (0, 0), // import
-    CalxInstr::Unreachable => (0, 0),   // TODO
-    CalxInstr::Nop => (0, 0),
-    CalxInstr::Quit(_) => (0, 0),
-    CalxInstr::Return => (0, 0), // TODO
-    CalxInstr::Assert(_) => (1, 0),
-  }
 }

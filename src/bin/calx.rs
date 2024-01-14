@@ -20,6 +20,8 @@ struct Args {
   disable_pre: bool,
   #[arg(short, long, value_name = "EMIT_BINARY")]
   emit_binary: Option<String>,
+  #[arg(short, long, value_name = "VERBOSE")]
+  verbose: bool,
   #[arg(long, value_name = "EVAL_BINARY")]
   eval_binary: bool,
   #[arg(value_name = "SOURCE")]
@@ -38,7 +40,7 @@ fn main() -> Result<(), String> {
   let mut fns: Vec<CalxFunc> = vec![];
 
   if eval_binary {
-    let code = fs::read(source).expect("read binar from source file");
+    let code = fs::read(source).expect("read binary from source file");
     let program: CalxBinaryProgram = bincode::decode_from_slice(&code, bincode::config::standard())
       .expect("decode functions from binary")
       .0;
@@ -92,8 +94,8 @@ fn main() -> Result<(), String> {
 
   let now = Instant::now();
   if !disable_pre {
-    println!("start preprocessing");
-    vm.preprocess()?;
+    println!("[calx] start preprocessing");
+    vm.preprocess(args.verbose)?;
   } else {
     println!("Preprocess disabled.")
   }
@@ -104,12 +106,12 @@ fn main() -> Result<(), String> {
     }
   }
 
-  println!("start running");
+  println!("[calx] start running");
   match vm.run(vec![Calx::I64(1)]) {
     Ok(ret) => {
       let elapsed = now.elapsed();
 
-      println!("Took {:.3?}: {:?}", elapsed, ret);
+      println!("[calx] took {:.3?}: {:?}", elapsed, ret);
       Ok(())
     }
     Err(e) => {
