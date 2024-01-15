@@ -16,39 +16,42 @@ fn blocks (-> i64)
   return
 
 fn sum (-> i64)
-  local.new
-  block (-> i64)
-    const 0
-    local.set 0
-    const 0
-    loop (i64)
+  local.new $sum
+  const 0
+  local.set $sum
+
+  const 0
+  block (i64 -> i64)
+    loop (i64 -> i64)
       ;; "echo inspect i"
       ;; const |inspect
+      ;; local.get $c
       ;; echo
-      ;; dup
-      ;; echo i
 
-      ;; "i += 1"
+      ;; "c += 1"
       const 1
       i.add
 
-      ;; "acc += i"
       dup
-      local.get 0
+
+      ;; "acc += c"
+      local.get $sum
       i.add
-      local.set 0
+      local.set $sum
+
+      dup
 
       ;; "if >= 1M"
-      dup
       const 1000000
       i.ge
       br-if 1
-
       br 0
+
   drop
-  const "|check sum"
+
   echo
-  local.get 0
+    const "|check sum"
+  local.get $sum
   dup
   echo
   return

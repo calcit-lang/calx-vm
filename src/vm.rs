@@ -549,6 +549,11 @@ impl CalxVM {
             }
 
             let target_block = blocks_track[blocks_track.len() - size - 1].to_owned();
+            let expected_size = target_block.expected_finish_size();
+            if stack_size != expected_size {
+              return Err(format!("br({size}) expected size {expected_size}, got {stack_size}"));
+            }
+
             if target_block.looped {
               // not checking
               ops.push(CalxInstr::Jmp(target_block.from))
@@ -571,7 +576,12 @@ impl CalxVM {
             } else {
               ops.push(CalxInstr::JmpIf(target_block.to))
             }
-            stack_size -= 1
+            stack_size -= 1;
+
+            let expected_size = target_block.expected_finish_size();
+            if stack_size != expected_size {
+              return Err(format!("brIf({size}) expected size {expected_size}, got {stack_size}"));
+            }
           }
           CalxInstr::BlockEnd(looped) => {
             // println!("checking: {:?}", blocks_track);
@@ -583,8 +593,9 @@ impl CalxVM {
             if *looped {
               // nothing, branched during runtime
             } else if stack_size != prev_block.initial_stack_size + prev_block.ret_types.len() - prev_block.params_types.len() {
+              let block_kind = if prev_block.looped { "loop" } else { "block" };
               return Err(format!(
-                "stack size is {stack_size}, initial size is {}, return types is {:?} at block end",
+                "stack size is {stack_size}, initial size is {}, return types is {:?} at {block_kind} end",
                 prev_block.initial_stack_size, prev_block.ret_types
               ));
             }

@@ -283,6 +283,13 @@ pub struct BlockData {
   pub initial_stack_size: usize,
 }
 
+impl BlockData {
+  // size of stack after block finished or breaked
+  pub fn expected_finish_size(&self) -> usize {
+    self.initial_stack_size - self.params_types.len() + self.ret_types.len()
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
   pub locals: Vec<Calx>, // params + added locals
