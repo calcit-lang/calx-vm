@@ -63,8 +63,8 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   }
 
   Ok(CalxFunc {
-    name: name.to_string(),
-    params_types,
+    name: Rc::new(name.to_string()),
+    params_types: params_types.into(),
     ret_types: Rc::new(ret_types),
     local_names: Rc::new(locals_collector.locals),
     instrs: Rc::new(body),
@@ -259,6 +259,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
 
             Ok(vec![CalxInstr::Assert((*message).to_owned())])
           }
+          "inspect" => Ok(vec![CalxInstr::Inspect]),
           _ => Err(format!("unknown instruction: {}", name)),
         },
       }

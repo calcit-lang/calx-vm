@@ -9,6 +9,9 @@ fn f-add (($a i64) ($b i64) -> i64)
       local.get $b
     local.get $c
   dup
+
+  inspect
+
   echo
   return
 

@@ -73,8 +73,8 @@ impl fmt::Display for Calx {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
 pub struct CalxFunc {
-  pub name: String,
-  pub params_types: Vec<CalxType>,
+  pub name: Rc<String>,
+  pub params_types: Rc<Vec<CalxType>>,
   pub ret_types: Rc<Vec<CalxType>>,
   pub instrs: Rc<Vec<CalxInstr>>,
   pub local_names: Rc<Vec<String>>,
@@ -83,7 +83,7 @@ pub struct CalxFunc {
 impl fmt::Display for CalxFunc {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "CalxFunc {} (", self.name)?;
-    for p in &self.params_types {
+    for p in &*self.params_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str("-> ")?;
@@ -182,6 +182,8 @@ pub enum CalxInstr {
   Return,
   /// TODO might also be a foreign function instead
   Assert(String),
+  /// inspecting stack
+  Inspect,
 }
 
 impl CalxInstr {
@@ -242,6 +244,8 @@ impl CalxInstr {
       CalxInstr::Quit(_) => (0, 0),
       CalxInstr::Return => (0, 0), // TODO
       CalxInstr::Assert(_) => (1, 0),
+      // debug
+      CalxInstr::Inspect => (0, 0),
     }
   }
 }
@@ -292,6 +296,7 @@ impl BlockData {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
+  pub name: Rc<String>,
   pub locals: Vec<Calx>, // params + added locals
   /** store return values */
   pub instrs: Rc<Vec<CalxInstr>>,
@@ -304,6 +309,7 @@ pub struct CalxFrame {
 impl Default for CalxFrame {
   fn default() -> Self {
     CalxFrame {
+      name: String::from("<zero>").into(),
       locals: vec![],
       instrs: Rc::new(vec![]),
       pointer: 0,

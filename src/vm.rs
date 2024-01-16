@@ -26,6 +26,7 @@ impl CalxVM {
   pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>, imports: CalxImportsDict) -> Self {
     let main_func = find_func(&fns, "main").expect("main function is required");
     let main_frame = CalxFrame {
+      name: main_func.name.to_owned(),
       initial_stack_size: 0,
       blocks_track: vec![],
       instrs: main_func.instrs.clone(),
@@ -399,6 +400,7 @@ impl CalxVM {
             Some(f) => {
               let instrs = f.instrs.to_owned();
               let ret_types = f.ret_types.to_owned();
+              let f_name = f.name.to_owned();
               let mut locals: Vec<Calx> = vec![];
               for _ in 0..f.params_types.len() {
                 let v = self.stack_pop()?;
@@ -406,6 +408,7 @@ impl CalxVM {
               }
               self.frames.push(self.top_frame.to_owned());
               self.top_frame = CalxFrame {
+                name: f_name,
                 blocks_track: vec![],
                 initial_stack_size: self.stack.len(),
                 locals,
@@ -427,6 +430,7 @@ impl CalxVM {
               // println!("examine stack: {:?}", self.stack);
               let instrs = f.instrs.to_owned();
               let ret_types = f.ret_types.to_owned();
+              let f_name = f.name.to_owned();
               let mut locals: Vec<Calx> = vec![];
               for _ in 0..f.params_types.len() {
                 let v = self.stack_pop()?;
@@ -441,6 +445,7 @@ impl CalxVM {
                 )));
               }
               self.top_frame = CalxFrame {
+                name: f_name,
                 blocks_track: vec![],
                 initial_stack_size: self.stack.len(),
                 locals,
@@ -493,6 +498,24 @@ impl CalxVM {
           } else {
             return Err(self.gen_err(format!("Failed assertion: {}", message)));
           }
+        }
+        CalxInstr::Inspect => {
+          println!("[ ----------------");
+          println!(
+            "  Internal frames: {:?}",
+            self.frames.iter().map(|x| x.name.to_owned()).collect::<Vec<_>>()
+          );
+          println!("  Top frame: {}", self.top_frame.name);
+          println!("  Locals: {:?}", self.top_frame.locals);
+          println!("  Blocks: {:?}", self.top_frame.blocks_track);
+          println!("  Stack({}): {:?}", self.stack.len(), self.stack);
+          println!(
+            "  Sizes: {} + {}",
+            self.top_frame.initial_stack_size,
+            self.top_frame.ret_types.len()
+          );
+          println!("  Pointer: {}", self.top_frame.pointer);
+          println!("  -------------- ]");
         }
       }
 
@@ -747,5 +770,5 @@ impl CalxVM {
 }
 
 pub fn find_func<'a>(funcs: &'a [CalxFunc], name: &str) -> Option<&'a CalxFunc> {
-  funcs.iter().find(|x| &*x.name == name)
+  funcs.iter().find(|x| *x.name == name)
 }
