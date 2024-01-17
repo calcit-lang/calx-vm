@@ -135,6 +135,7 @@ Calx Binary Edition `0.1`:
 | `return`             |                                                          | TODO                                   |
 | `fn $types $body`    |                                                          | Global definition                      |
 | `assert`             | `quit(1)` if not `true`                                  | for testing                            |
+| `inspect             | println inspection information                           |                                        |
 
 For `$types`, it can be `($t1 $t2 -> $t3 $t4)`, where supported types are:
 
@@ -145,6 +146,17 @@ For `$types`, it can be `($t1 $t2 -> $t3 $t4)`, where supported types are:
 - str _TODO_
 - list _TODO_
 - link _TODO_
+
+### Preprocess
+
+Before Calx running the instructions, Calx performs preprocessing to them. There are several tasks:
+
+- `block` and `loop` are expanded since there are `block-end` instructions
+- `br` and `br-if` also expanded to `jmp` and `jmp-if` instructions, internally
+- stack size is checked to ensure it's consistent among branches, and tidied up at function end
+- local variables are renamed to indexes
+
+these steps simplies debugging, although it's sure that's good features.
 
 ### License
 

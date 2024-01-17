@@ -4,6 +4,8 @@
 
 mod locals;
 
+use std::rc::Rc;
+
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -61,11 +63,11 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   }
 
   Ok(CalxFunc {
-    name: name.to_string(),
-    params_types,
-    ret_types,
-    local_names: locals_collector.locals,
-    instrs: body,
+    name: Rc::new(name.to_string()),
+    params_types: params_types.into(),
+    ret_types: Rc::new(ret_types),
+    local_names: Rc::new(locals_collector.locals),
+    instrs: Rc::new(body),
   })
 }
 
@@ -257,6 +259,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
 
             Ok(vec![CalxInstr::Assert((*message).to_owned())])
           }
+          "inspect" => Ok(vec![CalxInstr::Inspect]),
           _ => Err(format!("unknown instruction: {}", name)),
         },
       }
@@ -345,8 +348,8 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
       looped,
       from: ptr_base + 1,
       to: p,
-      params_types,
-      ret_types,
+      params_types: Rc::new(params_types),
+      ret_types: Rc::new(ret_types),
     },
   );
   Ok(chunk)

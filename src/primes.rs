@@ -4,7 +4,7 @@
  */
 
 use bincode::{Decode, Encode};
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 /// Simplied from Calcit, but trying to be basic and mutable
 #[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
@@ -73,21 +73,21 @@ impl fmt::Display for Calx {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
 pub struct CalxFunc {
-  pub name: String,
-  pub params_types: Vec<CalxType>,
-  pub ret_types: Vec<CalxType>,
-  pub instrs: Vec<CalxInstr>,
-  pub local_names: Vec<String>,
+  pub name: Rc<String>,
+  pub params_types: Rc<Vec<CalxType>>,
+  pub ret_types: Rc<Vec<CalxType>>,
+  pub instrs: Rc<Vec<CalxInstr>>,
+  pub local_names: Rc<Vec<String>>,
 }
 
 impl fmt::Display for CalxFunc {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "CalxFunc {} (", self.name)?;
-    for p in &self.params_types {
+    for p in &*self.params_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str("-> ")?;
-    for p in &self.ret_types {
+    for p in &*self.ret_types {
       write!(f, "{:?} ", p)?;
     }
     f.write_str(")")?;
@@ -161,8 +161,8 @@ pub enum CalxInstr {
   Jmp(usize),   // internal
   JmpIf(usize), // internal
   Block {
-    params_types: Vec<CalxType>,
-    ret_types: Vec<CalxType>,
+    params_types: Rc<Vec<CalxType>>,
+    ret_types: Rc<Vec<CalxType>>,
     /// bool to indicate loop
     looped: bool,
     from: usize,
@@ -182,6 +182,72 @@ pub enum CalxInstr {
   Return,
   /// TODO might also be a foreign function instead
   Assert(String),
+  /// inspecting stack
+  Inspect,
+}
+
+impl CalxInstr {
+  /// notice that some of the instrs are special and need to handle manually
+  pub fn stack_arity(&self) -> (usize, usize) {
+    match self {
+      CalxInstr::LocalSet(_) => (1, 0),
+      CalxInstr::LocalTee(_) => (1, 1), // TODO need check
+      CalxInstr::LocalGet(_) => (0, 1),
+      CalxInstr::LocalNew => (0, 0),
+      CalxInstr::GlobalSet(_) => (1, 0),
+      CalxInstr::GlobalGet(_) => (0, 1),
+      CalxInstr::GlobalNew => (0, 0),
+      CalxInstr::Const(_) => (0, 1),
+      CalxInstr::Dup => (1, 2),
+      CalxInstr::Drop => (1, 0),
+      CalxInstr::IntAdd => (2, 1),
+      CalxInstr::IntMul => (2, 1),
+      CalxInstr::IntDiv => (2, 1),
+      CalxInstr::IntRem => (2, 1),
+      CalxInstr::IntNeg => (1, 1),
+      CalxInstr::IntShr => (2, 1),
+      CalxInstr::IntShl => (2, 1),
+      CalxInstr::IntEq => (2, 1),
+      CalxInstr::IntNe => (2, 1),
+      CalxInstr::IntLt => (2, 1),
+      CalxInstr::IntLe => (2, 1),
+      CalxInstr::IntGt => (2, 1),
+      CalxInstr::IntGe => (2, 1),
+      CalxInstr::Add => (2, 1),
+      CalxInstr::Mul => (2, 1),
+      CalxInstr::Div => (2, 1),
+      CalxInstr::Neg => (1, 1),
+      // string operations
+      // list operations
+      CalxInstr::NewList => (0, 1),
+      CalxInstr::ListGet => (2, 1),
+      CalxInstr::ListSet => (3, 0),
+      // Link
+      CalxInstr::NewLink => (0, 1),
+      // bool operations
+      CalxInstr::And => (2, 1),
+      CalxInstr::Or => (2, 1),
+      CalxInstr::Not => (1, 1),
+      // control stuctures
+      CalxInstr::Br(_) => (0, 0),
+      CalxInstr::BrIf(_) => (1, 0),
+      CalxInstr::Jmp(_) => (0, 0),
+      CalxInstr::JmpIf(_) => (1, 0),
+      CalxInstr::Block { .. } => (0, 0),
+      CalxInstr::BlockEnd(_) => (0, 0),
+      CalxInstr::Echo => (1, 0),
+      CalxInstr::Call(_) => (0, 0),       // TODO
+      CalxInstr::ReturnCall(_) => (0, 0), // TODO
+      CalxInstr::CallImport(_) => (0, 0), // import
+      CalxInstr::Unreachable => (0, 0),   // TODO
+      CalxInstr::Nop => (0, 0),
+      CalxInstr::Quit(_) => (0, 0),
+      CalxInstr::Return => (0, 0), // TODO
+      CalxInstr::Assert(_) => (1, 0),
+      // debug
+      CalxInstr::Inspect => (0, 0),
+    }
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -204,7 +270,7 @@ impl CalxError {
     CalxError {
       message: s,
       stack: vec![],
-      top_frame: CalxFrame::new_empty(),
+      top_frame: CalxFrame::default(),
       blocks: vec![],
       globals: vec![],
     }
@@ -214,31 +280,42 @@ impl CalxError {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub struct BlockData {
   pub looped: bool,
-  pub ret_types: Vec<CalxType>,
+  pub params_types: Rc<Vec<CalxType>>,
+  pub ret_types: Rc<Vec<CalxType>>,
   pub from: usize,
   pub to: usize,
   pub initial_stack_size: usize,
 }
 
+impl BlockData {
+  // size of stack after block finished or breaked
+  pub fn expected_finish_size(&self) -> usize {
+    self.initial_stack_size - self.params_types.len() + self.ret_types.len()
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
+  pub name: Rc<String>,
   pub locals: Vec<Calx>, // params + added locals
-  pub instrs: Vec<CalxInstr>,
+  /** store return values */
+  pub instrs: Rc<Vec<CalxInstr>>,
   pub pointer: usize,
   pub initial_stack_size: usize,
   pub blocks_track: Vec<BlockData>,
-  pub ret_types: Vec<CalxType>,
+  pub ret_types: Rc<Vec<CalxType>>,
 }
 
-impl CalxFrame {
-  pub fn new_empty() -> Self {
+impl Default for CalxFrame {
+  fn default() -> Self {
     CalxFrame {
+      name: String::from("<zero>").into(),
       locals: vec![],
-      instrs: vec![],
+      instrs: Rc::new(vec![]),
       pointer: 0,
       initial_stack_size: 0,
       blocks_track: vec![],
-      ret_types: vec![],
+      ret_types: Rc::new(vec![]),
     }
   }
 }
@@ -247,7 +324,7 @@ impl fmt::Display for CalxFrame {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("CalxFrame ")?;
     write!(f, "_{} (", self.initial_stack_size)?;
-    for p in &self.ret_types {
+    for p in &*self.ret_types {
       write!(f, "{:?} ", p)?;
     }
     write!(f, ") @{}", self.pointer)?;

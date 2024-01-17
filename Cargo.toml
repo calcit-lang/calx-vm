@@ -1,6 +1,6 @@
 [package]
 name = "calx_vm"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["jiyinyiyong <jiyinyiyong@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -9,9 +9,7 @@ homepage = "https://github.com/calcit-lang/calx-vm"
 documentation = "https://docs.rs/crate/calx_vm/"
 repository = "https://github.com/calcit-lang/calx-vm.rs"
 readme = "README.md"
-exclude = [
-  "examples/*",
-]
+exclude = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
