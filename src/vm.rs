@@ -14,6 +14,8 @@ pub struct CalxVM {
   pub frames: Vec<CalxFrame>,
   pub top_frame: CalxFrame,
   pub imports: CalxImportsDict,
+  /// extra status to tracking runnnig finished
+  pub finished: bool,
 }
 
 impl std::fmt::Debug for CalxVM {
@@ -41,7 +43,37 @@ impl CalxVM {
       frames: vec![],
       top_frame: main_frame,
       imports,
+      finished: false,
     }
+  }
+
+  pub fn inspect_display(&self, indent_size: u8) -> String {
+    let mut output = String::new();
+    let indent = "\n".to_owned() + &" ".repeat(indent_size as usize);
+    fmt::write(
+      &mut output,
+      format_args!(
+        "{indent}Internal frames: {:?}",
+        self.frames.iter().map(|x| x.name.to_owned()).collect::<Vec<_>>()
+      ),
+    )
+    .expect("inspect display");
+
+    fmt::write(&mut output, format_args!("{indent}Top frame: {}", self.top_frame.name)).expect("inspect display");
+    fmt::write(&mut output, format_args!("{indent}Locals: {:?}", self.top_frame.locals)).expect("inspect display");
+    fmt::write(&mut output, format_args!("{indent}Blocks: {:?}", self.top_frame.blocks_track)).expect("inspect display");
+    fmt::write(&mut output, format_args!("{indent}Stack({}): {:?}", self.stack.len(), self.stack)).expect("inspect display");
+    fmt::write(
+      &mut output,
+      format_args!(
+        "{indent}Sizes: {} + {}",
+        self.top_frame.initial_stack_size,
+        self.top_frame.ret_types.len()
+      ),
+    )
+    .expect("inspect display");
+    fmt::write(&mut output, format_args!("{indent}Pointer: {}", self.top_frame.pointer)).expect("inspect display");
+    output
   }
 
   pub fn run(&mut self, args: Vec<Calx>) -> Result<Calx, CalxError> {
@@ -500,21 +532,7 @@ impl CalxVM {
           }
         }
         CalxInstr::Inspect => {
-          println!("[ ----------------");
-          println!(
-            "  Internal frames: {:?}",
-            self.frames.iter().map(|x| x.name.to_owned()).collect::<Vec<_>>()
-          );
-          println!("  Top frame: {}", self.top_frame.name);
-          println!("  Locals: {:?}", self.top_frame.locals);
-          println!("  Blocks: {:?}", self.top_frame.blocks_track);
-          println!("  Stack({}): {:?}", self.stack.len(), self.stack);
-          println!(
-            "  Sizes: {} + {}",
-            self.top_frame.initial_stack_size,
-            self.top_frame.ret_types.len()
-          );
-          println!("  Pointer: {}", self.top_frame.pointer);
+          println!("[ ----------------{}", self.inspect_display(2));
           println!("  -------------- ]");
         }
       }
