@@ -22,17 +22,11 @@ use self::locals::LocalsCollector;
 /// ```
 pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   if nodes.len() <= 3 {
-    return Err(String::from("Not a function"));
+    return Err(String::from("function expects at least 3 lines"));
   }
 
-  if let Cirru::Leaf(x) = nodes[0].to_owned() {
-    if &*x == "fn" {
-      // ok
-    } else {
-      return Err(String::from("invalid"));
-    }
-  } else {
-    return Err(String::from("invalid"));
+  if !leaf_is(&nodes[0], "fn") && !leaf_is(&nodes[0], "defn") {
+    return Err(String::from("Not a function"));
   }
 
   let name: Box<str> = if let Cirru::Leaf(x) = nodes[1].to_owned() {
@@ -260,7 +254,8 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
             Ok(vec![CalxSyntax::Assert((*message).to_owned())])
           }
           "inspect" => Ok(vec![CalxSyntax::Inspect]),
-          _ => Err(format!("unknown instruction: {}", name)),
+          "if" => parse_if(ptr_base, xs, collector),
+          _ => Err(format!("unknown instruction: {} in {:?}", name, xs)),
         },
       }
     }
@@ -296,10 +291,13 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
   let (params_types, ret_types) = parse_block_types(&xs[1])?;
   for (idx, line) in xs.iter().enumerate() {
     if idx > 1 {
-      let instrs = parse_instr(p, line, collector)?;
-      for y in instrs {
-        p += 1;
-        chunk.push(y);
+      let lines = extract_nested(line)?;
+      for expanded in &lines {
+        let instrs = parse_instr(p, expanded, collector)?;
+        for y in instrs {
+          p += 1;
+          chunk.push(y);
+        }
       }
     }
   }
@@ -320,6 +318,72 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
     },
   );
   Ok(chunk)
+}
+
+pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
+  if xs.len() != 4 && xs.len() != 3 {
+    return Err(format!("if expected 2 or 3 arguments, got {:?}", xs));
+  }
+  let types = parse_block_types(&xs[1])?;
+  let ret_types = types.1.clone();
+  let then_syntax = parse_do(&xs[2], collector)?;
+  let else_syntax = if xs.len() == 4 { parse_do(&xs[3], collector)? } else { vec![] };
+
+  let mut p = ptr_base + 1; // leave a place for if instruction
+  let mut chunk: Vec<CalxSyntax> = vec![];
+  for instr in then_syntax {
+    p += 1;
+    chunk.push(instr);
+  }
+  p += 1;
+  let else_at = p;
+  chunk.push(CalxSyntax::EndIf);
+  for instr in else_syntax {
+    p += 1;
+    chunk.push(instr);
+  }
+
+  p += 1;
+  chunk.push(CalxSyntax::EndIf);
+
+  let to = p;
+
+  chunk.insert(
+    0,
+    CalxSyntax::If {
+      ret_types: Rc::new(ret_types),
+      else_at,
+      to,
+    },
+  );
+
+  Ok(chunk)
+}
+
+pub fn parse_do(xs: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
+  match xs {
+    Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
+    Cirru::List(ys) => {
+      let x0 = &ys[0];
+      if !leaf_is(x0, "do") {
+        return Err(format!("expected do, got {}", x0));
+      }
+
+      let mut chunk: Vec<CalxSyntax> = vec![];
+      for (idx, x) in ys.iter().enumerate() {
+        if idx > 0 {
+          let lines = extract_nested(x)?;
+          for expanded in &lines {
+            let instrs = parse_instr(idx, expanded, collector)?;
+            for y in instrs {
+              chunk.push(y);
+            }
+          }
+        }
+      }
+      Ok(chunk)
+    }
+  }
 }
 
 /// parameters might be named, need to check, by default use integers
@@ -413,17 +477,7 @@ pub fn extract_nested(xs: &Cirru) -> Result<Vec<Cirru>, String> {
       None => Err(String::from("unexpected empty expression")),
       Some(Cirru::List(zs)) => Err(format!("unexpected nested instruction name: {:?}", zs)),
       Some(Cirru::Leaf(zs)) => match &**zs {
-        "block" | "loop" => {
-          let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_owned())];
-          for (idx, y) in ys.iter().enumerate() {
-            if idx > 0 {
-              for e in extract_nested(y)? {
-                chunk.push(e);
-              }
-            }
-          }
-          Ok(vec![Cirru::List(chunk)])
-        }
+        "block" | "loop" | "if" | "do" => Ok(vec![xs.to_owned()]),
         _ => {
           let mut pre: Vec<Cirru> = vec![];
           let mut chunk: Vec<Cirru> = vec![Cirru::Leaf(zs.to_owned())];
@@ -445,4 +499,13 @@ pub fn extract_nested(xs: &Cirru) -> Result<Vec<Cirru>, String> {
       },
     },
   }
+}
+
+pub fn leaf_is(x: &Cirru, name: &str) -> bool {
+  if let Cirru::Leaf(y) = x {
+    if &**y == name {
+      return true;
+    }
+  }
+  false
 }

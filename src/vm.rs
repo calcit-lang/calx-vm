@@ -39,7 +39,7 @@ impl std::fmt::Debug for CalxVM {
 
 impl CalxVM {
   pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>, imports: CalxImportsDict) -> Self {
-    let main_func = find_func(&fns, "main").expect("main function is required");
+    let main_func = fns.iter().find(|x| *x.name == "main").expect("main function is required");
     let main_frame = CalxFrame {
       name: main_func.name.to_owned(),
       initial_stack_size: 0,
@@ -63,7 +63,7 @@ impl CalxVM {
   }
 
   pub fn setup_top_frame(&mut self) -> Result<(), String> {
-    self.top_frame.instrs = match find_func(&self.funcs, "main") {
+    self.top_frame.instrs = match self.find_func("main") {
       Some(f) => match f.instrs.to_owned() {
         Some(x) => x,
         None => return Err("main function must have instrs".to_owned()),
@@ -494,7 +494,7 @@ impl CalxVM {
       }
       Call(f_name) => {
         // println!("frame size: {}", self.frames.len());
-        match find_func(&self.funcs, f_name) {
+        match self.find_func(f_name) {
           Some(f) => {
             let instrs = f.instrs.to_owned();
             let ret_types = f.ret_types.to_owned();
@@ -526,7 +526,7 @@ impl CalxVM {
       }
       ReturnCall(f_name) => {
         // println!("frame size: {}", self.frames.len());
-        match find_func(&self.funcs, f_name) {
+        match self.find_func(f_name) {
           Some(f) => {
             // println!("examine stack: {:?}", self.stack);
             let instrs = f.instrs.to_owned();
@@ -721,7 +721,7 @@ impl CalxVM {
 
             ops.push(CalxInstr::Nop)
           }
-          CalxSyntax::Call(f_name) => match find_func(&self.funcs, f_name) {
+          CalxSyntax::Call(f_name) => match self.find_func(f_name) {
             Some(f) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
@@ -731,7 +731,7 @@ impl CalxVM {
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxSyntax::ReturnCall(f_name) => match find_func(&self.funcs, f_name) {
+          CalxSyntax::ReturnCall(f_name) => match self.find_func(f_name) {
             Some(f) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
@@ -761,6 +761,9 @@ impl CalxVM {
               ));
             }
             ops.push(CalxInstr::Return);
+          }
+          CalxSyntax::If { ret_types, else_at, to } => {
+            todo!()
           }
           a => {
             let instr: CalxInstr = a.try_into()?;
@@ -865,10 +868,10 @@ impl CalxVM {
       globals: self.globals.to_owned(),
     }
   }
-}
 
-pub fn find_func<'a>(funcs: &'a [CalxFunc], name: &str) -> Option<&'a CalxFunc> {
-  funcs.iter().find(|x| *x.name == name)
+  fn find_func(&self, name: &str) -> Option<&CalxFunc> {
+    self.funcs.iter().find(|x| *x.name == name)
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

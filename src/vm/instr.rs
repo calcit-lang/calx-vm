@@ -158,6 +158,7 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Inspect => Ok(Self::Inspect),
       CalxSyntax::If { .. } => Err("If should be handled manually".to_string()),
       CalxSyntax::EndIf => Ok(Self::EndIf),
+      CalxSyntax::Do(_) => Err("do should be handled manually".to_string()),
     }
   }
 }

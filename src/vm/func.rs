@@ -34,8 +34,15 @@ impl fmt::Display for CalxFunc {
       }
       f.write_str(" .")?;
     }
-    for (idx, instr) in self.instrs.iter().enumerate() {
-      write!(f, "\n  {:02} {:?}", idx, instr)?;
+    match &self.instrs {
+      Some(instrs) => {
+        for (idx, instr) in instrs.iter().enumerate() {
+          write!(f, "\n  {:02} {:?}", idx, instr)?;
+        }
+      }
+      None => {
+        write!(f, "\n  <none>")?;
+      }
     }
     f.write_str("\n")?;
     Ok(())

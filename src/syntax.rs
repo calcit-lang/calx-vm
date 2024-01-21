@@ -65,6 +65,8 @@ pub enum CalxSyntax {
     to: usize,
   },
   BlockEnd(bool),
+  /// just a list of instructions nested
+  Do(Vec<CalxSyntax>),
   /// pop and println current value
   Echo,
   /// TODO use function name at first, during running, index can be faster
@@ -83,8 +85,7 @@ pub enum CalxSyntax {
   /// if takes 1 value from stack, returns values as ret_types
   If {
     ret_types: Rc<Vec<CalxType>>,
-    then_to: usize,
-    else_to: usize,
+    else_at: usize,
     to: usize,
   },
   EndIf,
