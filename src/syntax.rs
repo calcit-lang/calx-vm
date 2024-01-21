@@ -88,5 +88,6 @@ pub enum CalxSyntax {
     else_at: usize,
     to: usize,
   },
-  EndIf,
+  ThenEnd,
+  ElseEnd,
 }

@@ -21,7 +21,8 @@ jobs:
       - run: cargo run -- -s demos/assert.cirru
       - run: cargo run -- -s demos/nested.cirru
       - run: cargo run -- -s demos/named.cirru
-      - run: cargo run -- demos/recur.cirru
+      - run: cargo run -- -s demos/recur.cirru
+      - run: cargo run -- -s demos/fibonacci.cirru
       - run: cargo run -- --emit-binary target/a.calx demos/named.cirru && cargo run -- --eval-binary target/a.calx
 
       # - run: cargo test

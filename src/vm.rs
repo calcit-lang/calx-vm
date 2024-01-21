@@ -10,6 +10,7 @@ use std::{fmt, vec};
 
 use crate::calx::{Calx, CalxType};
 use crate::syntax::CalxSyntax;
+use crate::vm::block_data::BlockStack;
 
 use self::block_data::BlockData;
 use self::frame::CalxFrame;
@@ -556,7 +557,7 @@ impl CalxVM {
     for i in 0..self.funcs.len() {
       let mut stack_size = 0;
       let mut ops: Vec<CalxInstr> = vec![];
-      let mut blocks_track: Vec<BlockData> = vec![];
+      let mut blocks_track = BlockStack::new();
 
       let f = &self.funcs[i];
 
@@ -585,14 +586,22 @@ impl CalxVM {
             if stack_size < params_types.len() {
               return Err(format!("insufficient params {} for block: {:?}", stack_size, params_types));
             }
-            blocks_track.push(BlockData {
-              looped: looped.to_owned(),
-              params_types: params_types.to_owned(),
-              ret_types: ret_types.to_owned(),
-              from: from.to_owned(),
-              to: to.to_owned(),
-              initial_stack_size: stack_size,
-            });
+            if *looped {
+              blocks_track.push(BlockData::Loop {
+                params_types: params_types.to_owned(),
+                ret_types: ret_types.to_owned(),
+                from: from.to_owned(),
+                to: to.to_owned(),
+                initial_stack_size: stack_size,
+              });
+            } else {
+              blocks_track.push(BlockData::Block {
+                params_types: params_types.to_owned(),
+                ret_types: ret_types.to_owned(),
+                to: to.to_owned(),
+                initial_stack_size: stack_size,
+              });
+            }
             ops.push(CalxInstr::Nop);
           }
           CalxSyntax::Br(size) => {
@@ -600,17 +609,16 @@ impl CalxVM {
               return Err(format!("br {} too large", size));
             }
 
-            let target_block = blocks_track[blocks_track.len() - size - 1].to_owned();
+            let target_block = blocks_track.peek_block_level(*size)?;
             let expected_size = target_block.expected_finish_size();
             if stack_size != expected_size {
               return Err(format!("br({size}) expected size {expected_size}, got {stack_size}"));
             }
 
-            if target_block.looped {
-              // not checking
-              ops.push(CalxInstr::Jmp(target_block.from))
-            } else {
-              ops.push(CalxInstr::Jmp(target_block.to))
+            match target_block {
+              BlockData::Loop { from, .. } => ops.push(CalxInstr::Jmp(from.to_owned())),
+              BlockData::Block { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              _ => unreachable!("br target must be block or loop"),
             }
           }
           CalxSyntax::BrIf(size) => {
@@ -621,12 +629,12 @@ impl CalxVM {
               return Err(format!("br {} too large", size));
             }
 
-            let target_block = blocks_track[blocks_track.len() - size - 1].to_owned();
-            if target_block.looped {
-              // not checking
-              ops.push(CalxInstr::JmpIf(target_block.from))
-            } else {
-              ops.push(CalxInstr::JmpIf(target_block.to))
+            let target_block = blocks_track.peek_block_level(*size)?;
+
+            match target_block {
+              BlockData::Loop { from, .. } => ops.push(CalxInstr::JmpIf(from.to_owned())),
+              BlockData::Block { to, .. } => ops.push(CalxInstr::JmpIf(to.to_owned())),
+              _ => unreachable!("br target must be block or loop"),
             }
             stack_size -= 1;
 
@@ -641,15 +649,11 @@ impl CalxVM {
               return Err(format!("invalid block end, {:?}", blocks_track));
             }
 
-            let prev_block = blocks_track.pop().unwrap();
+            let prev_block = blocks_track.pop_block()?;
             if *looped {
               // nothing, branched during runtime
-            } else if stack_size != prev_block.initial_stack_size + prev_block.ret_types.len() - prev_block.params_types.len() {
-              let block_kind = if prev_block.looped { "loop" } else { "block" };
-              return Err(format!(
-                "stack size is {stack_size}, initial size is {}, return types is {:?} at {block_kind} end",
-                prev_block.initial_stack_size, prev_block.ret_types
-              ));
+            } else if stack_size != prev_block.expected_finish_size() {
+              return Err(format!("size mismatch for block end: {} {:?}", stack_size, prev_block));
             }
 
             ops.push(CalxInstr::Nop)
@@ -696,7 +700,49 @@ impl CalxVM {
             ops.push(CalxInstr::Return);
           }
           CalxSyntax::If { ret_types, else_at, to } => {
-            todo!()
+            if stack_size < 1 {
+              return Err(format!("insufficient stack {} to branch", stack_size));
+            }
+            stack_size -= 1;
+
+            blocks_track.push(BlockData::If {
+              ret_types: ret_types.to_owned(),
+              else_to: else_at.to_owned(),
+              to: to.to_owned(),
+              initial_stack_size: stack_size,
+            });
+
+            ops.push(CalxInstr::JmpIf(else_at.to_owned()));
+          }
+          CalxSyntax::ElseEnd => {
+            if blocks_track.is_empty() {
+              return Err(format!("invalid else end, {:?}", blocks_track));
+            }
+
+            let prev_block = blocks_track.peek_if()?;
+            if stack_size != prev_block.expected_finish_size() {
+              return Err(format!("size mismatch for else-end: {} {:?}", stack_size, prev_block));
+            }
+
+            match prev_block {
+              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              _ => unreachable!("end inside if"),
+            }
+          }
+          CalxSyntax::ThenEnd => {
+            if blocks_track.is_empty() {
+              return Err(format!("invalid else end, {:?}", blocks_track));
+            }
+
+            let prev_block = blocks_track.pop_if()?;
+            if stack_size != prev_block.expected_finish_size() {
+              return Err(format!("size mismatch for then-end: {} {:?}", stack_size, prev_block));
+            }
+
+            match prev_block {
+              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              _ => unreachable!("end inside if"),
+            }
           }
           a => {
             let instr: CalxInstr = a.try_into()?;

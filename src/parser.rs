@@ -331,20 +331,22 @@ pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) 
 
   let mut p = ptr_base + 1; // leave a place for if instruction
   let mut chunk: Vec<CalxSyntax> = vec![];
-  for instr in then_syntax {
+
+  // put else branch first, and use jmp to target then branch
+  for instr in else_syntax {
     p += 1;
     chunk.push(instr);
   }
   p += 1;
   let else_at = p;
-  chunk.push(CalxSyntax::EndIf);
-  for instr in else_syntax {
+  chunk.push(CalxSyntax::ElseEnd);
+  for instr in then_syntax {
     p += 1;
     chunk.push(instr);
   }
 
   p += 1;
-  chunk.push(CalxSyntax::EndIf);
+  chunk.push(CalxSyntax::ThenEnd);
 
   let to = p;
 
