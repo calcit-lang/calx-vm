@@ -59,8 +59,10 @@ pub enum CalxInstr {
   // control stuctures
   Br(usize),
   BrIf(usize),
-  Jmp(usize),   // internal
-  JmpIf(usize), // internal
+  Jmp(usize),       // internal
+  JmpOffset(i32),   // internal
+  JmpIf(usize),     // internal
+  JmpOffsetIf(i32), // internal
   Block {
     params_types: Rc<Vec<CalxType>>,
     ret_types: Rc<Vec<CalxType>>,
@@ -141,8 +143,6 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       // control stuctures
       CalxSyntax::Br(a) => Ok(Self::Br(a.to_owned())),
       CalxSyntax::BrIf(a) => Ok(Self::BrIf(a.to_owned())),
-      CalxSyntax::Jmp(a) => Ok(Self::Jmp(a.to_owned())),
-      CalxSyntax::JmpIf(a) => Ok(Self::JmpIf(a.to_owned())),
       CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
       CalxSyntax::BlockEnd(a) => Ok(Self::BlockEnd(a.to_owned())),
       CalxSyntax::Echo => Ok(Self::Echo),
@@ -208,7 +208,9 @@ impl CalxInstr {
       CalxInstr::Br(_) => (0, 0),
       CalxInstr::BrIf(_) => (1, 0),
       CalxInstr::Jmp(_) => (0, 0),
+      CalxInstr::JmpOffset(_) => (0, 0),
       CalxInstr::JmpIf(_) => (1, 0),
+      CalxInstr::JmpOffsetIf(_) => (1, 0),
       CalxInstr::Block {
         params_types, ret_types, ..
       } => (params_types.len(), ret_types.len()),

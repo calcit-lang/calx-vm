@@ -154,10 +154,21 @@ impl CalxVM {
         self.top_frame.pointer = line.to_owned();
         return Ok(true); // point reset, goto next loop
       }
+      JmpOffset(l) => {
+        self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
+        return Ok(true); // point reset, goto next loop
+      }
       JmpIf(line) => {
         let v = self.stack_pop()?;
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           self.top_frame.pointer = line.to_owned();
+          return Ok(true); // point reset, goto next loop
+        }
+      }
+      JmpOffsetIf(l) => {
+        let v = self.stack_pop()?;
+        if v == Calx::Bool(true) || v == Calx::I64(1) {
+          self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
           return Ok(true); // point reset, goto next loop
         }
       }
@@ -461,25 +472,25 @@ impl CalxVM {
         }
       }
       NewList => {
-        // TODO
+        todo!()
       }
       ListGet => {
-        // TODO
+        todo!()
       }
       ListSet => {
-        // TODO
+        todo!()
       }
       NewLink => {
-        // TODO
+        todo!()
       }
       And => {
-        // TODO
+        todo!()
       }
       Or => {
-        // TODO
+        todo!()
       }
       Not => {
-        // TODO
+        todo!()
       }
       Call(f_name) => {
         // println!("frame size: {}", self.frames.len());
@@ -502,7 +513,7 @@ impl CalxVM {
               pointer: 0,
               instrs: match instrs {
                 Some(x) => x.to_owned(),
-                None => panic!("function must have instrs"),
+                None => unreachable!("function must have instrs"),
               },
               ret_types,
             };

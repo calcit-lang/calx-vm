@@ -1,6 +1,12 @@
-use core::fmt;
+mod types;
 
 use bincode::{Decode, Encode};
+use core::fmt;
+use lazy_static::lazy_static;
+use regex::Regex;
+use std::str::FromStr;
+
+pub use types::CalxType;
 
 /// Simplied from Calcit, but trying to be basic and mutable
 #[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
@@ -13,6 +19,37 @@ pub enum Calx {
   List(Vec<Calx>),
   // to simultate linked structures
   // Link(Box<Calx>, Box<Calx>, Box<Calx>),
+}
+
+impl FromStr for Calx {
+  type Err = String;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s {
+      "nil" => Ok(Calx::Nil),
+      "true" => Ok(Calx::Bool(true)),
+      "false" => Ok(Calx::Bool(false)),
+      "" => Err(String::from("unknown empty string")),
+      _ => {
+        let s0 = s.chars().next().unwrap();
+        if s0 == '|' || s0 == ':' {
+          Ok(Calx::Str(s[1..s.len()].to_owned()))
+        } else if FLOAT_PATTERN.is_match(s) {
+          match s.parse::<f64>() {
+            Ok(u) => Ok(Calx::F64(u)),
+            Err(e) => Err(format!("failed to parse: {}", e)),
+          }
+        } else if INT_PATTERN.is_match(s) {
+          match s.parse::<i64>() {
+            Ok(u) => Ok(Calx::I64(u)),
+            Err(e) => Err(format!("failed to parse: {}", e)),
+          }
+        } else {
+          Err(format!("unknown value: {}", s))
+        }
+      }
+    }
+  }
 }
 
 impl Calx {
@@ -42,17 +79,6 @@ impl Calx {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Decode, Encode)]
-pub enum CalxType {
-  Nil,
-  Bool,
-  I64,
-  F64,
-  Str,
-  List,
-  Link,
-}
-
 impl fmt::Display for Calx {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -77,4 +103,10 @@ impl fmt::Display for Calx {
       } // Calx::Link(..) => f.write_str("TODO LINK"),
     }
   }
+}
+
+lazy_static! {
+  static ref FLOAT_PATTERN: Regex = Regex::new("^-?\\d+\\.(\\d+)?$").unwrap();
+  static ref INT_PATTERN: Regex = Regex::new("^-?\\d+$").unwrap();
+  static ref USIZE_PATTERN: Regex = Regex::new("^\\d+$").unwrap();
 }

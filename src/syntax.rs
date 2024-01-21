@@ -56,8 +56,6 @@ pub enum CalxSyntax {
   // control stuctures
   Br(usize),
   BrIf(usize),
-  Jmp(usize),   // internal
-  JmpIf(usize), // internal
   Block {
     params_types: Rc<Vec<CalxType>>,
     ret_types: Rc<Vec<CalxType>>,
