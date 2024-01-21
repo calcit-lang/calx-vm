@@ -9,6 +9,7 @@ use std::rc::Rc;
 use std::{fmt, vec};
 
 use crate::calx::{Calx, CalxType};
+use crate::syntax::CalxSyntax;
 
 use self::block_data::BlockData;
 use self::frame::CalxFrame;
@@ -43,7 +44,10 @@ impl CalxVM {
       name: main_func.name.to_owned(),
       initial_stack_size: 0,
       blocks_track: vec![],
-      instrs: main_func.instrs.clone(),
+      instrs: match main_func.instrs {
+        Some(ref x) => x.to_owned(),
+        None => panic!("main function must have instrs"),
+      },
       pointer: 0,
       locals: vec![],
       ret_types: main_func.ret_types.clone(),
@@ -486,7 +490,10 @@ impl CalxVM {
               initial_stack_size: self.stack.len(),
               locals,
               pointer: 0,
-              instrs,
+              instrs: match instrs {
+                Some(x) => x.to_owned(),
+                None => panic!("function must have instrs"),
+              },
               ret_types,
             };
 
@@ -523,7 +530,10 @@ impl CalxVM {
               initial_stack_size: self.stack.len(),
               locals,
               pointer: 0,
-              instrs,
+              instrs: match instrs {
+                Some(x) => x.to_owned(),
+                None => panic!("function must have instrs"),
+              },
               ret_types,
             };
 
@@ -605,13 +615,13 @@ impl CalxVM {
         );
       }
 
-      for j in 0..self.funcs[i].instrs.len() {
+      for j in 0..self.funcs[i].syntax.len() {
         if verbose {
-          println!("{} * {:?}", stack_size, self.funcs[i].instrs[j].to_owned());
+          println!("{} * {:?}", stack_size, self.funcs[i].syntax[j].to_owned());
         }
-        let instrs = &self.funcs[i].instrs;
-        match &instrs[j] {
-          CalxInstr::Block {
+        let syntax = &self.funcs[i].syntax;
+        match &syntax[j] {
+          CalxSyntax::Block {
             looped,
             params_types,
             ret_types,
@@ -631,7 +641,7 @@ impl CalxVM {
             });
             ops.push(CalxInstr::Nop);
           }
-          CalxInstr::Br(size) => {
+          CalxSyntax::Br(size) => {
             if *size > blocks_track.len() {
               return Err(format!("br {} too large", size));
             }
@@ -649,7 +659,7 @@ impl CalxVM {
               ops.push(CalxInstr::Jmp(target_block.to))
             }
           }
-          CalxInstr::BrIf(size) => {
+          CalxSyntax::BrIf(size) => {
             if blocks_track.is_empty() {
               return Err(format!("cannot branch with no blocks, {}", size));
             }
@@ -671,7 +681,7 @@ impl CalxVM {
               return Err(format!("brIf({size}) expected size {expected_size}, got {stack_size}"));
             }
           }
-          CalxInstr::BlockEnd(looped) => {
+          CalxSyntax::BlockEnd(looped) => {
             // println!("checking: {:?}", blocks_track);
             if blocks_track.is_empty() {
               return Err(format!("invalid block end, {:?}", blocks_track));
@@ -690,7 +700,7 @@ impl CalxVM {
 
             ops.push(CalxInstr::Nop)
           }
-          CalxInstr::Call(f_name) => match find_func(&self.funcs, f_name) {
+          CalxSyntax::Call(f_name) => match find_func(&self.funcs, f_name) {
             Some(f) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
@@ -700,7 +710,7 @@ impl CalxVM {
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxInstr::ReturnCall(f_name) => match find_func(&self.funcs, f_name) {
+          CalxSyntax::ReturnCall(f_name) => match find_func(&self.funcs, f_name) {
             Some(f) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
@@ -710,7 +720,7 @@ impl CalxVM {
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxInstr::CallImport(f_name) => match &self.imports.get(f_name) {
+          CalxSyntax::CallImport(f_name) => match &self.imports.get(f_name) {
             Some((_f, size)) => {
               if stack_size < *size {
                 return Err(format!("insufficient size to call import: {} {:?}", stack_size, size));
@@ -720,7 +730,7 @@ impl CalxVM {
             }
             None => return Err(format!("missing imported function {}", f_name)),
           },
-          CalxInstr::Return => {
+          CalxSyntax::Return => {
             let ret_size = self.funcs[i].ret_types.len();
             stack_size -= ret_size;
             if stack_size != 0 {
@@ -732,8 +742,9 @@ impl CalxVM {
             ops.push(CalxInstr::Return);
           }
           a => {
+            let instr: CalxInstr = a.try_into()?;
             // checks
-            let (params_size, ret_size) = a.stack_arity();
+            let (params_size, ret_size) = instr.stack_arity();
             if stack_size < params_size {
               return Err(format!("insufficient stack {} to call {:?} of {}", stack_size, a, params_size));
             }
@@ -742,7 +753,7 @@ impl CalxVM {
             //   "  sizes: {:?} {} {} -> {}",
             //   a, params_size, ret_size, stack_size
             // );
-            ops.push(a.to_owned());
+            ops.push(instr.to_owned());
           }
         }
       }
@@ -753,7 +764,7 @@ impl CalxVM {
         ));
       }
 
-      self.funcs[i].instrs = Rc::new(ops);
+      self.funcs[i].instrs = Some(Rc::new(ops));
     }
     Ok(())
   }

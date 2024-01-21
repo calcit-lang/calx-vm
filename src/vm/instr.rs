@@ -2,7 +2,10 @@ use std::rc::Rc;
 
 use bincode::{Decode, Encode};
 
-use crate::calx::{Calx, CalxType};
+use crate::{
+  calx::{Calx, CalxType},
+  syntax::CalxSyntax,
+};
 
 /// learning from WASM but for dynamic data
 #[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
@@ -90,6 +93,73 @@ pub enum CalxInstr {
     to: usize,
   },
   EndIf,
+}
+
+impl TryFrom<&CalxSyntax> for CalxInstr {
+  type Error = String;
+
+  fn try_from(syntax: &CalxSyntax) -> Result<Self, Self::Error> {
+    match syntax {
+      CalxSyntax::LocalSet(a) => Ok(Self::LocalSet(a.to_owned())),
+      CalxSyntax::LocalTee(a) => Ok(Self::LocalTee(a.to_owned())),
+      CalxSyntax::LocalGet(a) => Ok(Self::LocalGet(a.to_owned())),
+      CalxSyntax::LocalNew => Ok(Self::LocalNew),
+      CalxSyntax::GlobalSet(a) => Ok(Self::GlobalSet(a.to_owned())),
+      CalxSyntax::GlobalGet(a) => Ok(Self::GlobalGet(a.to_owned())),
+      CalxSyntax::GlobalNew => Ok(Self::GlobalNew),
+      CalxSyntax::Const(a) => Ok(Self::Const(a.to_owned())),
+      CalxSyntax::Dup => Ok(Self::Dup),
+      CalxSyntax::Drop => Ok(Self::Drop),
+      CalxSyntax::IntAdd => Ok(Self::IntAdd),
+      CalxSyntax::IntMul => Ok(Self::IntMul),
+      CalxSyntax::IntDiv => Ok(Self::IntDiv),
+      CalxSyntax::IntRem => Ok(Self::IntRem),
+      CalxSyntax::IntNeg => Ok(Self::IntNeg),
+      CalxSyntax::IntShr => Ok(Self::IntShr),
+      CalxSyntax::IntShl => Ok(Self::IntShl),
+      CalxSyntax::IntEq => Ok(Self::IntEq),
+      CalxSyntax::IntNe => Ok(Self::IntNe),
+      CalxSyntax::IntLt => Ok(Self::IntLt),
+      CalxSyntax::IntLe => Ok(Self::IntLe),
+      CalxSyntax::IntGt => Ok(Self::IntGt),
+      CalxSyntax::IntGe => Ok(Self::IntGe),
+      CalxSyntax::Add => Ok(Self::Add),
+      CalxSyntax::Mul => Ok(Self::Mul),
+      CalxSyntax::Div => Ok(Self::Div),
+      CalxSyntax::Neg => Ok(Self::Neg),
+      // string operations
+      // list operations
+      CalxSyntax::NewList => Ok(Self::NewList),
+      CalxSyntax::ListGet => Ok(Self::ListGet),
+      CalxSyntax::ListSet => Ok(Self::ListSet),
+      // Link
+      CalxSyntax::NewLink => Ok(Self::NewLink),
+      // bool operations
+      CalxSyntax::And => Ok(Self::And),
+      CalxSyntax::Or => Ok(Self::Or),
+      CalxSyntax::Not => Ok(Self::Not),
+      // control stuctures
+      CalxSyntax::Br(a) => Ok(Self::Br(a.to_owned())),
+      CalxSyntax::BrIf(a) => Ok(Self::BrIf(a.to_owned())),
+      CalxSyntax::Jmp(a) => Ok(Self::Jmp(a.to_owned())),
+      CalxSyntax::JmpIf(a) => Ok(Self::JmpIf(a.to_owned())),
+      CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
+      CalxSyntax::BlockEnd(a) => Ok(Self::BlockEnd(a.to_owned())),
+      CalxSyntax::Echo => Ok(Self::Echo),
+      CalxSyntax::Call(a) => Ok(Self::Call(a.to_owned())),
+      CalxSyntax::ReturnCall(a) => Ok(Self::ReturnCall(a.to_owned())),
+      CalxSyntax::CallImport(a) => Ok(Self::CallImport(a.to_owned())),
+      CalxSyntax::Unreachable => Ok(Self::Unreachable),
+      CalxSyntax::Nop => Ok(Self::Nop),
+      CalxSyntax::Quit(a) => Ok(Self::Quit(a.to_owned())),
+      CalxSyntax::Return => Ok(Self::Return),
+      CalxSyntax::Assert(a) => Ok(Self::Assert(a.to_owned())),
+      // debug
+      CalxSyntax::Inspect => Ok(Self::Inspect),
+      CalxSyntax::If { .. } => Err("If should be handled manually".to_string()),
+      CalxSyntax::EndIf => Ok(Self::EndIf),
+    }
+  }
 }
 
 impl CalxInstr {

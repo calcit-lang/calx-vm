@@ -2,7 +2,7 @@ use bincode::{Decode, Encode};
 use core::fmt;
 use std::rc::Rc;
 
-use crate::calx::CalxType;
+use crate::{calx::CalxType, syntax::CalxSyntax};
 
 use super::instr::CalxInstr;
 
@@ -11,7 +11,8 @@ pub struct CalxFunc {
   pub name: Rc<String>,
   pub params_types: Rc<Vec<CalxType>>,
   pub ret_types: Rc<Vec<CalxType>>,
-  pub instrs: Rc<Vec<CalxInstr>>,
+  pub syntax: Rc<Vec<CalxSyntax>>,
+  pub instrs: Option<Rc<Vec<CalxInstr>>>,
   pub local_names: Rc<Vec<String>>,
 }
 

@@ -1,5 +1,6 @@
 mod calx;
 mod parser;
+mod syntax;
 mod util;
 mod vm;
 
