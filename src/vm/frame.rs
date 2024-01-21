@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::calx::{Calx, CalxType};
 
-use super::{block_data::BlockData, instr::CalxInstr};
+use super::instr::CalxInstr;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
@@ -13,7 +13,6 @@ pub struct CalxFrame {
   pub instrs: Rc<Vec<CalxInstr>>,
   pub pointer: usize,
   pub initial_stack_size: usize,
-  pub blocks_track: Vec<BlockData>,
   pub ret_types: Rc<Vec<CalxType>>,
 }
 
@@ -25,7 +24,6 @@ impl Default for CalxFrame {
       instrs: Rc::new(vec![]),
       pointer: 0,
       initial_stack_size: 0,
-      blocks_track: vec![],
       ret_types: Rc::new(vec![]),
     }
   }

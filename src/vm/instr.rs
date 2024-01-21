@@ -57,21 +57,10 @@ pub enum CalxInstr {
   Or,
   Not,
   // control stuctures
-  Br(usize),
-  BrIf(usize),
   Jmp(usize),       // internal
   JmpOffset(i32),   // internal
   JmpIf(usize),     // internal
   JmpOffsetIf(i32), // internal
-  Block {
-    params_types: Rc<Vec<CalxType>>,
-    ret_types: Rc<Vec<CalxType>>,
-    /// bool to indicate loop
-    looped: bool,
-    from: usize,
-    to: usize,
-  },
-  BlockEnd(bool),
   /// pop and println current value
   Echo,
   /// TODO use function name at first, during running, index can be faster
@@ -141,10 +130,10 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Or => Ok(Self::Or),
       CalxSyntax::Not => Ok(Self::Not),
       // control stuctures
-      CalxSyntax::Br(a) => Ok(Self::Br(a.to_owned())),
-      CalxSyntax::BrIf(a) => Ok(Self::BrIf(a.to_owned())),
+      CalxSyntax::Br(_) => Err("Br should be handled manually".to_string()),
+      CalxSyntax::BrIf(_) => Err("BrIf should be handled manually".to_owned()),
       CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
-      CalxSyntax::BlockEnd(a) => Ok(Self::BlockEnd(a.to_owned())),
+      CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
       CalxSyntax::Echo => Ok(Self::Echo),
       CalxSyntax::Call(a) => Ok(Self::Call(a.to_owned())),
       CalxSyntax::ReturnCall(a) => Ok(Self::ReturnCall(a.to_owned())),
@@ -206,16 +195,10 @@ impl CalxInstr {
       CalxInstr::Or => (2, 1),
       CalxInstr::Not => (1, 1),
       // control stuctures
-      CalxInstr::Br(_) => (0, 0),
-      CalxInstr::BrIf(_) => (1, 0),
       CalxInstr::Jmp(_) => (0, 0),
       CalxInstr::JmpOffset(_) => (0, 0),
       CalxInstr::JmpIf(_) => (1, 0),
       CalxInstr::JmpOffsetIf(_) => (1, 0),
-      CalxInstr::Block {
-        params_types, ret_types, ..
-      } => (params_types.len(), ret_types.len()),
-      CalxInstr::BlockEnd(_) => (0, 0),
       CalxInstr::Echo => (1, 0),
       CalxInstr::Call(_) => (0, 0),       // TODO
       CalxInstr::ReturnCall(_) => (0, 0), // TODO

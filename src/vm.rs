@@ -43,7 +43,6 @@ impl CalxVM {
     let main_frame = CalxFrame {
       name: main_func.name.to_owned(),
       initial_stack_size: 0,
-      blocks_track: vec![],
       // use empty instrs, will be replaced by preprocess
       instrs: Rc::new(vec![]),
       pointer: 0,
@@ -93,7 +92,6 @@ impl CalxVM {
 
     fmt::write(&mut output, format_args!("{indent}Top frame: {}", self.top_frame.name)).expect("inspect display");
     fmt::write(&mut output, format_args!("{indent}Locals: {:?}", self.top_frame.locals)).expect("inspect display");
-    fmt::write(&mut output, format_args!("{indent}Blocks: {:?}", self.top_frame.blocks_track)).expect("inspect display");
     fmt::write(&mut output, format_args!("{indent}Stack({}): {:?}", self.stack.len(), self.stack)).expect("inspect display");
     fmt::write(
       &mut output,
@@ -170,69 +168,6 @@ impl CalxVM {
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
           return Ok(true); // point reset, goto next loop
-        }
-      }
-      Br(size) => {
-        self.shrink_blocks_by(*size)?;
-
-        let last_idx = self.top_frame.blocks_track.len() - 1;
-        if self.top_frame.blocks_track[last_idx].looped {
-          self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
-        } else {
-          self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
-        }
-
-        return Ok(true); // point reset, goto next loop
-      }
-      BrIf(size) => {
-        let last_idx = self.stack.len() - 1;
-        if self.stack[last_idx] == Calx::Bool(true) || self.stack[last_idx] == Calx::I64(1) {
-          self.shrink_blocks_by(*size)?;
-
-          let last_idx = self.top_frame.blocks_track.len() - 1;
-          if self.top_frame.blocks_track[last_idx].looped {
-            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].from;
-          } else {
-            self.top_frame.pointer = self.top_frame.blocks_track[last_idx].to;
-          }
-
-          return Ok(true); // point reset, goto next loop
-        }
-      }
-      Block {
-        looped,
-        from,
-        to,
-        params_types,
-        ret_types,
-      } => {
-        if self.stack.len() < params_types.len() {
-          return Err(self.gen_err(format!("no enough data on stack {:?} for {:?}", self.stack, params_types)));
-        }
-        self.top_frame.blocks_track.push(BlockData {
-          looped: looped.to_owned(),
-          params_types: params_types.to_owned(),
-          ret_types: ret_types.to_owned(),
-          from: from.to_owned(),
-          to: to.to_owned(),
-          initial_stack_size: self.stack.len() - params_types.len(),
-        });
-        self.check_stack_for_block(params_types)?;
-      }
-      BlockEnd(looped) => {
-        if *looped {
-          return Err(self.gen_err(String::from("loop end expected to be branched")));
-        }
-        let last_block = self.top_frame.blocks_track.pop().unwrap();
-        if self.stack.len() != last_block.initial_stack_size + last_block.ret_types.len() {
-          return Err(self.gen_err(format!(
-            "block-end {:?} expected initial size {} plus {:?}, got stack size {}, in\n {}",
-            last_block,
-            last_block.initial_stack_size,
-            last_block.ret_types,
-            self.stack.len(),
-            self.top_frame
-          )));
         }
       }
       LocalSet(idx) => {
@@ -507,7 +442,6 @@ impl CalxVM {
             self.frames.push(self.top_frame.to_owned());
             self.top_frame = CalxFrame {
               name: f_name,
-              blocks_track: vec![],
               initial_stack_size: self.stack.len(),
               locals,
               pointer: 0,
@@ -547,7 +481,6 @@ impl CalxVM {
             }
             self.top_frame = CalxFrame {
               name: f_name,
-              blocks_track: vec![],
               initial_stack_size: self.stack.len(),
               locals,
               pointer: 0,
@@ -839,30 +772,9 @@ impl CalxVM {
     self.stack.push(x)
   }
 
-  /// assumed that the size already checked
-  #[inline(always)]
-  fn shrink_blocks_by(&mut self, size: usize) -> Result<(), CalxError> {
-    if self.top_frame.blocks_track.len() <= size {
-      return Err(self.gen_err(format!(
-        "stack size {} eq/smaller than br size {}",
-        self.top_frame.blocks_track.len(),
-        size
-      )));
-    }
-
-    let mut i = size;
-    while i > 0 {
-      self.top_frame.blocks_track.pop();
-      i -= 1;
-    }
-
-    Ok(())
-  }
-
   fn gen_err(&self, s: String) -> CalxError {
     CalxError {
       message: s,
-      blocks: self.top_frame.blocks_track.to_owned(),
       top_frame: self.top_frame.to_owned(),
       stack: self.stack.to_owned(),
       globals: self.globals.to_owned(),
@@ -879,7 +791,6 @@ pub struct CalxError {
   pub message: String,
   pub stack: Vec<Calx>,
   pub top_frame: CalxFrame,
-  pub blocks: Vec<BlockData>,
   pub globals: Vec<Calx>,
 }
 
@@ -895,7 +806,6 @@ impl CalxError {
       message: s,
       stack: vec![],
       top_frame: CalxFrame::default(),
-      blocks: vec![],
       globals: vec![],
     }
   }
