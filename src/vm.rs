@@ -703,7 +703,6 @@ impl CalxVM {
             if stack_size < 1 {
               return Err(format!("insufficient stack {} to branch", stack_size));
             }
-            stack_size -= 1;
 
             blocks_track.push(BlockData::If {
               ret_types: ret_types.to_owned(),
@@ -712,6 +711,7 @@ impl CalxVM {
               initial_stack_size: stack_size,
             });
 
+            stack_size -= 1;
             ops.push(CalxInstr::JmpIf(else_at.to_owned()));
           }
           CalxSyntax::ElseEnd => {
@@ -720,6 +720,7 @@ impl CalxVM {
             }
 
             let prev_block = blocks_track.peek_if()?;
+
             if stack_size != prev_block.expected_finish_size() {
               return Err(format!("size mismatch for else-end: {} {:?}", stack_size, prev_block));
             }

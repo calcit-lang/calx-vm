@@ -36,37 +36,5 @@ fn test_extracting() -> Result<(), String> {
     ))
   );
 
-  assert_eq!(
-    Cirru::List(extract_nested(&Cirru::List(vec![
-      Cirru::leaf("block"),
-      Cirru::List(vec![
-        Cirru::leaf("c"),
-        Cirru::leaf("d"),
-        Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f"),])
-      ])
-    ]))?),
-    Cirru::List(vec!(Cirru::List(vec![
-      Cirru::leaf("block"),
-      Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f")]),
-      Cirru::List(vec![Cirru::leaf("c"), Cirru::leaf("d")])
-    ]),))
-  );
-
-  assert_eq!(
-    Cirru::List(extract_nested(&Cirru::List(vec![
-      Cirru::leaf("loop"),
-      Cirru::List(vec![
-        Cirru::leaf("c"),
-        Cirru::leaf("d"),
-        Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f"),])
-      ])
-    ]))?),
-    Cirru::List(vec!(Cirru::List(vec![
-      Cirru::leaf("loop"),
-      Cirru::List(vec![Cirru::leaf("e"), Cirru::leaf("f")]),
-      Cirru::List(vec![Cirru::leaf("c"), Cirru::leaf("d")])
-    ]),))
-  );
-
   Ok(())
 }

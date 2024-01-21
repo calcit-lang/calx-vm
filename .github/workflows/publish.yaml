@@ -16,6 +16,8 @@ jobs:
           toolchain: nightly
           components: clippy
 
+      - run: cargo test
+
       - run: cargo run -- -s demos/hello.cirru
       - run: cargo run -- -s demos/sum.cirru
       - run: cargo run -- -s demos/assert.cirru
@@ -23,6 +25,7 @@ jobs:
       - run: cargo run -- -s demos/named.cirru
       - run: cargo run -- -s demos/recur.cirru
       - run: cargo run -- -s demos/fibonacci.cirru
+      - run: cargo run -- -s demos/if.cirru
       - run: cargo run -- --emit-binary target/a.calx demos/named.cirru && cargo run -- --eval-binary target/a.calx
 
       # - run: cargo test
