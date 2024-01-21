@@ -1,8 +1,19 @@
-use crate::primes::{BlockData, Calx, CalxError, CalxFrame, CalxFunc, CalxInstr, CalxType};
+mod block_data;
+pub mod frame;
+pub mod func;
+pub mod instr;
+
 use std::collections::hash_map::HashMap;
 use std::ops::Rem;
 use std::rc::Rc;
 use std::{fmt, vec};
+
+use crate::calx::{Calx, CalxType};
+
+use self::block_data::BlockData;
+use self::frame::CalxFrame;
+use self::func::CalxFunc;
+use self::instr::CalxInstr;
 
 pub type CalxImportsDict = HashMap<String, (fn(xs: Vec<Calx>) -> Result<Calx, CalxError>, usize)>;
 
@@ -121,19 +132,22 @@ impl CalxVM {
       return Ok(true);
     }
     let instrs = self.top_frame.instrs.to_owned();
+
+    use instr::CalxInstr::*;
+
     match &instrs[self.top_frame.pointer] {
-      CalxInstr::Jmp(line) => {
+      Jmp(line) => {
         self.top_frame.pointer = line.to_owned();
         return Ok(true); // point reset, goto next loop
       }
-      CalxInstr::JmpIf(line) => {
+      JmpIf(line) => {
         let v = self.stack_pop()?;
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           self.top_frame.pointer = line.to_owned();
           return Ok(true); // point reset, goto next loop
         }
       }
-      CalxInstr::Br(size) => {
+      Br(size) => {
         self.shrink_blocks_by(*size)?;
 
         let last_idx = self.top_frame.blocks_track.len() - 1;
@@ -145,7 +159,7 @@ impl CalxVM {
 
         return Ok(true); // point reset, goto next loop
       }
-      CalxInstr::BrIf(size) => {
+      BrIf(size) => {
         let last_idx = self.stack.len() - 1;
         if self.stack[last_idx] == Calx::Bool(true) || self.stack[last_idx] == Calx::I64(1) {
           self.shrink_blocks_by(*size)?;
@@ -160,7 +174,7 @@ impl CalxVM {
           return Ok(true); // point reset, goto next loop
         }
       }
-      CalxInstr::Block {
+      Block {
         looped,
         from,
         to,
@@ -180,7 +194,7 @@ impl CalxVM {
         });
         self.check_stack_for_block(params_types)?;
       }
-      CalxInstr::BlockEnd(looped) => {
+      BlockEnd(looped) => {
         if *looped {
           return Err(self.gen_err(String::from("loop end expected to be branched")));
         }
@@ -196,7 +210,7 @@ impl CalxVM {
           )));
         }
       }
-      CalxInstr::LocalSet(idx) => {
+      LocalSet(idx) => {
         let v = self.stack_pop()?;
         if *idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.set {} for {:?}", idx, self.top_frame.locals)));
@@ -204,7 +218,7 @@ impl CalxVM {
           self.top_frame.locals[*idx] = v
         }
       }
-      CalxInstr::LocalTee(idx) => {
+      LocalTee(idx) => {
         let v = self.stack_pop()?;
         if *idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.tee {}", idx)));
@@ -213,14 +227,14 @@ impl CalxVM {
         }
         self.stack_push(v);
       }
-      CalxInstr::LocalGet(idx) => {
+      LocalGet(idx) => {
         if *idx < self.top_frame.locals.len() {
           self.stack_push(self.top_frame.locals[*idx].to_owned())
         } else {
           return Err(self.gen_err(format!("invalid index for local.get {}", idx)));
         }
       }
-      CalxInstr::Return => {
+      Return => {
         // return values are moved to a temp space
         let mut ret_stack: Vec<Calx> = vec![];
 
@@ -250,8 +264,8 @@ impl CalxVM {
           }
         }
       }
-      CalxInstr::LocalNew => self.top_frame.locals.push(Calx::Nil),
-      CalxInstr::GlobalSet(idx) => {
+      LocalNew => self.top_frame.locals.push(Calx::Nil),
+      GlobalSet(idx) => {
         let v = self.stack_pop()?;
         if self.globals.len() >= *idx {
           return Err(self.gen_err(format!("out of bound in global.set {}", idx)));
@@ -259,22 +273,22 @@ impl CalxVM {
           self.globals[*idx] = v
         }
       }
-      CalxInstr::GlobalGet(idx) => {
+      GlobalGet(idx) => {
         if *idx < self.globals.len() {
           self.stack_push(self.globals[*idx].to_owned())
         } else {
           return Err(self.gen_err(format!("invalid index for global.get {}", idx)));
         }
       }
-      CalxInstr::GlobalNew => self.globals.push(Calx::Nil),
-      CalxInstr::Const(v) => self.stack_push(v.to_owned()),
-      CalxInstr::Dup => {
+      GlobalNew => self.globals.push(Calx::Nil),
+      Const(v) => self.stack_push(v.to_owned()),
+      Dup => {
         self.stack_push(self.stack[self.stack.len() - 1].to_owned());
       }
-      CalxInstr::Drop => {
+      Drop => {
         let _ = self.stack_pop()?;
       }
-      CalxInstr::IntAdd => {
+      IntAdd => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -283,7 +297,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to add, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntMul => {
+      IntMul => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -292,7 +306,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to multiply, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntDiv => {
+      IntDiv => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -301,7 +315,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to divide, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntRem => {
+      IntRem => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -310,7 +324,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to add, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntNeg => {
+      IntNeg => {
         let last_idx = self.stack.len() - 1;
         if let Calx::I64(n) = self.stack[last_idx] {
           self.stack[last_idx] = Calx::I64(-n)
@@ -318,7 +332,7 @@ impl CalxVM {
           return Err(self.gen_err(format!("expected int, got {}", self.stack[last_idx])));
         }
       }
-      CalxInstr::IntShr => {
+      IntShr => {
         let bits = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &bits) {
@@ -326,7 +340,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("invalid number for SHR, {:?} {:?}", self.stack[last_idx], bits))),
         }
       }
-      CalxInstr::IntShl => {
+      IntShl => {
         let bits = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &bits) {
@@ -334,7 +348,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("invalid number for SHL, {:?} {:?}", self.stack[last_idx], bits))),
         }
       }
-      CalxInstr::IntEq => {
+      IntEq => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -345,7 +359,7 @@ impl CalxVM {
         }
       }
 
-      CalxInstr::IntNe => {
+      IntNe => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -354,7 +368,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to ne compare, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntLt => {
+      IntLt => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -363,7 +377,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to le compare, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntLe => {
+      IntLe => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -372,7 +386,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to le compare, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntGt => {
+      IntGt => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -382,7 +396,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to gt compare, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::IntGe => {
+      IntGe => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -392,7 +406,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 integers to ge compare, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::Add => {
+      Add => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -403,7 +417,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 numbers to +, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::Mul => {
+      Mul => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -414,7 +428,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 numbers to multiply, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::Div => {
+      Div => {
         // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
@@ -424,7 +438,7 @@ impl CalxVM {
           (_, _) => return Err(self.gen_err(format!("expected 2 numbers to divide, {:?} {:?}", self.stack[last_idx], v2))),
         }
       }
-      CalxInstr::Neg => {
+      Neg => {
         let last_idx = self.stack.len() - 1;
         if let Calx::F64(n) = self.stack[last_idx] {
           self.stack[last_idx] = Calx::F64(-n)
@@ -432,28 +446,28 @@ impl CalxVM {
           return Err(self.gen_err(format!("expected float, got {}", self.stack[last_idx])));
         }
       }
-      CalxInstr::NewList => {
+      NewList => {
         // TODO
       }
-      CalxInstr::ListGet => {
+      ListGet => {
         // TODO
       }
-      CalxInstr::ListSet => {
+      ListSet => {
         // TODO
       }
-      CalxInstr::NewLink => {
+      NewLink => {
         // TODO
       }
-      CalxInstr::And => {
+      And => {
         // TODO
       }
-      CalxInstr::Or => {
+      Or => {
         // TODO
       }
-      CalxInstr::Not => {
+      Not => {
         // TODO
       }
-      CalxInstr::Call(f_name) => {
+      Call(f_name) => {
         // println!("frame size: {}", self.frames.len());
         match find_func(&self.funcs, f_name) {
           Some(f) => {
@@ -482,7 +496,7 @@ impl CalxVM {
           None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
         }
       }
-      CalxInstr::ReturnCall(f_name) => {
+      ReturnCall(f_name) => {
         // println!("frame size: {}", self.frames.len());
         match find_func(&self.funcs, f_name) {
           Some(f) => {
@@ -519,7 +533,7 @@ impl CalxVM {
           None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
         }
       }
-      CalxInstr::CallImport(f_name) => match self.imports.to_owned().get(f_name) {
+      CallImport(f_name) => match self.imports.to_owned().get(f_name) {
         None => return Err(self.gen_err(format!("missing imported function {}", f_name))),
         Some((f, size)) => {
           if self.stack.len() < *size {
@@ -539,18 +553,18 @@ impl CalxVM {
           self.stack_push(v);
         }
       },
-      CalxInstr::Unreachable => {
+      Unreachable => {
         unreachable!("Unexpected from op")
       }
-      CalxInstr::Nop => {
+      Nop => {
         // Noop
       }
-      CalxInstr::Quit(code) => std::process::exit(*code as i32),
-      CalxInstr::Echo => {
+      Quit(code) => std::process::exit(*code as i32),
+      Echo => {
         let v = self.stack_pop()?;
         println!("{}", v);
       }
-      CalxInstr::Assert(message) => {
+      Assert(message) => {
         let v = self.stack_pop()?;
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           // Ok
@@ -558,9 +572,16 @@ impl CalxVM {
           return Err(self.gen_err(format!("Failed assertion: {}", message)));
         }
       }
-      CalxInstr::Inspect => {
+      Inspect => {
         println!("[ ----------------{}", self.inspect_display(2));
         println!("  -------------- ]");
+      }
+      If { ret_types, .. } => {
+        // TODO
+        self.check_stack_for_block(ret_types)?;
+      }
+      EndIf => {
+        unreachable!("End if is internal instruction during preprocessing")
       }
     }
 
@@ -815,4 +836,31 @@ impl CalxVM {
 
 pub fn find_func<'a>(funcs: &'a [CalxFunc], name: &str) -> Option<&'a CalxFunc> {
   funcs.iter().find(|x| *x.name == name)
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct CalxError {
+  pub message: String,
+  pub stack: Vec<Calx>,
+  pub top_frame: CalxFrame,
+  pub blocks: Vec<BlockData>,
+  pub globals: Vec<Calx>,
+}
+
+impl fmt::Display for CalxError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}\n{:?}\n{}", self.message, self.stack, self.top_frame)
+  }
+}
+
+impl CalxError {
+  pub fn new_raw(s: String) -> Self {
+    CalxError {
+      message: s,
+      stack: vec![],
+      top_frame: CalxFrame::default(),
+      blocks: vec![],
+      globals: vec![],
+    }
+  }
 }

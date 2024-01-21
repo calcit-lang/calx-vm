@@ -11,7 +11,9 @@ use regex::Regex;
 
 use cirru_parser::Cirru;
 
-use crate::primes::{Calx, CalxFunc, CalxInstr, CalxType};
+use crate::calx::{Calx, CalxType};
+use crate::vm::func::CalxFunc;
+use crate::vm::instr::CalxInstr;
 
 use self::locals::LocalsCollector;
 

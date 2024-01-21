@@ -5,7 +5,18 @@ use std::time::Instant;
 use cirru_parser::{parse, Cirru};
 use clap::{arg, Parser};
 
-use calx_vm::{log_calx_value, parse_function, Calx, CalxBinaryProgram, CalxFunc, CalxImportsDict, CalxVM, CALX_BINARY_EDITION};
+use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM, CALX_INSTR_EDITION};
+
+use bincode::{Decode, Encode};
+
+/// binary format for saving calx program
+/// TODO this is not a valid file format that requires magic code
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
+pub struct CalxBinaryProgram {
+  /// updates as instructions update
+  pub edition: String,
+  pub fns: Vec<CalxFunc>,
+}
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -44,13 +55,13 @@ fn main() -> Result<(), String> {
     let program: CalxBinaryProgram = bincode::decode_from_slice(&code, bincode::config::standard())
       .expect("decode functions from binary")
       .0;
-    if program.edition == CALX_BINARY_EDITION {
+    if program.edition == CALX_INSTR_EDITION {
       println!("Calx Edition: {}", program.edition);
       fns = program.fns;
     } else {
       return Err(format!(
         "Runner uses binary edition {}, binary encoded in {}",
-        CALX_BINARY_EDITION, program.edition
+        CALX_INSTR_EDITION, program.edition
       ));
     }
   } else {
@@ -69,7 +80,7 @@ fn main() -> Result<(), String> {
 
   if emit_binary.is_some() {
     let program = CalxBinaryProgram {
-      edition: CALX_BINARY_EDITION.to_string(),
+      edition: CALX_INSTR_EDITION.to_string(),
       fns,
     };
     let buf = bincode::encode_to_vec(program, bincode::config::standard()).map_err(|e| e.to_string())?;
