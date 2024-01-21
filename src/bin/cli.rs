@@ -27,8 +27,6 @@ pub struct CalxBinaryProgram {
 struct Args {
   #[arg(short, long, value_name = "SHOW_CODE")]
   show_code: bool,
-  #[arg(short, long, value_name = "DISABLE_PRE")]
-  disable_pre: bool,
   #[arg(short, long, value_name = "EMIT_BINARY")]
   emit_binary: Option<String>,
   #[arg(short, long, value_name = "VERBOSE")]
@@ -44,7 +42,6 @@ fn main() -> Result<(), String> {
 
   let source = args.source;
   let show_code = args.show_code;
-  let disable_pre = args.disable_pre;
   let emit_binary = args.emit_binary;
   let eval_binary = args.eval_binary;
 
@@ -104,12 +101,11 @@ fn main() -> Result<(), String> {
   // }
 
   let now = Instant::now();
-  if !disable_pre {
-    println!("[calx] start preprocessing");
-    vm.preprocess(args.verbose)?;
-  } else {
-    println!("Preprocess disabled.")
-  }
+
+  println!("[calx] start preprocessing");
+  vm.preprocess(args.verbose)?;
+
+  vm.setup_top_frame()?;
 
   if show_code {
     for func in &vm.funcs {

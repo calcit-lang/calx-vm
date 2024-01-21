@@ -44,10 +44,8 @@ impl CalxVM {
       name: main_func.name.to_owned(),
       initial_stack_size: 0,
       blocks_track: vec![],
-      instrs: match main_func.instrs {
-        Some(ref x) => x.to_owned(),
-        None => panic!("main function must have instrs"),
-      },
+      // use empty instrs, will be replaced by preprocess
+      instrs: Rc::new(vec![]),
       pointer: 0,
       locals: vec![],
       ret_types: main_func.ret_types.clone(),
@@ -62,6 +60,18 @@ impl CalxVM {
       return_value: Calx::Nil,
       finished: false,
     }
+  }
+
+  pub fn setup_top_frame(&mut self) -> Result<(), String> {
+    self.top_frame.instrs = match find_func(&self.funcs, "main") {
+      Some(f) => match f.instrs.to_owned() {
+        Some(x) => x,
+        None => return Err("main function must have instrs".to_owned()),
+      },
+      None => return Err("main function is required".to_owned()),
+    };
+
+    Ok(())
   }
 
   pub fn make_return(&mut self, v: Calx) {
@@ -766,6 +776,7 @@ impl CalxVM {
 
       self.funcs[i].instrs = Some(Rc::new(ops));
     }
+
     Ok(())
   }
 
