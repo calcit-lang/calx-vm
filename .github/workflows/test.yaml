@@ -34,6 +34,7 @@ jobs:
       - run: cargo run -- -s demos/recur.cirru
       - run: cargo run -- -s demos/fibonacci.cirru
       - run: cargo run -- -s demos/if.cirru
+      - run: cargo run -- -s demos/fibo-if.cirru
       - run: cargo run -- --emit-binary target/a.calx demos/named.cirru && cargo run -- --eval-binary target/a.calx
 
       - uses: giraffate/clippy-action@v1

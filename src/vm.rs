@@ -129,6 +129,7 @@ impl CalxVM {
   }
 
   /// run one step, return true if continuing
+  #[inline(always)]
   pub fn step(&mut self) -> Result<bool, CalxError> {
     if self.top_frame.pointer >= self.top_frame.instrs.len() {
       // println!("status {:?} {}", self.stack, self.top_frame);
