@@ -73,6 +73,8 @@ fn main ()
 
 ### Instructions
 
+> _TODO_ update to `0.2.x`...
+
 Highly inspired by:
 
 - WASM https://github.com/WebAssembly/design/blob/main/Semantics.md
@@ -135,7 +137,7 @@ Calx Binary Edition `0.1`:
 | `return`             |                                                          | TODO                                   |
 | `fn $types $body`    |                                                          | Global definition                      |
 | `assert`             | `quit(1)` if not `true`                                  | for testing                            |
-| `inspect             | println inspection information                           |                                        |
+| `inspect`            | println inspection information                           |                                        |
 
 For `$types`, it can be `($t1 $t2 -> $t3 $t4)`, where supported types are:
 

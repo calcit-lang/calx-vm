@@ -5,7 +5,18 @@ use std::time::Instant;
 use cirru_parser::{parse, Cirru};
 use clap::{arg, Parser};
 
-use calx_vm::{log_calx_value, parse_function, Calx, CalxBinaryProgram, CalxFunc, CalxImportsDict, CalxVM, CALX_BINARY_EDITION};
+use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM, CALX_INSTR_EDITION};
+
+use bincode::{Decode, Encode};
+
+/// binary format for saving calx program
+/// TODO this is not a valid file format that requires magic code
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
+pub struct CalxBinaryProgram {
+  /// updates as instructions update
+  pub edition: String,
+  pub fns: Vec<CalxFunc>,
+}
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -16,8 +27,6 @@ use calx_vm::{log_calx_value, parse_function, Calx, CalxBinaryProgram, CalxFunc,
 struct Args {
   #[arg(short, long, value_name = "SHOW_CODE")]
   show_code: bool,
-  #[arg(short, long, value_name = "DISABLE_PRE")]
-  disable_pre: bool,
   #[arg(short, long, value_name = "EMIT_BINARY")]
   emit_binary: Option<String>,
   #[arg(short, long, value_name = "VERBOSE")]
@@ -33,7 +42,6 @@ fn main() -> Result<(), String> {
 
   let source = args.source;
   let show_code = args.show_code;
-  let disable_pre = args.disable_pre;
   let emit_binary = args.emit_binary;
   let eval_binary = args.eval_binary;
 
@@ -44,13 +52,13 @@ fn main() -> Result<(), String> {
     let program: CalxBinaryProgram = bincode::decode_from_slice(&code, bincode::config::standard())
       .expect("decode functions from binary")
       .0;
-    if program.edition == CALX_BINARY_EDITION {
+    if program.edition == CALX_INSTR_EDITION {
       println!("Calx Edition: {}", program.edition);
       fns = program.fns;
     } else {
       return Err(format!(
         "Runner uses binary edition {}, binary encoded in {}",
-        CALX_BINARY_EDITION, program.edition
+        CALX_INSTR_EDITION, program.edition
       ));
     }
   } else {
@@ -69,7 +77,7 @@ fn main() -> Result<(), String> {
 
   if emit_binary.is_some() {
     let program = CalxBinaryProgram {
-      edition: CALX_BINARY_EDITION.to_string(),
+      edition: CALX_INSTR_EDITION.to_string(),
       fns,
     };
     let buf = bincode::encode_to_vec(program, bincode::config::standard()).map_err(|e| e.to_string())?;
@@ -93,12 +101,11 @@ fn main() -> Result<(), String> {
   // }
 
   let now = Instant::now();
-  if !disable_pre {
-    println!("[calx] start preprocessing");
-    vm.preprocess(args.verbose)?;
-  } else {
-    println!("Preprocess disabled.")
-  }
+
+  println!("[calx] start preprocessing");
+  vm.preprocess(args.verbose)?;
+
+  vm.setup_top_frame()?;
 
   if show_code {
     for func in &vm.funcs {
