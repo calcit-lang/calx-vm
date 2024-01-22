@@ -9,6 +9,14 @@ use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, C
 
 use bincode::{Decode, Encode};
 
+// main.rs
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 /// binary format for saving calx program
 /// TODO this is not a valid file format that requires magic code
 #[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
