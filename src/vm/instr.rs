@@ -1,89 +1,107 @@
-use std::rc::Rc;
-
 use bincode::{Decode, Encode};
 
-use crate::{
-  calx::{Calx, CalxType},
-  syntax::CalxSyntax,
-};
+use crate::{calx::Calx, syntax::CalxSyntax};
 
 /// learning from WASM but for dynamic data
 #[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
 pub enum CalxInstr {
-  // Param, // load variable from parameter
+  /// pop from stack, set value at position
   LocalSet(usize),
-  LocalTee(usize), // set and also load to stack
+  /// set and also load to stack
+  LocalTee(usize),
+  /// get value at position load on stack
   LocalGet(usize),
+  /// increase size of array of locals
   LocalNew,
+  /// set global value at position
   GlobalSet(usize),
+  /// get global value from position
   GlobalGet(usize),
+  /// increase size of array of globals
   GlobalNew,
+  /// push value to stack
   Const(Calx),
+  /// duplicate value on stack
   Dup,
+  /// drop top value from stack
   Drop,
-  // number operations
+  /// add two i64 numbers on stack into a i64
   IntAdd,
+  /// multiply two i64 numbers on stack into a i64
   IntMul,
+  /// divide two i64 numbers on stack into a i64
   IntDiv,
+  /// remainder of two i64 numbers on stack into a i64
   IntRem,
+  /// negate a i64 number on stack
   IntNeg,
+  /// shift right a i64 number on stack
   IntShr,
+  /// shift left a i64 number on stack
   IntShl,
-  /// equal
+  /// equal of two i64 numbers on stack into a bool
   IntEq,
-  /// not equal
+  /// not equal of two i64 numbers on stack into a bool
   IntNe,
-  /// littler than
+  /// littler than, compares two i64 numbers on stack
   IntLt,
-  /// littler than, or equal
+  /// littler than, or equal, compares two i64 numbers on stack
   IntLe,
-  /// greater than
+  /// greater than, compares two i64 numbers on stack
   IntGt,
-  /// greater than, or equal
+  /// greater than, or equal, compares two i64 numbers on stack
   IntGe,
+  /// add two f64 numbers on stack into a f64
   Add,
+  /// multiply two f64 numbers on stack into a f64
   Mul,
+  /// divide two f64 numbers on stack into a f64
   Div,
+  /// negate a f64 number on stack
   Neg,
-  // string operations
-  // list operations
+  /// TODO
   NewList,
+  /// TODO
   ListGet,
+  /// TODO
   ListSet,
-  // Link
+  /// TODO
   NewLink,
-  // bool operations
+  /// TODO
   And,
+  /// TODO
   Or,
+  /// TODO
   Not,
-  // control stuctures
-  Jmp(usize),       // internal
-  JmpOffset(i32),   // internal
-  JmpIf(usize),     // internal
-  JmpOffsetIf(i32), // internal
+  /// Jump to index
+  Jmp(usize),
+  /// Jump by offset
+  JmpOffset(i32),
+  /// Jump to index if top value is true
+  JmpIf(usize),
+  /// Jump by offset if top value is true
+  JmpOffsetIf(i32),
   /// pop and println current value
   Echo,
-  /// TODO use function name at first, during running, index can be faster
+  /// call function
+  /// TODO optimize with index
   Call(String),
-  /// for tail recursion
+  /// tail recursion
   ReturnCall(String),
+  /// call import
   CallImport(String),
+  /// unreachable panic
   Unreachable,
+  /// no operation placeholder
   Nop,
-  Quit(usize), // quit and return value
+  /// quit and return error code
+  Quit(usize),
+  /// return from function
   Return,
   /// TODO might also be a foreign function instead
   Assert(String),
   /// inspecting stack
   Inspect,
-  /// if takes 1 value from stack, returns values as ret_types
-  If {
-    ret_types: Rc<Vec<CalxType>>,
-    then_to: usize,
-    else_to: usize,
-    to: usize,
-  },
-  EndIf,
 }
 
 impl TryFrom<&CalxSyntax> for CalxInstr {
@@ -211,8 +229,6 @@ impl CalxInstr {
       CalxInstr::Assert(_) => (1, 0),
       // debug
       CalxInstr::Inspect => (0, 0),
-      CalxInstr::If { ret_types, .. } => (1, ret_types.len()),
-      CalxInstr::EndIf => (0, 0),
     }
   }
 }

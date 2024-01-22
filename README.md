@@ -13,20 +13,55 @@ it starts with a `main` function:
 
 ```cirru
 fn main ()
-  const "|hello world"
+  const 1
+  call demo
+  const 0
+  call demo
+
+fn demo (($a i64) ->)
+  local.get $a
+
+  if (->)
+    do
+      const 11
+      echo
+    do
+      const 20
+      echo
+  const 3
   echo
 ```
 
-`-S` to show instructions:
+`-s` to show instructions:
 
 ```bash
-calx -S hello.cirru
-```
+$ calx demos/if.cirru -s
+[calx] start preprocessing
+loaded fn: CalxFunc main (-> )
+  00 Const(I64(1))
+  01 Call("demo")
+  02 Const(I64(0))
+  03 Call("demo")
 
-`-D` to disable preprocess:
+loaded fn: CalxFunc demo (I64 -> )
+  local_names: 0_$a .
+  00 LocalGet(0)
+  01 JmpIf(5)
+  02 Const(I64(20))
+  03 Echo
+  04 Jmp(8)
+  05 Const(I64(11))
+  06 Echo
+  07 Jmp(8)
+  08 Const(I64(3))
+  09 Echo
 
-```bash
-calx -D hello.cirru
+[calx] start running
+11
+3
+20
+3
+[calx] took 67.250µs: Nil
 ```
 
 `--emit-binary filename` for encode functions into a binary file.
@@ -73,81 +108,12 @@ fn main ()
 
 ### Instructions
 
-> _TODO_ update to `0.2.x`...
+Find docs on https://docs.rs/calx_vm/ .
 
 Highly inspired by:
 
 - WASM https://github.com/WebAssembly/design/blob/main/Semantics.md
 - Lox https://github.com/Darksecond/lox/blob/master/lox-vm/src/bettervm/vm.rs
-
-For binary op, top value puts on right.
-
-Calx Binary Edition `0.1`:
-
-| Code                 | Usage                                                    | Note                                   |
-| -------------------- | -------------------------------------------------------- | -------------------------------------- |
-| `local.set $idx`     | pop from stack, set value at `$idx`                      |                                        |
-| `local.tee $idx`     | set value at `$idx`, and also load it                    |                                        |
-| `local.get $idx`     | get value at `$idx` load on stack                        |                                        |
-| `local.new $name`    | increase size of array of locals                         | name is optional, defaults to `$<idx>` |
-| `global.set $idx`    | set global value at `$idx`                               |                                        |
-| `global.get $idx`    | get global value at `$idx`                               |                                        |
-| `global.new`         | increase size of array of globals                        |                                        |
-| `const $v`           | push value `$v` on stack                                 |                                        |
-| `dup`                | duplicate top value on stack                             |                                        |
-| `drop`               | drop top value from stack                                |                                        |
-| `i.add`              | add two i64 numbers on stack into one                    |                                        |
-| `i.mul`              | multiply two i64 numbers on stack into one               |                                        |
-| `i.div`              | divide two i64 numbers on stack into one                 |                                        |
-| `i.rem`              | calculate reminder two i64 numbers on stack into one     |                                        |
-| `i.neg`              | negate i64 numbers on top of stack                       |                                        |
-| `i.shr $bits`        | call SHR `$bits` bits on i64 numbers on top of stack     |                                        |
-| `i.shl $bits`        | call SHL `$bits` bits on i64 numbers on top of stack     |                                        |
-| `i.eq`               | detects if two i64 numbers on stack equal                |                                        |
-| `i.ne`               | detects if two i64 numbers on stack not equal            |                                        |
-| `i.lt`               | litter than, compares two i64 numbers on stack           |                                        |
-| `i.gt`               | greater than, compares two i64 numbers on stack          |                                        |
-| `i.le`               | litter/equal than, compares two i64 numbers on stack     |                                        |
-| `i.ge`               | greater/equal than, compares two i64 numbers on stack    |                                        |
-| `add`                | add two f64 numbers on stack into one                    |                                        |
-| `mul`                | multiply two f64 numbers on stack into one               |                                        |
-| `div`                | divide two f64 numbers on stack into one                 |                                        |
-| `neg`                | negate f64 numbers on top of stack                       |                                        |
-| `list.new`           |                                                          | TODO                                   |
-| `list.get`           |                                                          | TODO                                   |
-| `list.set`           |                                                          | TODO                                   |
-| `link.new`           |                                                          | TODO                                   |
-| `and`                |                                                          | TODO                                   |
-| `or`                 |                                                          | TODO                                   |
-| `not`                |                                                          | TODO                                   |
-| `br $n`              | branch `$n` level of block, 0 means end of current block |                                        |
-| `br-if $n`           | like `br $n` but detects top value on stack first        | Internal                               |
-| (JMP `$l`)           | jump to line `$l`                                        | Internal                               |
-| (JMP_IF `$l`)        | conditional jump to `$l`                                 |
-| `block $types $body` | declare a block                                          |                                        |
-| `loop $types $body`  | declare a loop block                                     |                                        |
-| (BlockEnd)           | internal mark for ending a block                         | Internal                               |
-| `echo`               | pop value from stack and print                           |                                        |
-| `call $f`            | call function `$f`                                       |                                        |
-| `return-call $f`     | tail call function `$f`                                  |                                        |
-| `call-import $f`     | call imported function `$f`                              |                                        |
-| `unreachable`        | throw unreachable panic                                  |                                        |
-| `nop`                | No op                                                    |                                        |
-| `quit $code`         | quit program and return exit code `$code`                |                                        |
-| `return`             |                                                          | TODO                                   |
-| `fn $types $body`    |                                                          | Global definition                      |
-| `assert`             | `quit(1)` if not `true`                                  | for testing                            |
-| `inspect`            | println inspection information                           |                                        |
-
-For `$types`, it can be `($t1 $t2 -> $t3 $t4)`, where supported types are:
-
-- nil
-- i64
-- f64
-- bool _TODO_
-- str _TODO_
-- list _TODO_
-- link _TODO_
 
 ### Preprocess
 
@@ -158,7 +124,7 @@ Before Calx running the instructions, Calx performs preprocessing to them. There
 - stack size is checked to ensure it's consistent among branches, and tidied up at function end
 - local variables are renamed to indexes
 
-these steps simplies debugging, although it's sure that's good features.
+The codebase would be updated as I'm learning more about WASM.
 
 ### License
 

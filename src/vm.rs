@@ -8,7 +8,7 @@ use std::ops::Rem;
 use std::rc::Rc;
 use std::{fmt, vec};
 
-use crate::calx::{Calx, CalxType};
+use crate::calx::Calx;
 use crate::syntax::CalxSyntax;
 use crate::vm::block_data::BlockStack;
 
@@ -19,6 +19,13 @@ use self::instr::CalxInstr;
 
 pub type CalxImportsDict = HashMap<String, (fn(xs: Vec<Calx>) -> Result<Calx, CalxError>, usize)>;
 
+/// Virtual Machine for Calx
+/// code is evaluated in a several steps:
+/// 1. parse into `CalxSyntax`
+/// 2. preprocess `CalxSyntax` into instructions(`CalxInstr`)
+/// 3. run instructions
+///
+/// `CalxSyntax` contains some richer info than `CalxInstr`.
 #[derive(Clone)]
 pub struct CalxVM {
   pub stack: Vec<Calx>,
@@ -542,13 +549,6 @@ impl CalxVM {
         println!("[ ----------------{}", self.inspect_display(2));
         println!("  -------------- ]");
       }
-      If { ret_types, .. } => {
-        // TODO
-        self.check_stack_for_block(ret_types)?;
-      }
-      EndIf => {
-        unreachable!("End if is internal instruction during preprocessing")
-      }
     }
 
     Ok(false)
@@ -772,20 +772,6 @@ impl CalxVM {
       self.funcs[i].instrs = Some(Rc::new(ops));
     }
 
-    Ok(())
-  }
-
-  /// checks is given parameters on stack top
-  fn check_stack_for_block(&self, params: &[CalxType]) -> Result<(), CalxError> {
-    if self.stack.len() < params.len() {
-      return Err(self.gen_err(format!("stack size does not match given params: {:?} {:?}", self.stack, params)));
-    }
-    for (idx, t) in params.iter().enumerate() {
-      if self.stack[self.stack.len() - params.len() - 1 + idx].typed_as(t.to_owned()) {
-        continue;
-      }
-      return Err(self.gen_err(format!("stack type does not match given params: {:?} {:?}", self.stack, params)));
-    }
     Ok(())
   }
 
