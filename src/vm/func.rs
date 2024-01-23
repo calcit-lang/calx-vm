@@ -8,7 +8,7 @@ use super::instr::CalxInstr;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFunc {
-  pub name: Rc<String>,
+  pub name: Rc<str>,
   pub params_types: Rc<Vec<CalxType>>,
   pub ret_types: Rc<Vec<CalxType>>,
   pub syntax: Rc<Vec<CalxSyntax>>,

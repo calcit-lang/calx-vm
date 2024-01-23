@@ -47,7 +47,7 @@ impl std::fmt::Debug for CalxVM {
 
 impl CalxVM {
   pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>, imports: CalxImportsDict) -> Self {
-    let main_func = fns.iter().find(|x| *x.name == "main").expect("main function is required");
+    let main_func = fns.iter().find(|x| &*x.name == "main").expect("main function is required");
     let main_frame = CalxFrame {
       name: main_func.name.clone(),
       initial_stack_size: 0,
@@ -72,7 +72,7 @@ impl CalxVM {
   pub fn setup_top_frame(&mut self) -> Result<(), String> {
     self.top_frame.instrs = match self.find_func("main") {
       Some(f) => match f.instrs.clone() {
-        Some(x) => x,
+        Some(x) => x.to_owned(),
         None => return Err("main function must have instrs".to_string()),
       },
       None => return Err("main function is required".to_string()),
@@ -450,7 +450,7 @@ impl CalxVM {
               locals,
               pointer: 0,
               instrs: match instrs {
-                Some(x) => x.to_owned(),
+                Some(x) => x.clone(),
                 None => unreachable!("function must have instrs"),
               },
               ret_types,
@@ -467,9 +467,9 @@ impl CalxVM {
         match self.find_func(f_name) {
           Some(f) => {
             // println!("examine stack: {:?}", self.stack);
-            let instrs = f.instrs.to_owned();
-            let ret_types = f.ret_types.to_owned();
-            let f_name = f.name.to_owned();
+            let instrs = f.instrs.clone();
+            let ret_types = f.ret_types.clone();
+            let f_name = f.name.clone();
             let mut locals: Vec<Calx> = vec![];
             for _ in 0..f.params_types.len() {
               let v = self.stack_pop()?;
@@ -490,7 +490,7 @@ impl CalxVM {
               locals,
               pointer: 0,
               instrs: match instrs {
-                Some(x) => x.to_owned(),
+                Some(x) => x.clone(),
                 None => panic!("function must have instrs"),
               },
               ret_types,
@@ -570,7 +570,7 @@ impl CalxVM {
 
       for j in 0..self.funcs[i].syntax.len() {
         if verbose {
-          println!("{} * {:?}", stack_size, self.funcs[i].syntax[j].to_owned());
+          println!("{} * {:?}", stack_size, self.funcs[i].syntax[j]);
         }
         let syntax = &self.funcs[i].syntax;
         match &syntax[j] {
@@ -586,17 +586,17 @@ impl CalxVM {
             }
             if *looped {
               blocks_track.push(BlockData::Loop {
-                params_types: params_types.to_owned(),
-                ret_types: ret_types.to_owned(),
-                from: from.to_owned(),
-                to: to.to_owned(),
+                params_types: params_types.clone(),
+                ret_types: ret_types.clone(),
+                from: *from,
+                to: *to,
                 initial_stack_size: stack_size,
               });
             } else {
               blocks_track.push(BlockData::Block {
-                params_types: params_types.to_owned(),
-                ret_types: ret_types.to_owned(),
-                to: to.to_owned(),
+                params_types: params_types.clone(),
+                ret_types: ret_types.clone(),
+                to: *to,
                 initial_stack_size: stack_size,
               });
             }
@@ -724,7 +724,7 @@ impl CalxVM {
             }
 
             match prev_block {
-              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(*to)),
               _ => unreachable!("end inside if"),
             }
           }
@@ -739,7 +739,7 @@ impl CalxVM {
             }
 
             match prev_block {
-              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to)),
               _ => unreachable!("end inside if"),
             }
           }
@@ -755,7 +755,7 @@ impl CalxVM {
             //   "  sizes: {:?} {} {} -> {}",
             //   a, params_size, ret_size, stack_size
             // );
-            ops.push(instr.to_owned());
+            ops.push(instr);
           }
         }
       }
@@ -813,7 +813,7 @@ impl CalxVM {
   }
 
   fn find_func(&self, name: &str) -> Option<&CalxFunc> {
-    self.funcs.iter().find(|x| *x.name == name)
+    self.funcs.iter().find(|x| &*x.name == name)
   }
 }
 
