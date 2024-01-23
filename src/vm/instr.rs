@@ -1,9 +1,9 @@
-use bincode::{Decode, Encode};
+use std::rc::Rc;
 
 use crate::{calx::Calx, syntax::CalxSyntax};
 
 /// learning from WASM but for dynamic data
-#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CalxInstr {
   /// pop from stack, set value at position
   LocalSet(usize),
@@ -85,11 +85,11 @@ pub enum CalxInstr {
   Echo,
   /// call function
   /// TODO optimize with index
-  Call(String),
+  Call(Rc<str>),
   /// tail recursion
-  ReturnCall(String),
+  ReturnCall(Rc<str>),
   /// call import
-  CallImport(String),
+  CallImport(Rc<str>),
   /// unreachable panic
   Unreachable,
   /// no operation placeholder
@@ -153,9 +153,9 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
       CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
       CalxSyntax::Echo => Ok(Self::Echo),
-      CalxSyntax::Call(a) => Ok(Self::Call(a.to_owned())),
-      CalxSyntax::ReturnCall(a) => Ok(Self::ReturnCall(a.to_owned())),
-      CalxSyntax::CallImport(a) => Ok(Self::CallImport(a.to_owned())),
+      CalxSyntax::Call(a) => Ok(Self::Call(Rc::from(a.as_str()))),
+      CalxSyntax::ReturnCall(a) => Ok(Self::ReturnCall(Rc::from(a.as_str()))),
+      CalxSyntax::CallImport(a) => Ok(Self::CallImport(Rc::from(a.as_str()))),
       CalxSyntax::Unreachable => Ok(Self::Unreachable),
       CalxSyntax::Nop => Ok(Self::Nop),
       CalxSyntax::Quit(a) => Ok(Self::Quit(a.to_owned())),

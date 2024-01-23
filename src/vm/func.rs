@@ -6,7 +6,7 @@ use crate::{calx::CalxType, syntax::CalxSyntax};
 
 use super::instr::CalxInstr;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFunc {
   pub name: Rc<String>,
   pub params_types: Rc<Vec<CalxType>>,
