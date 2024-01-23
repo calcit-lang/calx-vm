@@ -435,41 +435,37 @@ impl CalxVM {
       Not => {
         todo!()
       }
-      Call(f_name) => {
+      Call(idx) => {
         // println!("frame size: {}", self.frames.len());
-        match self.find_func(f_name) {
-          Some(f) => {
-            let instrs = f.instrs.clone();
-            let ret_types = f.ret_types.clone();
-            let f_name = f.name.clone();
-            let mut locals: Vec<Calx> = Vec::with_capacity(3);
-            for _ in 0..f.params_types.len() {
-              let v = self.stack_pop()?;
-              locals.push(v);
-            }
-            locals.reverse();
-
-            // TODO reduce copy drop
-
-            let new_frame = CalxFrame {
-              name: f_name,
-              initial_stack_size: self.stack.len(),
-              locals,
-              pointer: 0,
-              instrs: match instrs {
-                Some(x) => x.clone(),
-                None => unreachable!("function must have instrs"),
-              },
-              ret_types,
-            };
-            let prev_frame = mem::replace(&mut self.top_frame, new_frame);
-            self.frames.push(prev_frame);
-
-            // start in new frame
-            return Ok(true);
-          }
-          None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
+        let f = &self.funcs[*idx];
+        let instrs = f.instrs.clone();
+        let ret_types = f.ret_types.clone();
+        let f_name = f.name.clone();
+        let mut locals: Vec<Calx> = vec![];
+        for _ in 0..f.params_types.len() {
+          let v = self.stack_pop()?;
+          locals.push(v);
         }
+        locals.reverse();
+
+        // TODO reduce copy drop
+
+        let new_frame = CalxFrame {
+          name: f_name,
+          initial_stack_size: self.stack.len(),
+          locals,
+          pointer: 0,
+          instrs: match instrs {
+            Some(x) => x.clone(),
+            None => unreachable!("function must have instrs"),
+          },
+          ret_types,
+        };
+        let prev_frame = mem::replace(&mut self.top_frame, new_frame);
+        self.frames.push(prev_frame);
+
+        // start in new frame
+        return Ok(true);
       }
       ReturnCall(f_name) => {
         // println!("frame size: {}", self.frames.len());
@@ -666,13 +662,13 @@ impl CalxVM {
 
             ops.push(CalxInstr::Nop)
           }
-          CalxSyntax::Call(f_name) => match self.find_func(f_name) {
-            Some(f) => {
+          CalxSyntax::Call(f_name) => match self.find_func_idx(f_name) {
+            Some((idx, f)) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
               }
               stack_size = stack_size - f.params_types.len() + f.ret_types.len();
-              ops.push(CalxInstr::Call(Rc::from(f_name.as_str())))
+              ops.push(CalxInstr::Call(idx));
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
@@ -833,6 +829,10 @@ impl CalxVM {
 
   fn find_func(&self, name: &str) -> Option<&CalxFunc> {
     self.funcs.iter().find(|x| &*x.name == name)
+  }
+
+  fn find_func_idx(&self, name: &str) -> Option<(usize, &CalxFunc)> {
+    self.funcs.iter().enumerate().find(|pair| &*pair.1.name == name)
   }
 }
 

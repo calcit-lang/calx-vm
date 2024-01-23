@@ -84,8 +84,7 @@ pub enum CalxInstr {
   /// pop and println current value
   Echo,
   /// call function
-  /// TODO optimize with index
-  Call(Rc<str>),
+  Call(usize),
   /// tail recursion
   ReturnCall(Rc<str>),
   /// call import
@@ -153,7 +152,7 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
       CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
       CalxSyntax::Echo => Ok(Self::Echo),
-      CalxSyntax::Call(a) => Ok(Self::Call(Rc::from(a.as_str()))),
+      CalxSyntax::Call(_) => Err("Call should be handled manually".to_string()),
       CalxSyntax::ReturnCall(a) => Ok(Self::ReturnCall(Rc::from(a.as_str()))),
       CalxSyntax::CallImport(a) => Ok(Self::CallImport(Rc::from(a.as_str()))),
       CalxSyntax::Unreachable => Ok(Self::Unreachable),
