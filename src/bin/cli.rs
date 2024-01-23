@@ -5,9 +5,7 @@ use std::{collections::hash_map::HashMap, rc::Rc};
 use cirru_parser::{parse, Cirru};
 use clap::{arg, Parser};
 
-use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM, CALX_INSTR_EDITION};
-
-use bincode::{Decode, Encode};
+use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM};
 
 // main.rs
 // #[cfg(not(target_env = "msvc"))]

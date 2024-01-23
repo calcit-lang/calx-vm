@@ -6,7 +6,7 @@ pub mod instr;
 use std::collections::hash_map::HashMap;
 use std::ops::Rem;
 use std::rc::Rc;
-use std::{fmt, vec};
+use std::{fmt, mem, vec};
 
 use crate::calx::Calx;
 use crate::syntax::CalxSyntax;
@@ -141,22 +141,26 @@ impl CalxVM {
     if self.top_frame.pointer >= self.top_frame.instrs.len() {
       // println!("status {:?} {}", self.stack, self.top_frame);
       self.check_func_return(self.top_frame.ret_types.len())?;
-      if self.frames.is_empty() {
-        let v = self.stack.pop().unwrap_or(Calx::Nil);
-        self.make_return(v);
-        return Ok(false);
-      } else {
-        // let prev_frame = self.top_frame;
-        self.top_frame = self.frames.pop().unwrap();
+
+      match self.frames.pop() {
+        Some(v) => {
+          self.top_frame = v;
+        }
+        None => {
+          let v = self.stack.pop().unwrap_or(Calx::Nil);
+          self.make_return(v);
+          return Ok(false);
+        }
       }
+
       self.top_frame.pointer += 1;
       return Ok(true);
     }
-    let instrs = self.top_frame.instrs.clone();
+    let instr = &self.top_frame.instrs[self.top_frame.pointer];
 
     use instr::CalxInstr::*;
 
-    match &instrs[self.top_frame.pointer] {
+    match &instr {
       Jmp(line) => {
         self.top_frame.pointer = *line;
         return Ok(true); // point reset, goto next loop
@@ -166,21 +170,23 @@ impl CalxVM {
         return Ok(true); // point reset, goto next loop
       }
       JmpIf(line) => {
-        let v = self.stack_pop()?;
+        let v = self.stack.pop().unwrap();
         if v == Calx::Bool(true) || v == Calx::I64(1) {
-          self.top_frame.pointer = *line;
+          self.top_frame.pointer = line.to_owned();
           return Ok(true); // point reset, goto next loop
         }
       }
       JmpOffsetIf(l) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
           return Ok(true); // point reset, goto next loop
         }
       }
       LocalSet(idx) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if *idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.set {} for {:?}", idx, self.top_frame.locals)));
         } else {
@@ -188,7 +194,8 @@ impl CalxVM {
         }
       }
       LocalTee(idx) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if *idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.tee {}", idx)));
         } else {
@@ -226,7 +233,8 @@ impl CalxVM {
       }
       LocalNew => self.top_frame.locals.push(Calx::Nil),
       GlobalSet(idx) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if self.globals.len() >= *idx {
           return Err(self.gen_err(format!("out of bound in global.set {}", idx)));
         } else {
@@ -434,7 +442,7 @@ impl CalxVM {
             let instrs = f.instrs.clone();
             let ret_types = f.ret_types.clone();
             let f_name = f.name.clone();
-            let mut locals: Vec<Calx> = vec![];
+            let mut locals: Vec<Calx> = Vec::with_capacity(3);
             for _ in 0..f.params_types.len() {
               let v = self.stack_pop()?;
               locals.push(v);
@@ -443,8 +451,7 @@ impl CalxVM {
 
             // TODO reduce copy drop
 
-            self.frames.push(self.top_frame.to_owned());
-            self.top_frame = CalxFrame {
+            let new_frame = CalxFrame {
               name: f_name,
               initial_stack_size: self.stack.len(),
               locals,
@@ -455,6 +462,8 @@ impl CalxVM {
               },
               ret_types,
             };
+            let prev_frame = mem::replace(&mut self.top_frame, new_frame);
+            self.frames.push(prev_frame);
 
             // start in new frame
             return Ok(true);
@@ -535,7 +544,8 @@ impl CalxVM {
         println!("{}", v);
       }
       Assert(message) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           // Ok
         } else {
@@ -788,14 +798,23 @@ impl CalxVM {
 
   #[inline(always)]
   fn stack_pop(&mut self) -> Result<Calx, CalxError> {
-    if self.stack.is_empty() {
-      Err(self.gen_err(String::from("cannot pop from empty stack")))
-    } else if self.stack.len() <= self.top_frame.initial_stack_size {
+    if self.stack.len() <= self.top_frame.initial_stack_size {
       Err(self.gen_err(String::from("cannot pop from parent stack")))
     } else {
-      let v = self.stack.pop().unwrap();
-      Ok(v)
+      match self.stack.pop() {
+        Some(v) => Ok(v),
+        None => Err(self.gen_err(String::from("cannot pop from empty stack"))),
+      }
     }
+  }
+
+  fn check_before_pop(&self) -> Result<(), CalxError> {
+    if self.stack.is_empty() {
+      return Err(self.gen_err(String::from("cannot pop from empty stack")));
+    } else if self.stack.len() <= self.top_frame.initial_stack_size {
+      return Err(self.gen_err(String::from("cannot pop from parent stack")));
+    }
+    Ok(())
   }
 
   #[inline(always)]
