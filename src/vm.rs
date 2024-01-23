@@ -441,12 +441,10 @@ impl CalxVM {
         let instrs = f.instrs.clone();
         let ret_types = f.ret_types.clone();
         let f_name = f.name.clone();
-        let mut locals: Vec<Calx> = vec![];
-        for _ in 0..f.params_types.len() {
-          let v = self.stack_pop()?;
-          locals.push(v);
-        }
-        locals.reverse();
+
+        let n = f.params_types.len();
+        self.check_before_pop_n(n)?;
+        let locals = self.stack.split_off(self.stack.len() - n);
 
         // TODO reduce copy drop
 
@@ -475,12 +473,11 @@ impl CalxVM {
             let instrs = f.instrs.clone();
             let ret_types = f.ret_types.clone();
             let f_name = f.name.clone();
-            let mut locals: Vec<Calx> = vec![];
-            for _ in 0..f.params_types.len() {
-              let v = self.stack_pop()?;
-              locals.push(v);
-            }
-            locals.reverse();
+
+            let n = f.params_types.len();
+            self.check_before_pop_n(n)?;
+            let locals = self.stack.split_off(self.stack.len() - n);
+
             let prev_frame = &self.top_frame;
             if prev_frame.initial_stack_size != self.stack.len() {
               return Err(self.gen_err(format!(
@@ -518,12 +515,11 @@ impl CalxVM {
               self.stack.len()
             )));
           }
-          let mut args: Vec<Calx> = vec![];
-          for _ in 0..*size {
-            let item = self.stack_pop()?;
-            args.push(item);
-          }
-          args.reverse();
+
+          let n = *size;
+          self.check_before_pop_n(n)?;
+          let args = self.stack.split_off(self.stack.len() - n);
+
           let v = f(&args)?;
           self.stack_push(v);
         }
@@ -808,6 +804,15 @@ impl CalxVM {
     if self.stack.is_empty() {
       return Err(self.gen_err(String::from("cannot pop from empty stack")));
     } else if self.stack.len() <= self.top_frame.initial_stack_size {
+      return Err(self.gen_err(String::from("cannot pop from parent stack")));
+    }
+    Ok(())
+  }
+
+  fn check_before_pop_n(&self, n: usize) -> Result<(), CalxError> {
+    if self.stack.len() < n {
+      return Err(self.gen_err(String::from("cannot pop from empty stack")));
+    } else if self.stack.len() - n < self.top_frame.initial_stack_size {
       return Err(self.gen_err(String::from("cannot pop from parent stack")));
     }
     Ok(())
