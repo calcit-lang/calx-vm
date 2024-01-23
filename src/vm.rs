@@ -257,7 +257,6 @@ impl CalxVM {
         let _ = self.stack_pop()?;
       }
       IntAdd => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&(self.stack[last_idx]), &v2) {
@@ -266,7 +265,6 @@ impl CalxVM {
         }
       }
       IntMul => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -275,7 +273,6 @@ impl CalxVM {
         }
       }
       IntDiv => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -284,7 +281,6 @@ impl CalxVM {
         }
       }
       IntRem => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -317,7 +313,6 @@ impl CalxVM {
         }
       }
       IntEq => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -328,7 +323,6 @@ impl CalxVM {
       }
 
       IntNe => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -337,7 +331,6 @@ impl CalxVM {
         }
       }
       IntLt => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -346,7 +339,6 @@ impl CalxVM {
         }
       }
       IntLe => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -355,7 +347,6 @@ impl CalxVM {
         }
       }
       IntGt => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -365,7 +356,6 @@ impl CalxVM {
         }
       }
       IntGe => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -375,7 +365,6 @@ impl CalxVM {
         }
       }
       Add => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -386,7 +375,6 @@ impl CalxVM {
         }
       }
       Mul => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -465,44 +453,41 @@ impl CalxVM {
         // start in new frame
         return Ok(true);
       }
-      ReturnCall(f_name) => {
+      ReturnCall(idx) => {
         // println!("frame size: {}", self.frames.len());
-        match self.find_func(f_name) {
-          Some(f) => {
-            // println!("examine stack: {:?}", self.stack);
-            let instrs = f.instrs.clone();
-            let ret_types = f.ret_types.clone();
-            let f_name = f.name.clone();
+        let f = &self.funcs[*idx];
 
-            let n = f.params_types.len();
-            self.check_before_pop_n(n)?;
-            let locals = self.stack.split_off(self.stack.len() - n);
+        // println!("examine stack: {:?}", self.stack);
+        let instrs = f.instrs.clone();
+        let ret_types = f.ret_types.clone();
+        let f_name = f.name.clone();
 
-            let prev_frame = &self.top_frame;
-            if prev_frame.initial_stack_size != self.stack.len() {
-              return Err(self.gen_err(format!(
-                "expected constant initial stack size: {}, got: {}",
-                prev_frame.initial_stack_size,
-                self.stack.len()
-              )));
-            }
-            self.top_frame = CalxFrame {
-              name: f_name,
-              initial_stack_size: self.stack.len(),
-              locals,
-              pointer: 0,
-              instrs: match instrs {
-                Some(x) => x.clone(),
-                None => panic!("function must have instrs"),
-              },
-              ret_types,
-            };
+        let n = f.params_types.len();
+        self.check_before_pop_n(n)?;
+        let locals = self.stack.split_off(self.stack.len() - n);
 
-            // start in new frame
-            return Ok(true);
-          }
-          None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
+        let prev_frame = &self.top_frame;
+        if prev_frame.initial_stack_size != self.stack.len() {
+          return Err(self.gen_err(format!(
+            "expected constant initial stack size: {}, got: {}",
+            prev_frame.initial_stack_size,
+            self.stack.len()
+          )));
         }
+        self.top_frame = CalxFrame {
+          name: f_name,
+          initial_stack_size: self.stack.len(),
+          locals,
+          pointer: 0,
+          instrs: match instrs {
+            Some(x) => x.clone(),
+            None => panic!("function must have instrs"),
+          },
+          ret_types,
+        };
+
+        // start in new frame
+        return Ok(true);
       }
       CallImport(f_name) => match self.imports.to_owned().get(f_name) {
         None => return Err(self.gen_err(format!("missing imported function {}", f_name))),
@@ -668,13 +653,13 @@ impl CalxVM {
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxSyntax::ReturnCall(f_name) => match self.find_func(f_name) {
-            Some(f) => {
+          CalxSyntax::ReturnCall(f_name) => match self.find_func_idx(f_name) {
+            Some((idx, f)) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
               }
               stack_size = stack_size - f.params_types.len() + f.ret_types.len();
-              ops.push(CalxInstr::ReturnCall(Rc::from(f_name.as_str())))
+              ops.push(CalxInstr::ReturnCall(idx))
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },

@@ -86,7 +86,7 @@ pub enum CalxInstr {
   /// call function
   Call(usize),
   /// tail recursion
-  ReturnCall(Rc<str>),
+  ReturnCall(usize),
   /// call import
   CallImport(Rc<str>),
   /// unreachable panic
@@ -147,21 +147,23 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Or => Ok(Self::Or),
       CalxSyntax::Not => Ok(Self::Not),
       // control stuctures
-      CalxSyntax::Br(_) => Err("Br should be handled manually".to_string()),
-      CalxSyntax::BrIf(_) => Err("BrIf should be handled manually".to_owned()),
-      CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
-      CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
       CalxSyntax::Echo => Ok(Self::Echo),
-      CalxSyntax::Call(_) => Err("Call should be handled manually".to_string()),
-      CalxSyntax::ReturnCall(a) => Ok(Self::ReturnCall(Rc::from(a.as_str()))),
-      CalxSyntax::CallImport(a) => Ok(Self::CallImport(Rc::from(a.as_str()))),
       CalxSyntax::Unreachable => Ok(Self::Unreachable),
       CalxSyntax::Nop => Ok(Self::Nop),
       CalxSyntax::Quit(a) => Ok(Self::Quit(a.to_owned())),
       CalxSyntax::Return => Ok(Self::Return),
       CalxSyntax::Assert(a) => Ok(Self::Assert(a.to_owned())),
+      CalxSyntax::CallImport(a) => Ok(Self::CallImport(Rc::from(a.as_str()))),
       // debug
       CalxSyntax::Inspect => Ok(Self::Inspect),
+
+      // control flow syntax would be compiled
+      CalxSyntax::Br(_) => Err("Br should be handled manually".to_string()),
+      CalxSyntax::BrIf(_) => Err("BrIf should be handled manually".to_owned()),
+      CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
+      CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
+      CalxSyntax::Call(_) => Err("Call should be handled manually".to_string()),
+      CalxSyntax::ReturnCall(_) => Err("ReturnCall should be handled manually".to_string()),
       CalxSyntax::If { .. } => Err("If should be handled manually".to_string()),
       CalxSyntax::ThenEnd => Err("ThenEnd should be handled manually".to_string()),
       CalxSyntax::ElseEnd => Err("ElseEnd should be handled manually".to_string()),
