@@ -7,87 +7,122 @@ use crate::{Calx, CalxType};
 /// learning from WASM but for dynamic data
 #[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
 pub enum CalxSyntax {
-  // Param, // load variable from parameter
+  /// `local.set`, pop from stack, set value at position
   LocalSet(usize),
-  LocalTee(usize), // set and also load to stack
+  /// `local.tee`, set value at position, and also load to stack
+  LocalTee(usize),
+  /// `local.get`, get value at position load on stack
   LocalGet(usize),
+  /// `local.new`, increase size of array of locals
   LocalNew,
+  /// `global.set`, set global value at position
   GlobalSet(usize),
+  /// `global.get`, get global value from position
   GlobalGet(usize),
+  /// `global.new`, increase size of array of globals
   GlobalNew,
+  /// `const`, push value to stack
   Const(Calx),
+  /// `dup`, duplicate value on stack
   Dup,
+  /// `drop`, drop top value from stack
   Drop,
-  // number operations
+  /// `i.add`, add two i64 numbers on stack into a i64
   IntAdd,
+  /// `i.mul`, multiply two i64 numbers on stack into a i64
   IntMul,
+  /// `i.div`, divide two i64 numbers on stack into a i64
   IntDiv,
+  /// `i.rem`, remainder of two i64 numbers on stack into a i64
   IntRem,
+  /// `i.neg`, negate a i64 number on stack
   IntNeg,
+  /// `i.shr`, shift right a i64 number on stack
   IntShr,
+  /// `i.shl`, shift left a i64 number on stack
   IntShl,
-  /// equal
+  /// `i.eq`, equal of two i64 numbers on stack into a bool
   IntEq,
-  /// not equal
+  /// `i.ne`, not equal of two i64 numbers on stack into a bool
   IntNe,
-  /// littler than
+  /// `i.lt`, littler than, compares two i64 numbers on stack
   IntLt,
-  /// littler than, or equal
+  /// `i.le`, littler than, or equal, compares two i64 numbers on stack
   IntLe,
-  /// greater than
+  /// `i.gt`, greater than, compares two i64 numbers on stack
   IntGt,
-  /// greater than, or equal
+  /// `i.ge`, greater than, or equal, compares two i64 numbers on stack
   IntGe,
+  /// `add`, add two f64 numbers on stack into a f64
   Add,
+  /// `mul`, multiply two f64 numbers on stack into a f64
   Mul,
+  /// `div`, divide two f64 numbers on stack into a f64
   Div,
+  /// `neg`, negate a f64 number on stack
   Neg,
-  // string operations
-  // list operations
+  /// TODO list operations
   NewList,
+  /// TODO
   ListGet,
+  /// TODO
   ListSet,
-  // Link
+  /// TODO Link
   NewLink,
-  // bool operations
+  /// TODO
   And,
+  /// TODO
   Or,
+  /// TODO
   Not,
-  // control stuctures
-  Br(usize),
-  BrIf(usize),
+  /// `block`, creates block, for `block` and `loop`
   Block {
-    params_types: Rc<Vec<CalxType>>,
-    ret_types: Rc<Vec<CalxType>>,
     /// bool to indicate loop
     looped: bool,
+    params_types: Rc<Vec<CalxType>>,
+    ret_types: Rc<Vec<CalxType>>,
+    /// index of `end` instruction
     from: usize,
+    /// index of `end` instruction
     to: usize,
   },
+  /// `br`, break from block, level `0` indicates the innermost block
+  Br(usize),
+  /// `br-if`, break from block conditionally, level `0` indicates the innermost block
+  BrIf(usize),
+  /// (parsed) end of block, for `block` and `loop`
   BlockEnd(bool),
-  /// just a list of instructions nested
+  /// `do`, just a list of instructions nested, used inside `if` area
   Do(Vec<CalxSyntax>),
-  /// pop and println current value
+  /// `echo`, pop and println current value
   Echo,
-  /// TODO use function name at first, during running, index can be faster
+  /// `call`, call function
+  /// TODO optimize with index
   Call(String),
-  /// for tail recursion
+  /// `return-call`, tail recursion call function name
   ReturnCall(String),
+  /// `call-import`, call import function
   CallImport(String),
+  /// `unreachable`, unreachable panic
   Unreachable,
+  /// `nop`, no operation placeholder
   Nop,
-  Quit(usize), // quit and return value
+  /// `quit`, quit and return value
+  Quit(usize),
+  /// `return`, return from function
   Return,
-  /// TODO might also be a foreign function instead
+  /// `assert`, TODO might also be a foreign function instead
   Assert(String),
-  /// inspecting stack
+  /// `inspect`, inspecting stack
   Inspect,
-  /// if takes 1 value from stack, returns values as ret_types
+  /// `if`, takes 1 value from stack, returns values as ret_types
   If {
     ret_types: Rc<Vec<CalxType>>,
     else_at: usize,
     to: usize,
   },
+  /// (parsed) end of then instructions
   ThenEnd,
+  /// (parsed) end of else instructions
   ElseEnd,
 }

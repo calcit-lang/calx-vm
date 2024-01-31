@@ -1,7 +1,7 @@
 
 fn main ()
   const 0
-  const 100000
+  const 20000000
   call sum
   echo
 

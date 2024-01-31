@@ -6,9 +6,9 @@ pub mod instr;
 use std::collections::hash_map::HashMap;
 use std::ops::Rem;
 use std::rc::Rc;
-use std::{fmt, vec};
+use std::{fmt, mem, vec};
 
-use crate::calx::{Calx, CalxType};
+use crate::calx::Calx;
 use crate::syntax::CalxSyntax;
 use crate::vm::block_data::BlockStack;
 
@@ -17,8 +17,15 @@ use self::frame::CalxFrame;
 use self::func::CalxFunc;
 use self::instr::CalxInstr;
 
-pub type CalxImportsDict = HashMap<String, (fn(xs: Vec<Calx>) -> Result<Calx, CalxError>, usize)>;
+pub type CalxImportsDict = HashMap<Rc<str>, (fn(xs: &Vec<Calx>) -> Result<Calx, CalxError>, usize)>;
 
+/// Virtual Machine for Calx
+/// code is evaluated in a several steps:
+/// 1. parse into `CalxSyntax`
+/// 2. preprocess `CalxSyntax` into instructions(`CalxInstr`)
+/// 3. run instructions
+///
+/// `CalxSyntax` contains some richer info than `CalxInstr`.
 #[derive(Clone)]
 pub struct CalxVM {
   pub stack: Vec<Calx>,
@@ -40,9 +47,9 @@ impl std::fmt::Debug for CalxVM {
 
 impl CalxVM {
   pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>, imports: CalxImportsDict) -> Self {
-    let main_func = fns.iter().find(|x| *x.name == "main").expect("main function is required");
+    let main_func = fns.iter().find(|x| &*x.name == "main").expect("main function is required");
     let main_frame = CalxFrame {
-      name: main_func.name.to_owned(),
+      name: main_func.name.clone(),
       initial_stack_size: 0,
       // use empty instrs, will be replaced by preprocess
       instrs: Rc::new(vec![]),
@@ -64,11 +71,11 @@ impl CalxVM {
 
   pub fn setup_top_frame(&mut self) -> Result<(), String> {
     self.top_frame.instrs = match self.find_func("main") {
-      Some(f) => match f.instrs.to_owned() {
-        Some(x) => x,
-        None => return Err("main function must have instrs".to_owned()),
+      Some(f) => match f.instrs.clone() {
+        Some(x) => x.to_owned(),
+        None => return Err("main function must have instrs".to_string()),
       },
-      None => return Err("main function is required".to_owned()),
+      None => return Err("main function is required".to_string()),
     };
 
     Ok(())
@@ -81,12 +88,12 @@ impl CalxVM {
 
   pub fn inspect_display(&self, indent_size: u8) -> String {
     let mut output = String::new();
-    let indent = "\n".to_owned() + &" ".repeat(indent_size as usize);
+    let indent = "\n".to_string() + &" ".repeat(indent_size as usize);
     fmt::write(
       &mut output,
       format_args!(
         "{indent}Internal frames: {:?}",
-        self.frames.iter().map(|x| x.name.to_owned()).collect::<Vec<_>>()
+        self.frames.iter().map(|x| x.name.clone()).collect::<Vec<_>>()
       ),
     )
     .expect("inspect display");
@@ -133,25 +140,29 @@ impl CalxVM {
   pub fn step(&mut self) -> Result<bool, CalxError> {
     if self.top_frame.pointer >= self.top_frame.instrs.len() {
       // println!("status {:?} {}", self.stack, self.top_frame);
-      self.check_func_return()?;
-      if self.frames.is_empty() {
-        let v = self.stack.pop().unwrap_or(Calx::Nil);
-        self.make_return(v);
-        return Ok(false);
-      } else {
-        // let prev_frame = self.top_frame;
-        self.top_frame = self.frames.pop().unwrap();
+      self.check_func_return(self.top_frame.ret_types.len())?;
+
+      match self.frames.pop() {
+        Some(v) => {
+          self.top_frame = v;
+        }
+        None => {
+          let v = self.stack.pop().unwrap_or(Calx::Nil);
+          self.make_return(v);
+          return Ok(false);
+        }
       }
+
       self.top_frame.pointer += 1;
       return Ok(true);
     }
-    let instrs = self.top_frame.instrs.to_owned();
+    let instr = &self.top_frame.instrs[self.top_frame.pointer];
 
     use instr::CalxInstr::*;
 
-    match &instrs[self.top_frame.pointer] {
+    match &instr {
       Jmp(line) => {
-        self.top_frame.pointer = line.to_owned();
+        self.top_frame.pointer = *line;
         return Ok(true); // point reset, goto next loop
       }
       JmpOffset(l) => {
@@ -159,21 +170,23 @@ impl CalxVM {
         return Ok(true); // point reset, goto next loop
       }
       JmpIf(line) => {
-        let v = self.stack_pop()?;
+        let v = self.stack.pop().unwrap();
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           self.top_frame.pointer = line.to_owned();
           return Ok(true); // point reset, goto next loop
         }
       }
       JmpOffsetIf(l) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
           return Ok(true); // point reset, goto next loop
         }
       }
       LocalSet(idx) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if *idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.set {} for {:?}", idx, self.top_frame.locals)));
         } else {
@@ -181,7 +194,8 @@ impl CalxVM {
         }
       }
       LocalTee(idx) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if *idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.tee {}", idx)));
         } else {
@@ -198,37 +212,29 @@ impl CalxVM {
       }
       Return => {
         // return values are moved to a temp space
-        let mut ret_stack: Vec<Calx> = vec![];
 
         let ret_size = self.top_frame.ret_types.len();
-        for _ in 0..ret_size {
-          let v = self.stack_pop()?;
-          ret_stack.insert(0, v);
-        }
 
-        self.check_func_return()?;
+        self.check_func_return(ret_size)?;
 
         if self.frames.is_empty() {
           // top frame return, just return value
-          return match ret_stack.first() {
+          return match self.stack.last() {
             Some(x) => {
               self.make_return(x.to_owned());
               Ok(false)
             }
-            None => Err(self.gen_err("return without value".to_owned())),
+            None => Err(self.gen_err("return without value".to_string())),
           };
         } else {
           // let prev_frame = self.top_frame;
           self.top_frame = self.frames.pop().unwrap();
-          // push return values back
-          for v in ret_stack {
-            self.stack_push(v);
-          }
         }
       }
       LocalNew => self.top_frame.locals.push(Calx::Nil),
       GlobalSet(idx) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if self.globals.len() >= *idx {
           return Err(self.gen_err(format!("out of bound in global.set {}", idx)));
         } else {
@@ -251,7 +257,6 @@ impl CalxVM {
         let _ = self.stack_pop()?;
       }
       IntAdd => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&(self.stack[last_idx]), &v2) {
@@ -260,7 +265,6 @@ impl CalxVM {
         }
       }
       IntMul => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -269,7 +273,6 @@ impl CalxVM {
         }
       }
       IntDiv => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -278,7 +281,6 @@ impl CalxVM {
         }
       }
       IntRem => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -311,7 +313,6 @@ impl CalxVM {
         }
       }
       IntEq => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -322,7 +323,6 @@ impl CalxVM {
       }
 
       IntNe => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -331,7 +331,6 @@ impl CalxVM {
         }
       }
       IntLt => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -340,7 +339,6 @@ impl CalxVM {
         }
       }
       IntLe => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
         match (&self.stack[last_idx], &v2) {
@@ -349,7 +347,6 @@ impl CalxVM {
         }
       }
       IntGt => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -359,7 +356,6 @@ impl CalxVM {
         }
       }
       IntGe => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -369,7 +365,6 @@ impl CalxVM {
         }
       }
       Add => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -380,7 +375,6 @@ impl CalxVM {
         }
       }
       Mul => {
-        // reversed order
         let v2 = self.stack_pop()?;
         let last_idx = self.stack.len() - 1;
 
@@ -429,75 +423,71 @@ impl CalxVM {
       Not => {
         todo!()
       }
-      Call(f_name) => {
+      Call(idx) => {
         // println!("frame size: {}", self.frames.len());
-        match self.find_func(f_name) {
-          Some(f) => {
-            let instrs = f.instrs.to_owned();
-            let ret_types = f.ret_types.to_owned();
-            let f_name = f.name.to_owned();
-            let mut locals: Vec<Calx> = vec![];
-            for _ in 0..f.params_types.len() {
-              let v = self.stack_pop()?;
-              locals.insert(0, v);
-            }
-            self.frames.push(self.top_frame.to_owned());
-            self.top_frame = CalxFrame {
-              name: f_name,
-              initial_stack_size: self.stack.len(),
-              locals,
-              pointer: 0,
-              instrs: match instrs {
-                Some(x) => x.to_owned(),
-                None => unreachable!("function must have instrs"),
-              },
-              ret_types,
-            };
+        let f = &self.funcs[*idx];
+        let instrs = f.instrs.clone();
+        let ret_types = f.ret_types.clone();
+        let f_name = f.name.clone();
 
-            // start in new frame
-            return Ok(true);
-          }
-          None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
-        }
+        let n = f.params_types.len();
+        self.check_before_pop_n(n)?;
+        let locals = self.stack.split_off(self.stack.len() - n);
+
+        // TODO reduce copy drop
+
+        let new_frame = CalxFrame {
+          name: f_name,
+          initial_stack_size: self.stack.len(),
+          locals,
+          pointer: 0,
+          instrs: match instrs {
+            Some(x) => x.clone(),
+            None => unreachable!("function must have instrs"),
+          },
+          ret_types,
+        };
+        let prev_frame = mem::replace(&mut self.top_frame, new_frame);
+        self.frames.push(prev_frame);
+
+        // start in new frame
+        return Ok(true);
       }
-      ReturnCall(f_name) => {
+      ReturnCall(idx) => {
         // println!("frame size: {}", self.frames.len());
-        match self.find_func(f_name) {
-          Some(f) => {
-            // println!("examine stack: {:?}", self.stack);
-            let instrs = f.instrs.to_owned();
-            let ret_types = f.ret_types.to_owned();
-            let f_name = f.name.to_owned();
-            let mut locals: Vec<Calx> = vec![];
-            for _ in 0..f.params_types.len() {
-              let v = self.stack_pop()?;
-              locals.insert(0, v);
-            }
-            let prev_frame = &self.top_frame;
-            if prev_frame.initial_stack_size != self.stack.len() {
-              return Err(self.gen_err(format!(
-                "expected constant initial stack size: {}, got: {}",
-                prev_frame.initial_stack_size,
-                self.stack.len()
-              )));
-            }
-            self.top_frame = CalxFrame {
-              name: f_name,
-              initial_stack_size: self.stack.len(),
-              locals,
-              pointer: 0,
-              instrs: match instrs {
-                Some(x) => x.to_owned(),
-                None => panic!("function must have instrs"),
-              },
-              ret_types,
-            };
+        let f = &self.funcs[*idx];
 
-            // start in new frame
-            return Ok(true);
-          }
-          None => return Err(self.gen_err(format!("cannot find function named: {}", f_name))),
+        // println!("examine stack: {:?}", self.stack);
+        let instrs = f.instrs.clone();
+        let ret_types = f.ret_types.clone();
+        let f_name = f.name.clone();
+
+        let n = f.params_types.len();
+        self.check_before_pop_n(n)?;
+        let locals = self.stack.split_off(self.stack.len() - n);
+
+        let prev_frame = &self.top_frame;
+        if prev_frame.initial_stack_size != self.stack.len() {
+          return Err(self.gen_err(format!(
+            "expected constant initial stack size: {}, got: {}",
+            prev_frame.initial_stack_size,
+            self.stack.len()
+          )));
         }
+        self.top_frame = CalxFrame {
+          name: f_name,
+          initial_stack_size: self.stack.len(),
+          locals,
+          pointer: 0,
+          instrs: match instrs {
+            Some(x) => x.clone(),
+            None => panic!("function must have instrs"),
+          },
+          ret_types,
+        };
+
+        // start in new frame
+        return Ok(true);
       }
       CallImport(f_name) => match self.imports.to_owned().get(f_name) {
         None => return Err(self.gen_err(format!("missing imported function {}", f_name))),
@@ -510,12 +500,12 @@ impl CalxVM {
               self.stack.len()
             )));
           }
-          let mut args: Vec<Calx> = vec![];
-          for _ in 0..*size {
-            let item = self.stack_pop()?;
-            args.insert(0, item);
-          }
-          let v = f(args.to_owned())?;
+
+          let n = *size;
+          self.check_before_pop_n(n)?;
+          let args = self.stack.split_off(self.stack.len() - n);
+
+          let v = f(&args)?;
           self.stack_push(v);
         }
       },
@@ -531,7 +521,8 @@ impl CalxVM {
         println!("{}", v);
       }
       Assert(message) => {
-        let v = self.stack_pop()?;
+        self.check_before_pop()?;
+        let v = self.stack.pop().expect("pop value");
         if v == Calx::Bool(true) || v == Calx::I64(1) {
           // Ok
         } else {
@@ -541,13 +532,6 @@ impl CalxVM {
       Inspect => {
         println!("[ ----------------{}", self.inspect_display(2));
         println!("  -------------- ]");
-      }
-      If { ret_types, .. } => {
-        // TODO
-        self.check_stack_for_block(ret_types)?;
-      }
-      EndIf => {
-        unreachable!("End if is internal instruction during preprocessing")
       }
     }
 
@@ -573,7 +557,7 @@ impl CalxVM {
 
       for j in 0..self.funcs[i].syntax.len() {
         if verbose {
-          println!("{} * {:?}", stack_size, self.funcs[i].syntax[j].to_owned());
+          println!("{} * {:?}", stack_size, self.funcs[i].syntax[j]);
         }
         let syntax = &self.funcs[i].syntax;
         match &syntax[j] {
@@ -589,17 +573,17 @@ impl CalxVM {
             }
             if *looped {
               blocks_track.push(BlockData::Loop {
-                params_types: params_types.to_owned(),
-                ret_types: ret_types.to_owned(),
-                from: from.to_owned(),
-                to: to.to_owned(),
+                params_types: params_types.clone(),
+                ret_types: ret_types.clone(),
+                from: *from,
+                to: *to,
                 initial_stack_size: stack_size,
               });
             } else {
               blocks_track.push(BlockData::Block {
-                params_types: params_types.to_owned(),
-                ret_types: ret_types.to_owned(),
-                to: to.to_owned(),
+                params_types: params_types.clone(),
+                ret_types: ret_types.clone(),
+                to: *to,
                 initial_stack_size: stack_size,
               });
             }
@@ -617,8 +601,8 @@ impl CalxVM {
             }
 
             match target_block {
-              BlockData::Loop { from, .. } => ops.push(CalxInstr::Jmp(from.to_owned())),
-              BlockData::Block { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              BlockData::Loop { from, .. } => ops.push(CalxInstr::Jmp(*from)),
+              BlockData::Block { to, .. } => ops.push(CalxInstr::Jmp(*to)),
               _ => unreachable!("br target must be block or loop"),
             }
           }
@@ -633,8 +617,8 @@ impl CalxVM {
             let target_block = blocks_track.peek_block_level(*size)?;
 
             match target_block {
-              BlockData::Loop { from, .. } => ops.push(CalxInstr::JmpIf(from.to_owned())),
-              BlockData::Block { to, .. } => ops.push(CalxInstr::JmpIf(to.to_owned())),
+              BlockData::Loop { from, .. } => ops.push(CalxInstr::JmpIf(*from)),
+              BlockData::Block { to, .. } => ops.push(CalxInstr::JmpIf(*to)),
               _ => unreachable!("br target must be block or loop"),
             }
             stack_size -= 1;
@@ -659,33 +643,33 @@ impl CalxVM {
 
             ops.push(CalxInstr::Nop)
           }
-          CalxSyntax::Call(f_name) => match self.find_func(f_name) {
-            Some(f) => {
+          CalxSyntax::Call(f_name) => match self.find_func_idx(f_name) {
+            Some((idx, f)) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
               }
               stack_size = stack_size - f.params_types.len() + f.ret_types.len();
-              ops.push(CalxInstr::Call(f_name.to_owned()))
+              ops.push(CalxInstr::Call(idx));
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxSyntax::ReturnCall(f_name) => match self.find_func(f_name) {
-            Some(f) => {
+          CalxSyntax::ReturnCall(f_name) => match self.find_func_idx(f_name) {
+            Some((idx, f)) => {
               if stack_size < f.params_types.len() {
                 return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
               }
               stack_size = stack_size - f.params_types.len() + f.ret_types.len();
-              ops.push(CalxInstr::ReturnCall(f_name.to_owned()))
+              ops.push(CalxInstr::ReturnCall(idx))
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxSyntax::CallImport(f_name) => match &self.imports.get(f_name) {
+          CalxSyntax::CallImport(f_name) => match &self.imports.get(f_name.as_str()) {
             Some((_f, size)) => {
               if stack_size < *size {
                 return Err(format!("insufficient size to call import: {} {:?}", stack_size, size));
               }
               stack_size = stack_size - size + 1;
-              ops.push(CalxInstr::CallImport(f_name.to_owned()))
+              ops.push(CalxInstr::CallImport(Rc::from(f_name.as_str())))
             }
             None => return Err(format!("missing imported function {}", f_name)),
           },
@@ -706,14 +690,14 @@ impl CalxVM {
             }
 
             blocks_track.push(BlockData::If {
-              ret_types: ret_types.to_owned(),
-              else_to: else_at.to_owned(),
-              to: to.to_owned(),
+              ret_types: ret_types.clone(),
+              else_to: *else_at,
+              to: *to,
               initial_stack_size: stack_size,
             });
 
             stack_size -= 1;
-            ops.push(CalxInstr::JmpIf(else_at.to_owned()));
+            ops.push(CalxInstr::JmpIf(*else_at));
           }
           CalxSyntax::ElseEnd => {
             if blocks_track.is_empty() {
@@ -727,7 +711,7 @@ impl CalxVM {
             }
 
             match prev_block {
-              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(*to)),
               _ => unreachable!("end inside if"),
             }
           }
@@ -742,7 +726,7 @@ impl CalxVM {
             }
 
             match prev_block {
-              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to.to_owned())),
+              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to)),
               _ => unreachable!("end inside if"),
             }
           }
@@ -758,7 +742,7 @@ impl CalxVM {
             //   "  sizes: {:?} {} {} -> {}",
             //   a, params_size, ret_size, stack_size
             // );
-            ops.push(instr.to_owned());
+            ops.push(instr);
           }
         }
       }
@@ -775,23 +759,9 @@ impl CalxVM {
     Ok(())
   }
 
-  /// checks is given parameters on stack top
-  fn check_stack_for_block(&self, params: &[CalxType]) -> Result<(), CalxError> {
-    if self.stack.len() < params.len() {
-      return Err(self.gen_err(format!("stack size does not match given params: {:?} {:?}", self.stack, params)));
-    }
-    for (idx, t) in params.iter().enumerate() {
-      if self.stack[self.stack.len() - params.len() - 1 + idx].typed_as(t.to_owned()) {
-        continue;
-      }
-      return Err(self.gen_err(format!("stack type does not match given params: {:?} {:?}", self.stack, params)));
-    }
-    Ok(())
-  }
-
   #[inline(always)]
-  fn check_func_return(&self) -> Result<(), CalxError> {
-    if self.stack.len() != self.top_frame.initial_stack_size {
+  fn check_func_return(&self, ret_size: usize) -> Result<(), CalxError> {
+    if self.stack.len() - ret_size != self.top_frame.initial_stack_size {
       return Err(self.gen_err(format!(
         "stack size {} does not fit initial size {} plus {:?}",
         self.stack.len(),
@@ -805,14 +775,32 @@ impl CalxVM {
 
   #[inline(always)]
   fn stack_pop(&mut self) -> Result<Calx, CalxError> {
-    if self.stack.is_empty() {
-      Err(self.gen_err(String::from("cannot pop from empty stack")))
-    } else if self.stack.len() <= self.top_frame.initial_stack_size {
+    if self.stack.len() <= self.top_frame.initial_stack_size {
       Err(self.gen_err(String::from("cannot pop from parent stack")))
     } else {
-      let v = self.stack.pop().unwrap();
-      Ok(v)
+      match self.stack.pop() {
+        Some(v) => Ok(v),
+        None => Err(self.gen_err(String::from("cannot pop from empty stack"))),
+      }
     }
+  }
+
+  fn check_before_pop(&self) -> Result<(), CalxError> {
+    if self.stack.is_empty() {
+      return Err(self.gen_err(String::from("cannot pop from empty stack")));
+    } else if self.stack.len() <= self.top_frame.initial_stack_size {
+      return Err(self.gen_err(String::from("cannot pop from parent stack")));
+    }
+    Ok(())
+  }
+
+  fn check_before_pop_n(&self, n: usize) -> Result<(), CalxError> {
+    if self.stack.len() < n {
+      return Err(self.gen_err(String::from("cannot pop from empty stack")));
+    } else if self.stack.len() - n < self.top_frame.initial_stack_size {
+      return Err(self.gen_err(String::from("cannot pop from parent stack")));
+    }
+    Ok(())
   }
 
   #[inline(always)]
@@ -830,7 +818,11 @@ impl CalxVM {
   }
 
   fn find_func(&self, name: &str) -> Option<&CalxFunc> {
-    self.funcs.iter().find(|x| *x.name == name)
+    self.funcs.iter().find(|x| &*x.name == name)
+  }
+
+  fn find_func_idx(&self, name: &str) -> Option<(usize, &CalxFunc)> {
+    self.funcs.iter().enumerate().find(|pair| &*pair.1.name == name)
   }
 }
 

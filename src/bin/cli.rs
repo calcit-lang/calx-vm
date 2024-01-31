@@ -1,17 +1,22 @@
-use std::collections::hash_map::HashMap;
 use std::fs;
 use std::time::Instant;
+use std::{collections::hash_map::HashMap, rc::Rc};
 
 use cirru_parser::{parse, Cirru};
 use clap::{arg, Parser};
 
-use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM, CALX_INSTR_EDITION};
+use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM};
 
-use bincode::{Decode, Encode};
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 /// binary format for saving calx program
 /// TODO this is not a valid file format that requires magic code
-#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxBinaryProgram {
   /// updates as instructions update
   pub edition: String,
@@ -48,19 +53,20 @@ fn main() -> Result<(), String> {
   let mut fns: Vec<CalxFunc> = vec![];
 
   if eval_binary {
-    let code = fs::read(source).expect("read binary from source file");
-    let program: CalxBinaryProgram = bincode::decode_from_slice(&code, bincode::config::standard())
-      .expect("decode functions from binary")
-      .0;
-    if program.edition == CALX_INSTR_EDITION {
-      println!("Calx Edition: {}", program.edition);
-      fns = program.fns;
-    } else {
-      return Err(format!(
-        "Runner uses binary edition {}, binary encoded in {}",
-        CALX_INSTR_EDITION, program.edition
-      ));
-    }
+    todo!()
+    // let code = fs::read(source).expect("read binary from source file");
+    // let program: CalxBinaryProgram = bincode::decode_from_slice(&code, bincode::config::standard())
+    //   .expect("decode functions from binary")
+    //   .0;
+    // if program.edition == CALX_INSTR_EDITION {
+    //   println!("Calx Edition: {}", program.edition);
+    //   fns = program.fns;
+    // } else {
+    //   return Err(format!(
+    //     "Runner uses binary edition {}, binary encoded in {}",
+    //     CALX_INSTR_EDITION, program.edition
+    //   ));
+    // }
   } else {
     let contents = fs::read_to_string(source).expect("Cirru file for instructions");
     let xs = parse(&contents).expect("Some Cirru content");
@@ -76,21 +82,22 @@ fn main() -> Result<(), String> {
   }
 
   if emit_binary.is_some() {
-    let program = CalxBinaryProgram {
-      edition: CALX_INSTR_EDITION.to_string(),
-      fns,
-    };
-    let buf = bincode::encode_to_vec(program, bincode::config::standard()).map_err(|e| e.to_string())?;
-    let target_file = &emit_binary.unwrap();
-    fs::write(target_file, buf).map_err(|e| e.to_string())?;
-    println!("wrote binary to {}", target_file);
-    return Ok(());
+    todo!();
+    // let program = CalxBinaryProgram {
+    //   edition: CALX_INSTR_EDITION.to_string(),
+    //   fns,
+    // };
+    // let buf = bincode::encode_to_vec(program, bincode::config::standard()).map_err(|e| e.to_string())?;
+    // let target_file = &emit_binary.unwrap();
+    // fs::write(target_file, buf).map_err(|e| e.to_string())?;
+    // println!("wrote binary to {}", target_file);
+    // return Ok(());
   }
 
   let mut imports: CalxImportsDict = HashMap::new();
-  imports.insert(String::from("log"), (log_calx_value, 1));
-  imports.insert(String::from("log2"), (log_calx_value, 2));
-  imports.insert(String::from("log3"), (log_calx_value, 3));
+  imports.insert(Rc::from("log"), (log_calx_value, 1));
+  imports.insert(Rc::from("log2"), (log_calx_value, 2));
+  imports.insert(Rc::from("log3"), (log_calx_value, 3));
 
   let mut vm = CalxVM::new(fns, vec![], imports);
 

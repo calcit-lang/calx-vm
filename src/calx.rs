@@ -11,11 +11,17 @@ pub use types::CalxType;
 /// Simplied from Calcit, but trying to be basic and mutable
 #[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
 pub enum Calx {
+  /// TODO
   Nil,
+  /// TODO
   Bool(bool),
+  /// `i64`
   I64(i64),
+  /// `f64`
   F64(f64),
+  // TODO
   Str(String),
+  /// TODO
   List(Vec<Calx>),
   // to simultate linked structures
   // Link(Box<Calx>, Box<Calx>, Box<Calx>),

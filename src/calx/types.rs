@@ -1,14 +1,22 @@
 use bincode::{Decode, Encode};
 use std::str::FromStr;
 
+/// syntax like `(i64 -> i64)` can be used to types of functions and blocks
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Decode, Encode)]
 pub enum CalxType {
+  /// TODO
   Nil,
+  /// TODO
   Bool,
+  /// i64 value
   I64,
+  /// f64 value
   F64,
+  /// TODO
   Str,
+  /// TODO
   List,
+  /// TODO
   Link,
 }
 

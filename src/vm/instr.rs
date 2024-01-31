@@ -1,89 +1,106 @@
 use std::rc::Rc;
 
-use bincode::{Decode, Encode};
-
-use crate::{
-  calx::{Calx, CalxType},
-  syntax::CalxSyntax,
-};
+use crate::{calx::Calx, syntax::CalxSyntax};
 
 /// learning from WASM but for dynamic data
-#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CalxInstr {
-  // Param, // load variable from parameter
+  /// pop from stack, set value at position
   LocalSet(usize),
-  LocalTee(usize), // set and also load to stack
+  /// set and also load to stack
+  LocalTee(usize),
+  /// get value at position load on stack
   LocalGet(usize),
+  /// increase size of array of locals
   LocalNew,
+  /// set global value at position
   GlobalSet(usize),
+  /// get global value from position
   GlobalGet(usize),
+  /// increase size of array of globals
   GlobalNew,
+  /// push value to stack
   Const(Calx),
+  /// duplicate value on stack
   Dup,
+  /// drop top value from stack
   Drop,
-  // number operations
+  /// add two i64 numbers on stack into a i64
   IntAdd,
+  /// multiply two i64 numbers on stack into a i64
   IntMul,
+  /// divide two i64 numbers on stack into a i64
   IntDiv,
+  /// remainder of two i64 numbers on stack into a i64
   IntRem,
+  /// negate a i64 number on stack
   IntNeg,
+  /// shift right a i64 number on stack
   IntShr,
+  /// shift left a i64 number on stack
   IntShl,
-  /// equal
+  /// equal of two i64 numbers on stack into a bool
   IntEq,
-  /// not equal
+  /// not equal of two i64 numbers on stack into a bool
   IntNe,
-  /// littler than
+  /// littler than, compares two i64 numbers on stack
   IntLt,
-  /// littler than, or equal
+  /// littler than, or equal, compares two i64 numbers on stack
   IntLe,
-  /// greater than
+  /// greater than, compares two i64 numbers on stack
   IntGt,
-  /// greater than, or equal
+  /// greater than, or equal, compares two i64 numbers on stack
   IntGe,
+  /// add two f64 numbers on stack into a f64
   Add,
+  /// multiply two f64 numbers on stack into a f64
   Mul,
+  /// divide two f64 numbers on stack into a f64
   Div,
+  /// negate a f64 number on stack
   Neg,
-  // string operations
-  // list operations
+  /// TODO
   NewList,
+  /// TODO
   ListGet,
+  /// TODO
   ListSet,
-  // Link
+  /// TODO
   NewLink,
-  // bool operations
+  /// TODO
   And,
+  /// TODO
   Or,
+  /// TODO
   Not,
-  // control stuctures
-  Jmp(usize),       // internal
-  JmpOffset(i32),   // internal
-  JmpIf(usize),     // internal
-  JmpOffsetIf(i32), // internal
+  /// Jump to index
+  Jmp(usize),
+  /// Jump by offset
+  JmpOffset(i32),
+  /// Jump to index if top value is true
+  JmpIf(usize),
+  /// Jump by offset if top value is true
+  JmpOffsetIf(i32),
   /// pop and println current value
   Echo,
-  /// TODO use function name at first, during running, index can be faster
-  Call(String),
-  /// for tail recursion
-  ReturnCall(String),
-  CallImport(String),
+  /// call function
+  Call(usize),
+  /// tail recursion
+  ReturnCall(usize),
+  /// call import
+  CallImport(Rc<str>),
+  /// unreachable panic
   Unreachable,
+  /// no operation placeholder
   Nop,
-  Quit(usize), // quit and return value
+  /// quit and return error code
+  Quit(usize),
+  /// return from function
   Return,
   /// TODO might also be a foreign function instead
   Assert(String),
   /// inspecting stack
   Inspect,
-  /// if takes 1 value from stack, returns values as ret_types
-  If {
-    ret_types: Rc<Vec<CalxType>>,
-    then_to: usize,
-    else_to: usize,
-    to: usize,
-  },
-  EndIf,
 }
 
 impl TryFrom<&CalxSyntax> for CalxInstr {
@@ -130,21 +147,23 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Or => Ok(Self::Or),
       CalxSyntax::Not => Ok(Self::Not),
       // control stuctures
-      CalxSyntax::Br(_) => Err("Br should be handled manually".to_string()),
-      CalxSyntax::BrIf(_) => Err("BrIf should be handled manually".to_owned()),
-      CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
-      CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
       CalxSyntax::Echo => Ok(Self::Echo),
-      CalxSyntax::Call(a) => Ok(Self::Call(a.to_owned())),
-      CalxSyntax::ReturnCall(a) => Ok(Self::ReturnCall(a.to_owned())),
-      CalxSyntax::CallImport(a) => Ok(Self::CallImport(a.to_owned())),
       CalxSyntax::Unreachable => Ok(Self::Unreachable),
       CalxSyntax::Nop => Ok(Self::Nop),
       CalxSyntax::Quit(a) => Ok(Self::Quit(a.to_owned())),
       CalxSyntax::Return => Ok(Self::Return),
       CalxSyntax::Assert(a) => Ok(Self::Assert(a.to_owned())),
+      CalxSyntax::CallImport(a) => Ok(Self::CallImport(Rc::from(a.as_str()))),
       // debug
       CalxSyntax::Inspect => Ok(Self::Inspect),
+
+      // control flow syntax would be compiled
+      CalxSyntax::Br(_) => Err("Br should be handled manually".to_string()),
+      CalxSyntax::BrIf(_) => Err("BrIf should be handled manually".to_owned()),
+      CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
+      CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
+      CalxSyntax::Call(_) => Err("Call should be handled manually".to_string()),
+      CalxSyntax::ReturnCall(_) => Err("ReturnCall should be handled manually".to_string()),
       CalxSyntax::If { .. } => Err("If should be handled manually".to_string()),
       CalxSyntax::ThenEnd => Err("ThenEnd should be handled manually".to_string()),
       CalxSyntax::ElseEnd => Err("ElseEnd should be handled manually".to_string()),
@@ -211,8 +230,6 @@ impl CalxInstr {
       CalxInstr::Assert(_) => (1, 0),
       // debug
       CalxInstr::Inspect => (0, 0),
-      CalxInstr::If { ret_types, .. } => (1, ret_types.len()),
-      CalxInstr::EndIf => (0, 0),
     }
   }
 }

@@ -7,7 +7,7 @@ use super::instr::CalxInstr;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
-  pub name: Rc<String>,
+  pub name: Rc<str>,
   pub locals: Vec<Calx>, // params + added locals
   /** store return values */
   pub instrs: Rc<Vec<CalxInstr>>,
