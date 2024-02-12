@@ -1,11 +1,9 @@
 use std::rc::Rc;
 
-use bincode::{Decode, Encode};
-
 use crate::{Calx, CalxType};
 
 /// learning from WASM but for dynamic data
-#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CalxSyntax {
   /// `local.set`, pop from stack, set value at position
   LocalSet(usize),
@@ -98,11 +96,11 @@ pub enum CalxSyntax {
   Echo,
   /// `call`, call function
   /// TODO optimize with index
-  Call(String),
+  Call(Rc<str>),
   /// `return-call`, tail recursion call function name
-  ReturnCall(String),
+  ReturnCall(Rc<str>),
   /// `call-import`, call import function
-  CallImport(String),
+  CallImport(Rc<str>),
   /// `unreachable`, unreachable panic
   Unreachable,
   /// `nop`, no operation placeholder
@@ -112,7 +110,7 @@ pub enum CalxSyntax {
   /// `return`, return from function
   Return,
   /// `assert`, TODO might also be a foreign function instead
-  Assert(String),
+  Assert(Rc<str>),
   /// `inspect`, inspecting stack
   Inspect,
   /// `if`, takes 1 value from stack, returns values as ret_types

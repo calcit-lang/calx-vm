@@ -432,13 +432,14 @@ impl CalxVM {
 
         let n = f.params_types.len();
         self.check_before_pop_n(n)?;
-        let locals = self.stack.split_off(self.stack.len() - n);
+        let next_size = self.stack.len() - n;
+        let locals = self.stack.split_off(next_size);
 
         // TODO reduce copy drop
 
         let new_frame = CalxFrame {
           name: f_name,
-          initial_stack_size: self.stack.len(),
+          initial_stack_size: next_size,
           locals,
           pointer: 0,
           instrs: match instrs {
@@ -464,10 +465,12 @@ impl CalxVM {
 
         let n = f.params_types.len();
         self.check_before_pop_n(n)?;
-        let locals = self.stack.split_off(self.stack.len() - n);
+
+        let next_size = self.stack.len() - n;
+        let locals = self.stack.split_off(next_size);
 
         let prev_frame = &self.top_frame;
-        if prev_frame.initial_stack_size != self.stack.len() {
+        if prev_frame.initial_stack_size != next_size {
           return Err(self.gen_err(format!(
             "expected constant initial stack size: {}, got: {}",
             prev_frame.initial_stack_size,
@@ -476,7 +479,7 @@ impl CalxVM {
         }
         self.top_frame = CalxFrame {
           name: f_name,
-          initial_stack_size: self.stack.len(),
+          initial_stack_size: next_size,
           locals,
           pointer: 0,
           instrs: match instrs {
@@ -663,13 +666,13 @@ impl CalxVM {
             }
             None => return Err(format!("cannot find function named: {}", f_name)),
           },
-          CalxSyntax::CallImport(f_name) => match &self.imports.get(f_name.as_str()) {
+          CalxSyntax::CallImport(f_name) => match &self.imports.get(f_name) {
             Some((_f, size)) => {
               if stack_size < *size {
                 return Err(format!("insufficient size to call import: {} {:?}", stack_size, size));
               }
               stack_size = stack_size - size + 1;
-              ops.push(CalxInstr::CallImport(Rc::from(f_name.as_str())))
+              ops.push(CalxInstr::CallImport(f_name.to_owned()))
             }
             None => return Err(format!("missing imported function {}", f_name)),
           },
