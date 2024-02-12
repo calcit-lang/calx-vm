@@ -71,7 +71,7 @@ impl CalxVM {
 
   pub fn setup_top_frame(&mut self) -> Result<(), String> {
     self.top_frame.instrs = match self.find_func("main") {
-      Some(f) => match f.instrs.clone() {
+      Some(f) => match &f.instrs {
         Some(x) => x.to_owned(),
         None => return Err("main function must have instrs".to_string()),
       },
@@ -93,7 +93,7 @@ impl CalxVM {
       &mut output,
       format_args!(
         "{indent}Internal frames: {:?}",
-        self.frames.iter().map(|x| x.name.clone()).collect::<Vec<_>>()
+        self.frames.iter().map(|x| &*x.name).collect::<Vec<_>>()
       ),
     )
     .expect("inspect display");
@@ -160,7 +160,7 @@ impl CalxVM {
 
     use instr::CalxInstr::*;
 
-    match &instr {
+    match instr {
       Jmp(line) => {
         self.top_frame.pointer = *line;
         return Ok(true); // point reset, goto next loop
@@ -172,7 +172,7 @@ impl CalxVM {
       JmpIf(line) => {
         let v = self.stack.pop().unwrap();
         if v == Calx::Bool(true) || v == Calx::I64(1) {
-          self.top_frame.pointer = line.to_owned();
+          self.top_frame.pointer = *line;
           return Ok(true); // point reset, goto next loop
         }
       }
@@ -251,7 +251,7 @@ impl CalxVM {
       GlobalNew => self.globals.push(Calx::Nil),
       Const(v) => self.stack_push(v.to_owned()),
       Dup => {
-        self.stack_push(self.stack[self.stack.len() - 1].to_owned());
+        self.stack_push(self.stack.last().unwrap().to_owned());
       }
       Drop => {
         let _ = self.stack_pop()?;
@@ -426,7 +426,7 @@ impl CalxVM {
       Call(idx) => {
         // println!("frame size: {}", self.frames.len());
         let f = &self.funcs[*idx];
-        let instrs = f.instrs.clone();
+        let instrs = &f.instrs;
         let ret_types = f.ret_types.clone();
         let f_name = f.name.clone();
 
@@ -458,7 +458,7 @@ impl CalxVM {
         let f = &self.funcs[*idx];
 
         // println!("examine stack: {:?}", self.stack);
-        let instrs = f.instrs.clone();
+        let instrs = &f.instrs;
         let ret_types = f.ret_types.clone();
         let f_name = f.name.clone();
 
@@ -489,7 +489,7 @@ impl CalxVM {
         // start in new frame
         return Ok(true);
       }
-      CallImport(f_name) => match self.imports.to_owned().get(f_name) {
+      CallImport(f_name) => match self.imports.get(f_name) {
         None => return Err(self.gen_err(format!("missing imported function {}", f_name))),
         Some((f, size)) => {
           if self.stack.len() < *size {

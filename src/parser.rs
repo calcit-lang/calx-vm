@@ -29,8 +29,8 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     return Err(String::from("Not a function"));
   }
 
-  let name: Box<str> = if let Cirru::Leaf(x) = nodes[1].to_owned() {
-    x
+  let name: Box<str> = if let Cirru::Leaf(x) = &nodes[1] {
+    x.to_owned()
   } else {
     return Err(String::from("invalid name"));
   };
@@ -325,7 +325,7 @@ pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) 
     return Err(format!("if expected 2 or 3 arguments, got {:?}", xs));
   }
   let types = parse_block_types(&xs[1])?;
-  let ret_types = types.1.clone();
+  let ret_types = types.1;
   let then_syntax = parse_do(&xs[2], collector)?;
   let else_syntax = if xs.len() == 4 { parse_do(&xs[3], collector)? } else { vec![] };
 
