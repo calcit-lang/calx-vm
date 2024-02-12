@@ -61,7 +61,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     ret_types: Rc::new(ret_types),
     local_names: Rc::new(locals_collector.locals),
     syntax: Rc::new(body),
-    instrs: None,
+    instrs: Rc::new(vec![]),
   })
 }
 

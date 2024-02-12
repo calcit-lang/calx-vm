@@ -71,10 +71,7 @@ impl CalxVM {
 
   pub fn setup_top_frame(&mut self) -> Result<(), String> {
     self.top_frame.instrs = match self.find_func("main") {
-      Some(f) => match &f.instrs {
-        Some(x) => x.to_owned(),
-        None => return Err("main function must have instrs".to_string()),
-      },
+      Some(f) => f.instrs.to_owned(),
       None => return Err("main function is required".to_string()),
     };
 
@@ -442,10 +439,7 @@ impl CalxVM {
           initial_stack_size: next_size,
           locals,
           pointer: 0,
-          instrs: match instrs {
-            Some(x) => x.clone(),
-            None => unreachable!("function must have instrs"),
-          },
+          instrs: instrs.to_owned(),
           ret_types,
         };
         let prev_frame = mem::replace(&mut self.top_frame, new_frame);
@@ -482,10 +476,7 @@ impl CalxVM {
           initial_stack_size: next_size,
           locals,
           pointer: 0,
-          instrs: match instrs {
-            Some(x) => x.clone(),
-            None => panic!("function must have instrs"),
-          },
+          instrs: instrs.to_owned(),
           ret_types,
         };
 
@@ -756,7 +747,7 @@ impl CalxVM {
         ));
       }
 
-      self.funcs[i].instrs = Some(Rc::new(ops));
+      self.funcs[i].instrs = Rc::new(ops);
     }
 
     Ok(())
