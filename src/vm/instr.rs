@@ -98,7 +98,7 @@ pub enum CalxInstr {
   /// return from function
   Return,
   /// TODO might also be a foreign function instead
-  Assert(String),
+  Assert(Rc<str>),
   /// inspecting stack
   Inspect,
 }
@@ -153,7 +153,7 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Quit(a) => Ok(Self::Quit(a.to_owned())),
       CalxSyntax::Return => Ok(Self::Return),
       CalxSyntax::Assert(a) => Ok(Self::Assert(a.to_owned())),
-      CalxSyntax::CallImport(a) => Ok(Self::CallImport(Rc::from(a.as_str()))),
+      CalxSyntax::CallImport(a) => Ok(Self::CallImport(a.to_owned())),
       // debug
       CalxSyntax::Inspect => Ok(Self::Inspect),
 

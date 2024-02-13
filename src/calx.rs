@@ -1,15 +1,15 @@
 mod types;
 
-use bincode::{Decode, Encode};
+// use bincode::{Decode, Encode};
 use core::fmt;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::str::FromStr;
+use std::{rc::Rc, str::FromStr};
 
 pub use types::CalxType;
 
 /// Simplied from Calcit, but trying to be basic and mutable
-#[derive(Debug, Clone, PartialEq, PartialOrd, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Calx {
   /// TODO
   Nil,
@@ -20,7 +20,7 @@ pub enum Calx {
   /// `f64`
   F64(f64),
   // TODO
-  Str(String),
+  Str(Rc<str>),
   /// TODO
   List(Vec<Calx>),
   // to simultate linked structures
@@ -39,7 +39,7 @@ impl FromStr for Calx {
       _ => {
         let s0 = s.chars().next().unwrap();
         if s0 == '|' || s0 == ':' {
-          Ok(Calx::Str(s[1..s.len()].to_owned()))
+          Ok(Calx::Str(Rc::from(&s[1..s.len()])))
         } else if FLOAT_PATTERN.is_match(s) {
           match s.parse::<f64>() {
             Ok(u) => Ok(Calx::F64(u)),

@@ -11,7 +11,7 @@ pub struct CalxFunc {
   pub params_types: Rc<Vec<CalxType>>,
   pub ret_types: Rc<Vec<CalxType>>,
   pub syntax: Rc<Vec<CalxSyntax>>,
-  pub instrs: Option<Rc<Vec<CalxInstr>>>,
+  pub instrs: Rc<Vec<CalxInstr>>,
   pub local_names: Rc<Vec<String>>,
 }
 
@@ -33,15 +33,8 @@ impl fmt::Display for CalxFunc {
       }
       f.write_str(" .")?;
     }
-    match &self.instrs {
-      Some(instrs) => {
-        for (idx, instr) in instrs.iter().enumerate() {
-          write!(f, "\n  {:02} {:?}", idx, instr)?;
-        }
-      }
-      None => {
-        write!(f, "\n  <none>")?;
-      }
+    for (idx, instr) in self.instrs.iter().enumerate() {
+      write!(f, "\n  {:02} {:?}", idx, instr)?;
     }
     f.write_str("\n")?;
     Ok(())

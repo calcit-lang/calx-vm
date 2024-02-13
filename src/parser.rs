@@ -29,8 +29,8 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     return Err(String::from("Not a function"));
   }
 
-  let name: Box<str> = if let Cirru::Leaf(x) = nodes[1].to_owned() {
-    x
+  let name: Rc<str> = if let Cirru::Leaf(x) = &nodes[1] {
+    (**x).into()
   } else {
     return Err(String::from("invalid name"));
   };
@@ -61,7 +61,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
     ret_types: Rc::new(ret_types),
     local_names: Rc::new(locals_collector.locals),
     syntax: Rc::new(body),
-    instrs: None,
+    instrs: Rc::new(vec![]),
   })
 }
 
@@ -194,33 +194,33 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
               return Err(format!("call expected function name, {:?}", xs));
             }
             let name: Box<str> = match &xs[1] {
-              Cirru::Leaf(s) => s.to_owned(),
+              Cirru::Leaf(s) => (**s).into(),
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
             };
 
-            Ok(vec![CalxSyntax::Call((*name).to_owned())])
+            Ok(vec![CalxSyntax::Call(Rc::from(name))])
           }
           "return-call" => {
             if xs.len() != 2 {
               return Err(format!("return-call expected function name, {:?}", xs));
             }
             let name: Box<str> = match &xs[1] {
-              Cirru::Leaf(s) => s.to_owned(),
+              Cirru::Leaf(s) => (**s).into(),
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
             };
 
-            Ok(vec![CalxSyntax::ReturnCall((*name).to_owned())])
+            Ok(vec![CalxSyntax::ReturnCall(Rc::from(name))])
           }
           "call-import" => {
             if xs.len() != 2 {
               return Err(format!("call expected function name, {:?}", xs));
             }
             let name: Box<str> = match &xs[1] {
-              Cirru::Leaf(s) => s.to_owned(),
+              Cirru::Leaf(s) => (**s).into(),
               Cirru::List(_) => return Err(format!("expected a name, got {:?}", xs[1])),
             };
 
-            Ok(vec![CalxSyntax::CallImport((*name).to_owned())])
+            Ok(vec![CalxSyntax::CallImport(Rc::from(name))])
           }
           "unreachable" => Ok(vec![CalxSyntax::Unreachable]),
           "nop" => Ok(vec![CalxSyntax::Nop]),
@@ -247,11 +247,11 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
               return Err(format!("assert expected an extra message, {:?}", xs));
             }
             let message: Box<str> = match &xs[1] {
-              Cirru::Leaf(s) => s.to_owned(),
+              Cirru::Leaf(s) => (**s).into(),
               Cirru::List(_) => return Err(format!("assert expected a message, got {:?}", xs[1])),
             };
 
-            Ok(vec![CalxSyntax::Assert((*message).to_owned())])
+            Ok(vec![CalxSyntax::Assert(Rc::from(message))])
           }
           "inspect" => Ok(vec![CalxSyntax::Inspect]),
           "if" => parse_if(ptr_base, xs, collector),
@@ -325,7 +325,7 @@ pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) 
     return Err(format!("if expected 2 or 3 arguments, got {:?}", xs));
   }
   let types = parse_block_types(&xs[1])?;
-  let ret_types = types.1.clone();
+  let ret_types = types.1;
   let then_syntax = parse_do(&xs[2], collector)?;
   let else_syntax = if xs.len() == 4 { parse_do(&xs[3], collector)? } else { vec![] };
 
