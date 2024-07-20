@@ -2,8 +2,8 @@ use std::fs;
 use std::time::Instant;
 use std::{collections::hash_map::HashMap, rc::Rc};
 
+use argh::FromArgs;
 use cirru_parser::{parse, Cirru};
-use clap::{arg, Parser};
 
 use calx_vm::{log_calx_value, parse_function, Calx, CalxFunc, CalxImportsDict, CalxVM};
 
@@ -23,27 +23,28 @@ pub struct CalxBinaryProgram {
   pub fns: Vec<CalxFunc>,
 }
 
-/// Simple program to greet a person
-#[derive(Parser, Debug)]
-#[command(name = "Calx VM")]
-#[command(author = "Jon Chen <jiyinyiyong@gmail.com>")]
-#[command(version = "0.1.6")]
-#[command(about = "A toy VM", long_about = None)]
-struct Args {
-  #[arg(short, long, value_name = "SHOW_CODE")]
+#[derive(FromArgs)]
+/// Calx VM args
+struct TopLevel {
+  /// show code
+  #[argh(switch, short = 's')]
   show_code: bool,
-  #[arg(short, long, value_name = "EMIT_BINARY")]
+  /// emit binary
+  #[argh(option, short = 'b')]
   emit_binary: Option<String>,
-  #[arg(short, long, value_name = "VERBOSE")]
+  /// verbose
+  #[argh(switch, short = 'v')]
   verbose: bool,
-  #[arg(long, value_name = "EVAL_BINARY")]
+  /// eval binary
+  #[argh(switch, short = 'e')]
   eval_binary: bool,
-  #[arg(value_name = "SOURCE")]
+  /// source
+  #[argh(positional)]
   source: String,
 }
 
 fn main() -> Result<(), String> {
-  let args = Args::parse();
+  let args: TopLevel = argh::from_env();
 
   let source = args.source;
   let show_code = args.show_code;

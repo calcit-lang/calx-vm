@@ -196,7 +196,7 @@ impl CalxVM {
         if *idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.tee {}", idx)));
         } else {
-          self.top_frame.locals[*idx] = v.to_owned()
+          v.clone_into(&mut self.top_frame.locals[*idx])
         }
         self.stack_push(v);
       }
