@@ -56,7 +56,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   }
 
   Ok(CalxFunc {
-    name: Rc::from(name),
+    name,
     params_types: params_types.into(),
     ret_types: Rc::new(ret_types),
     local_names: Rc::new(locals_collector.locals),
