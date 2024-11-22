@@ -2,9 +2,8 @@ mod types;
 
 // use bincode::{Decode, Encode};
 use core::fmt;
-use lazy_static::lazy_static;
 use regex::Regex;
-use std::{rc::Rc, str::FromStr};
+use std::{rc::Rc, str::FromStr, sync::LazyLock};
 
 pub use types::CalxType;
 
@@ -111,8 +110,6 @@ impl fmt::Display for Calx {
   }
 }
 
-lazy_static! {
-  static ref FLOAT_PATTERN: Regex = Regex::new("^-?\\d+\\.(\\d+)?$").unwrap();
-  static ref INT_PATTERN: Regex = Regex::new("^-?\\d+$").unwrap();
-  static ref USIZE_PATTERN: Regex = Regex::new("^\\d+$").unwrap();
-}
+static FLOAT_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new("^-?\\d+\\.(\\d+)?$").unwrap());
+static INT_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new("^-?\\d+$").unwrap());
+// static USIZE_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new("^\\d+$").unwrap());

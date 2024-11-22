@@ -20,7 +20,6 @@ path = "src/bin/cli.rs"
 [dependencies]
 cirru_parser = "0.1.31"
 regex = "1.10.5"
-lazy_static = "1.5.0"
 bincode = "2.0.0-rc.3"
 argh = "0.1.12"
 
