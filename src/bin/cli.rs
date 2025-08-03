@@ -117,7 +117,7 @@ fn main() -> Result<(), String> {
 
   if show_code {
     for func in &vm.funcs {
-      println!("loaded fn: {}", func);
+      println!("loaded fn: {func}");
     }
   }
 
@@ -126,12 +126,12 @@ fn main() -> Result<(), String> {
     Ok(ret) => {
       let elapsed = now.elapsed();
 
-      println!("[calx] took {:.3?}: {:?}", elapsed, ret);
+      println!("[calx] took {elapsed:.3?}: {ret:?}");
       Ok(())
     }
     Err(e) => {
       println!("VM state: {:?}", vm.stack);
-      println!("{}", e);
+      println!("{e}");
       Err(String::from("Failed to run."))
     }
   }

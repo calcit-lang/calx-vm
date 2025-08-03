@@ -32,7 +32,7 @@ impl FromStr for CalxType {
       "str" => Ok(CalxType::Str),
       "list" => Ok(CalxType::List),
       "link" => Ok(CalxType::Link),
-      _ => Err(format!("unknown type: {}", s)),
+      _ => Err(format!("unknown type: {s}")),
     }
   }
 }

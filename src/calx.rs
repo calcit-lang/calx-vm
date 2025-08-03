@@ -42,15 +42,15 @@ impl FromStr for Calx {
         } else if FLOAT_PATTERN.is_match(s) {
           match s.parse::<f64>() {
             Ok(u) => Ok(Calx::F64(u)),
-            Err(e) => Err(format!("failed to parse: {}", e)),
+            Err(e) => Err(format!("failed to parse: {e}")),
           }
         } else if INT_PATTERN.is_match(s) {
           match s.parse::<i64>() {
             Ok(u) => Ok(Calx::I64(u)),
-            Err(e) => Err(format!("failed to parse: {}", e)),
+            Err(e) => Err(format!("failed to parse: {e}")),
           }
         } else {
-          Err(format!("unknown value: {}", s))
+          Err(format!("unknown value: {s}"))
         }
       }
     }

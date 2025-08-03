@@ -161,7 +161,7 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::Br(_) => Err("Br should be handled manually".to_string()),
       CalxSyntax::BrIf(_) => Err("BrIf should be handled manually".to_owned()),
       CalxSyntax::Block { .. } => Err("Block should be handled manually".to_string()),
-      CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {}", a)),
+      CalxSyntax::BlockEnd(a) => Err(format!("BlockEnd should be handled manually: {a}")),
       CalxSyntax::Call(_) => Err("Call should be handled manually".to_string()),
       CalxSyntax::ReturnCall(_) => Err("ReturnCall should be handled manually".to_string()),
       CalxSyntax::If { .. } => Err("If should be handled manually".to_string()),
