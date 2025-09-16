@@ -19,22 +19,22 @@ impl fmt::Display for CalxFunc {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "CalxFunc {} (", self.name)?;
     for p in &*self.params_types {
-      write!(f, "{:?} ", p)?;
+      write!(f, "{p:?} ")?;
     }
     f.write_str("-> ")?;
     for p in &*self.ret_types {
-      write!(f, "{:?} ", p)?;
+      write!(f, "{p:?} ")?;
     }
     f.write_str(")")?;
     if !self.local_names.is_empty() {
       f.write_str("\n  local_names:")?;
       for (idx, l) in self.local_names.iter().enumerate() {
-        write!(f, " {}_{}", idx, l)?;
+        write!(f, " {idx}_{l}")?;
       }
       f.write_str(" .")?;
     }
     for (idx, instr) in self.instrs.iter().enumerate() {
-      write!(f, "\n  {:02} {:?}", idx, instr)?;
+      write!(f, "\n  {idx:02} {instr:?}")?;
     }
     f.write_str("\n")?;
     Ok(())

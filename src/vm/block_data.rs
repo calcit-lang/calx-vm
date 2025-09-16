@@ -77,7 +77,7 @@ impl BlockStack {
     match self.stack.pop() {
       Some(a @ BlockData::If { .. }) => Ok(a),
       None => Err("BlockStack::pop_if: stack is empty".to_string()),
-      block => Err(format!("BlockStack::pop_if: expected If, got {:?}", block)),
+      block => Err(format!("BlockStack::pop_if: expected If, got {block:?}")),
     }
   }
 
@@ -85,7 +85,7 @@ impl BlockStack {
     match self.stack.last() {
       Some(a @ BlockData::If { .. }) => Ok(a),
       None => Err("BlockStack::peek_if: stack is empty".to_string()),
-      block => Err(format!("BlockStack::peek_if: expected If, got {:?}", block)),
+      block => Err(format!("BlockStack::peek_if: expected If, got {block:?}")),
     }
   }
 

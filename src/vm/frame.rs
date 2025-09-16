@@ -34,11 +34,11 @@ impl fmt::Display for CalxFrame {
     f.write_str("CalxFrame ")?;
     write!(f, "_{} (", self.initial_stack_size)?;
     for p in &*self.ret_types {
-      write!(f, "{:?} ", p)?;
+      write!(f, "{p:?} ")?;
     }
     write!(f, ") @{}", self.pointer)?;
     for (idx, instr) in self.instrs.iter().enumerate() {
-      write!(f, "\n  {:02} {:?}", idx, instr)?;
+      write!(f, "\n  {idx:02} {instr:?}")?;
     }
     f.write_str("\n")?;
     Ok(())

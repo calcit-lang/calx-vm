@@ -67,7 +67,7 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
 
 pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
   match node {
-    Cirru::Leaf(_) => Err(format!("expected expr of instruction, {}", node)),
+    Cirru::Leaf(_) => Err(format!("expected expr of instruction, {node}")),
     Cirru::List(xs) => {
       if xs.is_empty() {
         return Err(String::from("empty expr"));
@@ -75,25 +75,25 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
       let i0 = &xs[0];
 
       match i0 {
-        Cirru::List(_) => Err(format!("expected instruction name in a string, got {}", i0)),
+        Cirru::List(_) => Err(format!("expected instruction name in a string, got {i0}")),
         Cirru::Leaf(name) => match &**name {
           "local.get" => {
             if xs.len() != 2 {
-              return Err(format!("local.get expected a position, {:?}", xs));
+              return Err(format!("local.get expected a position, {xs:?}"));
             }
             let idx: usize = parse_local_idx(&xs[1], collector)?;
             Ok(vec![CalxSyntax::LocalGet(idx)])
           }
           "local.set" => {
             if xs.len() != 2 {
-              return Err(format!("local.set expected a position, {:?}", xs));
+              return Err(format!("local.set expected a position, {xs:?}"));
             }
             let idx: usize = parse_local_idx(&xs[1], collector)?;
             Ok(vec![CalxSyntax::LocalSet(idx)])
           }
           "local.tee" => {
             if xs.len() != 2 {
-              return Err(format!("list.tee expected a position, {:?}", xs));
+              return Err(format!("list.tee expected a position, {xs:?}"));
             }
             let idx: usize = parse_local_idx(&xs[1], collector)?;
             Ok(vec![CalxSyntax::LocalSet(idx)])
@@ -101,7 +101,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           "local.new" => Ok(vec![CalxSyntax::LocalNew]),
           "global.get" => {
             if xs.len() != 2 {
-              return Err(format!("global.get expected a position, {:?}", xs));
+              return Err(format!("global.get expected a position, {xs:?}"));
             }
             let idx: usize = match &xs[1] {
               Cirru::Leaf(s) => parse_usize(s)?,
@@ -113,7 +113,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           }
           "global.set" => {
             if xs.len() != 2 {
-              return Err(format!("global.set expected a position, {:?}", xs));
+              return Err(format!("global.set expected a position, {xs:?}"));
             }
             let idx: usize = match &xs[1] {
               Cirru::Leaf(s) => parse_usize(s)?,
@@ -126,14 +126,14 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           "global.new" => Ok(vec![CalxSyntax::GlobalNew]),
           "const" => {
             if xs.len() != 2 {
-              return Err(format!("const takes exactly 1 argument, got {:?}", xs));
+              return Err(format!("const takes exactly 1 argument, got {xs:?}"));
             }
             match &xs[1] {
               Cirru::Leaf(s) => {
                 let p1 = s.parse()?;
                 Ok(vec![CalxSyntax::Const(p1)])
               }
-              Cirru::List(a) => Err(format!("`const` not supporting list here: {:?}", a)),
+              Cirru::List(a) => Err(format!("`const` not supporting list here: {a:?}")),
             }
           }
           "dup" => Ok(vec![CalxSyntax::Dup]),
@@ -164,7 +164,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           "or" => Ok(vec![CalxSyntax::Or]),
           "br-if" => {
             if xs.len() != 2 {
-              return Err(format!("br-if expected a position, {:?}", xs));
+              return Err(format!("br-if expected a position, {xs:?}"));
             }
             let idx: usize = match &xs[1] {
               Cirru::Leaf(s) => parse_usize(s)?,
@@ -176,7 +176,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           }
           "br" => {
             if xs.len() != 2 {
-              return Err(format!("br expected a position, {:?}", xs));
+              return Err(format!("br expected a position, {xs:?}"));
             }
             let idx: usize = match &xs[1] {
               Cirru::Leaf(s) => parse_usize(s)?,
@@ -191,7 +191,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           "echo" => Ok(vec![CalxSyntax::Echo]),
           "call" => {
             if xs.len() != 2 {
-              return Err(format!("call expected function name, {:?}", xs));
+              return Err(format!("call expected function name, {xs:?}"));
             }
             let name: Box<str> = match &xs[1] {
               Cirru::Leaf(s) => (**s).into(),
@@ -202,7 +202,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           }
           "return-call" => {
             if xs.len() != 2 {
-              return Err(format!("return-call expected function name, {:?}", xs));
+              return Err(format!("return-call expected function name, {xs:?}"));
             }
             let name: Box<str> = match &xs[1] {
               Cirru::Leaf(s) => (**s).into(),
@@ -213,7 +213,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           }
           "call-import" => {
             if xs.len() != 2 {
-              return Err(format!("call expected function name, {:?}", xs));
+              return Err(format!("call expected function name, {xs:?}"));
             }
             let name: Box<str> = match &xs[1] {
               Cirru::Leaf(s) => (**s).into(),
@@ -230,7 +230,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           }
           "quit" => {
             if xs.len() != 2 {
-              return Err(format!("quit expected a position, {:?}", xs));
+              return Err(format!("quit expected a position, {xs:?}"));
             }
             let idx: usize = match &xs[1] {
               Cirru::Leaf(s) => parse_usize(s)?,
@@ -244,7 +244,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
 
           "assert" => {
             if xs.len() != 2 {
-              return Err(format!("assert expected an extra message, {:?}", xs));
+              return Err(format!("assert expected an extra message, {xs:?}"));
             }
             let message: Box<str> = match &xs[1] {
               Cirru::Leaf(s) => (**s).into(),
@@ -255,7 +255,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           }
           "inspect" => Ok(vec![CalxSyntax::Inspect]),
           "if" => parse_if(ptr_base, xs, collector),
-          _ => Err(format!("unknown instruction: {} in {:?}", name, xs)),
+          _ => Err(format!("unknown instruction: {name} in {xs:?}")),
         },
       }
     }
@@ -274,14 +274,14 @@ fn parse_local_idx(x: &Cirru, collector: &mut LocalsCollector) -> Result<usize, 
       }
       None => Err(String::from("invalid empty name")),
     },
-    Cirru::List(_) => Err(format!("expected token, got {}", x)),
+    Cirru::List(_) => Err(format!("expected token, got {x}")),
   }
 }
 
 pub fn parse_usize(s: &str) -> Result<usize, String> {
   match s.parse::<usize>() {
     Ok(u) => Ok(u),
-    Err(e) => Err(format!("failed to parse: {}", e)),
+    Err(e) => Err(format!("failed to parse: {e}")),
   }
 }
 
@@ -304,7 +304,7 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
   chunk.push(CalxSyntax::BlockEnd(looped));
 
   if looped && !ret_types.is_empty() {
-    println!("return types for loop actuall not checked: {:?}", ret_types);
+    println!("return types for loop actuall not checked: {ret_types:?}");
   }
 
   chunk.insert(
@@ -322,7 +322,7 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
 
 pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
   if xs.len() != 4 && xs.len() != 3 {
-    return Err(format!("if expected 2 or 3 arguments, got {:?}", xs));
+    return Err(format!("if expected 2 or 3 arguments, got {xs:?}"));
   }
   let types = parse_block_types(&xs[1])?;
   let ret_types = types.1;
@@ -364,11 +364,11 @@ pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) 
 
 pub fn parse_do(xs: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
   match xs {
-    Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
+    Cirru::Leaf(_) => Err(format!("expect expression for types, got {xs}")),
     Cirru::List(ys) => {
       let x0 = &ys[0];
       if !leaf_is(x0, "do") {
-        return Err(format!("expected do, got {}", x0));
+        return Err(format!("expected do, got {x0}"));
       }
 
       let mut chunk: Vec<CalxSyntax> = vec![];
@@ -391,7 +391,7 @@ pub fn parse_do(xs: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxS
 /// parameters might be named, need to check, by default use integers
 pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Vec<CalxType>, Vec<CalxType>), String> {
   match xs {
-    Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
+    Cirru::Leaf(_) => Err(format!("expect expression for types, got {xs}")),
     Cirru::List(ys) => {
       let mut params: Vec<CalxType> = vec![];
       let mut returns: Vec<CalxType> = vec![];
@@ -417,18 +417,18 @@ pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Ve
 
           Cirru::List(zs) => {
             if ret_mode {
-              return Err(format!("invalid syntax, return values should not have names, got {:?}", x));
+              return Err(format!("invalid syntax, return values should not have names, got {x:?}"));
             }
             if zs.len() != 2 {
-              return Err(format!("invalid syntax, expected name and type, got {:?}", x));
+              return Err(format!("invalid syntax, expected name and type, got {x:?}"));
             }
             let name_str = match &zs[0] {
               Cirru::Leaf(s) => s.to_owned(),
-              Cirru::List(_) => return Err(format!("invalid syntax, expected name, got {:?}", x)),
+              Cirru::List(_) => return Err(format!("invalid syntax, expected name, got {x:?}")),
             };
             let ty = match &zs[1] {
               Cirru::Leaf(s) => s.parse()?,
-              Cirru::List(_) => return Err(format!("invalid syntax, expected type, got {:?}", x)),
+              Cirru::List(_) => return Err(format!("invalid syntax, expected type, got {x:?}")),
             };
             collector.track(&name_str);
             params.push(ty);
@@ -444,7 +444,7 @@ pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Ve
 /// does not need names in block
 pub fn parse_block_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), String> {
   match xs {
-    Cirru::Leaf(_) => Err(format!("expect expression for types, got {}", xs)),
+    Cirru::Leaf(_) => Err(format!("expect expression for types, got {xs}")),
     Cirru::List(ys) => {
       let mut params: Vec<CalxType> = vec![];
       let mut returns: Vec<CalxType> = vec![];
@@ -474,10 +474,10 @@ pub fn parse_block_types(xs: &Cirru) -> Result<(Vec<CalxType>, Vec<CalxType>), S
 /// TODO better have some tests
 pub fn extract_nested(xs: &Cirru) -> Result<Vec<Cirru>, String> {
   match xs {
-    Cirru::Leaf(x) => Err(format!("not extracting leaf: {}", x)),
+    Cirru::Leaf(x) => Err(format!("not extracting leaf: {x}")),
     Cirru::List(ys) => match ys.first() {
       None => Err(String::from("unexpected empty expression")),
-      Some(Cirru::List(zs)) => Err(format!("unexpected nested instruction name: {:?}", zs)),
+      Some(Cirru::List(zs)) => Err(format!("unexpected nested instruction name: {zs:?}")),
       Some(Cirru::Leaf(zs)) => match &**zs {
         "block" | "loop" | "if" | "do" => Ok(vec![xs.to_owned()]),
         _ => {
