@@ -793,6 +793,9 @@ impl CalxVM {
     }
   }
 
+  // Keep the internal error shape aligned with CalxVM::step until the public
+  // CalxError boxing/API decision tracked in issue #21 is made.
+  #[allow(clippy::result_large_err)]
   #[inline(always)]
   fn stack_pop_right(&mut self) -> Result<(usize, Calx), CalxError> {
     self.check_before_pop_n(2)?;
