@@ -77,8 +77,8 @@ impl Calx {
       Calx::Bool(b) => *b,
       Calx::I64(n) => *n != 0,
       Calx::F64(n) => *n != 0.0,
-      Calx::Str(_) => false,
-      Calx::List(_) => false,
+      Calx::Str(_) => true,
+      Calx::List(_) => true,
       // Calx::Link(_, _, _) => true,
     }
   }

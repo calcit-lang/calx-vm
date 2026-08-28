@@ -4,7 +4,6 @@ pub mod func;
 pub mod instr;
 
 use std::collections::hash_map::HashMap;
-use std::ops::Rem;
 use std::rc::Rc;
 use std::{fmt, mem, vec};
 
@@ -47,15 +46,17 @@ impl std::fmt::Debug for CalxVM {
 
 impl CalxVM {
   pub fn new(fns: Vec<CalxFunc>, globals: Vec<Calx>, imports: CalxImportsDict) -> Self {
-    let main_func = fns.iter().find(|x| &*x.name == "main").expect("main function is required");
-    let main_frame = CalxFrame {
-      name: main_func.name.clone(),
-      initial_stack_size: 0,
-      // use empty instrs, will be replaced by preprocess
-      instrs: Rc::new(vec![]),
-      pointer: 0,
-      locals: vec![],
-      ret_types: main_func.ret_types.clone(),
+    let main_frame = match fns.iter().find(|x| &*x.name == "main") {
+      Some(main_func) => CalxFrame {
+        name: main_func.name.clone(),
+        initial_stack_size: 0,
+        // use empty instrs, will be replaced by preprocess
+        instrs: Rc::new(vec![]),
+        pointer: 0,
+        locals: vec![],
+        ret_types: main_func.ret_types.clone(),
+      },
+      None => CalxFrame::default(),
     };
     CalxVM {
       stack: vec![],
@@ -167,36 +168,37 @@ impl CalxVM {
         return Ok(true); // point reset, goto next loop
       }
       JmpIf(line) => {
-        let v = self.stack.pop().unwrap();
-        if v == Calx::Bool(true) || v == Calx::I64(1) {
-          self.top_frame.pointer = *line;
+        let line = *line;
+        let v = self.stack_pop()?;
+        if v.truthy() {
+          self.top_frame.pointer = line;
           return Ok(true); // point reset, goto next loop
         }
       }
       JmpOffsetIf(l) => {
-        self.check_before_pop()?;
-        let v = self.stack.pop().expect("pop value");
-        if v == Calx::Bool(true) || v == Calx::I64(1) {
-          self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
+        let offset = *l;
+        let v = self.stack_pop()?;
+        if v.truthy() {
+          self.top_frame.pointer = (self.top_frame.pointer as i32 + offset) as usize;
           return Ok(true); // point reset, goto next loop
         }
       }
       LocalSet(idx) => {
-        self.check_before_pop()?;
-        let v = self.stack.pop().expect("pop value");
-        if *idx >= self.top_frame.locals.len() {
+        let idx = *idx;
+        let v = self.stack_pop()?;
+        if idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.set {} for {:?}", idx, self.top_frame.locals)));
         } else {
-          self.top_frame.locals[*idx] = v
+          self.top_frame.locals[idx] = v
         }
       }
       LocalTee(idx) => {
-        self.check_before_pop()?;
-        let v = self.stack.pop().expect("pop value");
-        if *idx >= self.top_frame.locals.len() {
+        let idx = *idx;
+        let v = self.stack_pop()?;
+        if idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.tee {idx}")));
         } else {
-          v.clone_into(&mut self.top_frame.locals[*idx])
+          v.clone_into(&mut self.top_frame.locals[idx])
         }
         self.stack_push(v);
       }
@@ -224,12 +226,16 @@ impl CalxVM {
 
         if self.frames.is_empty() {
           // top frame return, just return value
-          return match self.stack.last() {
-            Some(x) => {
+          return match (ret_size, self.stack.last()) {
+            (0, _) => {
+              self.make_return(Calx::Nil);
+              Ok(false)
+            }
+            (_, Some(x)) => {
               self.make_return(x.to_owned());
               Ok(false)
             }
-            None => Err(self.gen_err("return without value".to_string())),
+            (_, None) => Err(self.gen_err("return without value".to_string())),
           };
         } else {
           // let prev_frame = self.top_frame;
@@ -238,12 +244,12 @@ impl CalxVM {
       }
       LocalNew => self.top_frame.locals.push(Calx::Nil),
       GlobalSet(idx) => {
-        self.check_before_pop()?;
-        let v = self.stack.pop().expect("pop value");
-        if self.globals.len() >= *idx {
+        let idx = *idx;
+        let v = self.stack_pop()?;
+        if idx >= self.globals.len() {
           return Err(self.gen_err(format!("out of bound in global.set {idx}")));
         } else {
-          self.globals[*idx] = v
+          self.globals[idx] = v
         }
       }
       GlobalGet(idx) => {
@@ -265,200 +271,148 @@ impl CalxVM {
         }
       }
       Dup => {
-        // 优化：避免不必要的clone，对于Copy类型直接复制
-        if let Some(last) = self.stack.last() {
-          match last {
-            Calx::I64(n) => self.stack.push(Calx::I64(*n)),
-            Calx::F64(n) => self.stack.push(Calx::F64(*n)),
-            Calx::Bool(b) => self.stack.push(Calx::Bool(*b)),
-            Calx::Nil => self.stack.push(Calx::Nil),
-            _ => self.stack.push(last.clone()),
-          }
-        }
+        self.check_before_pop()?;
+        let value = self
+          .stack
+          .last()
+          .cloned()
+          .ok_or_else(|| self.gen_err("cannot duplicate an empty stack".to_string()))?;
+        self.stack_push(value);
       }
       Drop => {
         let _ = self.stack_pop()?;
       }
       IntAdd => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::I64(n1 + n2);
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers to add, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::I64(n1.wrapping_add(*n2)),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to add, {v1:?} {v2:?}"))),
         }
       }
       IntMul => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::I64(n1 * n2);
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers to multiply, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::I64(n1.wrapping_mul(*n2)),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to multiply, {v1:?} {v2:?}"))),
         }
       }
       IntDiv => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::I64(n1 / n2);
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers to divide, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(_), Calx::I64(0)) => return Err(self.gen_err("trap: integer divide by zero".to_string())),
+          (Calx::I64(n1), Calx::I64(n2)) if *n1 == i64::MIN && *n2 == -1 => {
+            return Err(self.gen_err("trap: integer division overflow".to_string()));
+          }
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::I64(n1 / n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to divide, {v1:?} {v2:?}"))),
         }
       }
       IntRem => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::I64((*n1).rem(n2));
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers for remainder, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(_), Calx::I64(0)) => return Err(self.gen_err("trap: integer remainder by zero".to_string())),
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::I64(n1.wrapping_rem(*n2)),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers for remainder, {v1:?} {v2:?}"))),
         }
       }
       IntNeg => {
-        let last_idx = self.stack.len() - 1;
-        if let Calx::I64(n) = self.stack[last_idx] {
-          self.stack[last_idx] = Calx::I64(-n)
-        } else {
-          return Err(self.gen_err(format!("expected int, got {}", self.stack[last_idx])));
+        self.check_before_pop()?;
+        let top = self.stack.len() - 1;
+        match self.stack[top] {
+          Calx::I64(n) => self.stack[top] = Calx::I64(n.wrapping_neg()),
+          ref value => return Err(self.gen_err(format!("expected int, got {value}"))),
         }
       }
       IntShr => {
-        let bits = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-        match (&self.stack[last_idx], &bits) {
-          (Calx::I64(n), Calx::I64(b)) => self.stack[last_idx] = Calx::I64(n.checked_shr(*b as u32).unwrap()),
-          (_, _) => return Err(self.gen_err(format!("invalid number for SHR, {:?} {:?}", self.stack[last_idx], bits))),
+        let (left, bits) = self.stack_pop_right()?;
+        match (&self.stack[left], &bits) {
+          (Calx::I64(n), Calx::I64(b)) => self.stack[left] = Calx::I64(n.wrapping_shr(*b as u32)),
+          (value, bits) => return Err(self.gen_err(format!("invalid number for SHR, {value:?} {bits:?}"))),
         }
       }
       IntShl => {
-        let bits = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-        match (&self.stack[last_idx], &bits) {
-          (Calx::I64(n), Calx::I64(b)) => self.stack[last_idx] = Calx::I64(n.checked_shl(*b as u32).unwrap()),
-          (_, _) => return Err(self.gen_err(format!("invalid number for SHL, {:?} {:?}", self.stack[last_idx], bits))),
+        let (left, bits) = self.stack_pop_right()?;
+        match (&self.stack[left], &bits) {
+          (Calx::I64(n), Calx::I64(b)) => self.stack[left] = Calx::I64(n.wrapping_shl(*b as u32)),
+          (value, bits) => return Err(self.gen_err(format!("invalid number for SHL, {value:?} {bits:?}"))),
         }
       }
       IntEq => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::Bool(n1 == n2);
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers to eq compare, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::Bool(n1 == n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to eq compare, {v1:?} {v2:?}"))),
         }
       }
 
       IntNe => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-        match (&self.stack[last_idx], &v2) {
-          (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 != n2),
-          (_, _) => return Err(self.gen_err(format!("expected 2 integers to ne compare, {:?} {:?}", self.stack[last_idx], v2))),
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::Bool(n1 != n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to ne compare, {v1:?} {v2:?}"))),
         }
       }
       IntLt => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::Bool(n1 < n2);
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers to lt compare, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::Bool(n1 < n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to lt compare, {v1:?} {v2:?}"))),
         }
       }
       IntLe => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::Bool(n1 <= n2);
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers to le compare, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::Bool(n1 <= n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to le compare, {v1:?} {v2:?}"))),
         }
       }
       IntGt => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        if let (Calx::I64(n1), Calx::I64(n2)) = (&self.stack[last_idx], &v2) {
-          self.stack[last_idx] = Calx::Bool(n1 > n2);
-        } else {
-          return Err(self.gen_err(format!("expected 2 integers to gt compare, {:?} {:?}", self.stack[last_idx], v2)));
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::Bool(n1 > n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to gt compare, {v1:?} {v2:?}"))),
         }
       }
       IntGe => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        match (&self.stack[last_idx], &v2) {
-          (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::Bool(n1 >= n2),
-          (_, _) => return Err(self.gen_err(format!("expected 2 integers to ge compare, {:?} {:?}", self.stack[last_idx], v2))),
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::Bool(n1 >= n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to ge compare, {v1:?} {v2:?}"))),
         }
       }
       Add => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        match (&self.stack[last_idx], &v2) {
-          (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 + n2),
-          (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64(n1 + n2),
-          (_, _) => return Err(self.gen_err(format!("expected 2 numbers to +, {:?} {:?}", self.stack[last_idx], v2))),
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::F64(n1), Calx::F64(n2)) => self.stack[left] = Calx::F64(n1 + n2),
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::I64(n1.wrapping_add(*n2)),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 numbers to add, {v1:?} {v2:?}"))),
         }
       }
       Mul => {
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        match (&self.stack[last_idx], &v2) {
-          (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 * n2),
-          (Calx::I64(n1), Calx::I64(n2)) => self.stack[last_idx] = Calx::I64(n1 * n2),
-          (_, _) => return Err(self.gen_err(format!("expected 2 numbers to multiply, {:?} {:?}", self.stack[last_idx], v2))),
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::F64(n1), Calx::F64(n2)) => self.stack[left] = Calx::F64(n1 * n2),
+          (Calx::I64(n1), Calx::I64(n2)) => self.stack[left] = Calx::I64(n1.wrapping_mul(*n2)),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 numbers to multiply, {v1:?} {v2:?}"))),
         }
       }
       Div => {
-        // reversed order
-        let v2 = self.stack_pop()?;
-        let last_idx = self.stack.len() - 1;
-
-        match (&self.stack[last_idx], &v2) {
-          (Calx::F64(n1), Calx::F64(n2)) => self.stack[last_idx] = Calx::F64(n1 / n2),
-          (_, _) => return Err(self.gen_err(format!("expected 2 numbers to divide, {:?} {:?}", self.stack[last_idx], v2))),
+        let (left, right) = self.stack_pop_right()?;
+        match (&self.stack[left], &right) {
+          (Calx::F64(n1), Calx::F64(n2)) => self.stack[left] = Calx::F64(n1 / n2),
+          (v1, v2) => return Err(self.gen_err(format!("expected 2 floats to divide, {v1:?} {v2:?}"))),
         }
       }
       Neg => {
-        let last_idx = self.stack.len() - 1;
-        if let Calx::F64(n) = self.stack[last_idx] {
-          self.stack[last_idx] = Calx::F64(-n)
-        } else {
-          return Err(self.gen_err(format!("expected float, got {}", self.stack[last_idx])));
+        self.check_before_pop()?;
+        let top = self.stack.len() - 1;
+        match self.stack[top] {
+          Calx::F64(n) => self.stack[top] = Calx::F64(-n),
+          ref value => return Err(self.gen_err(format!("expected float, got {value}"))),
         }
       }
-      NewList => {
-        todo!()
-      }
-      ListGet => {
-        todo!()
-      }
-      ListSet => {
-        todo!()
-      }
-      NewLink => {
-        todo!()
-      }
-      And => {
-        todo!()
-      }
-      Or => {
-        todo!()
-      }
-      Not => {
-        todo!()
+      NewList | ListGet | ListSet | NewLink | And | Or | Not => {
+        return Err(self.gen_err(format!("unsupported instruction reached execution: {instr:?}")));
       }
       Call(idx) => {
         // println!("frame size: {}", self.frames.len());
@@ -544,20 +498,22 @@ impl CalxVM {
         }
       },
       Unreachable => {
-        unreachable!("Unexpected from op")
+        return Err(self.gen_err("trap: unreachable instruction executed".to_string()));
       }
       Nop => {
         // Noop
       }
-      Quit(code) => std::process::exit(*code as i32),
+      Quit(code) => {
+        return Err(self.gen_err(format!("trap: guest requested process exit with status {code}")));
+      }
       Echo => {
         let v = self.stack_pop()?;
         println!("{v}");
       }
       Assert(message) => {
-        self.check_before_pop()?;
-        let v = self.stack.pop().expect("pop value");
-        if v == Calx::Bool(true) || v == Calx::I64(1) {
+        let message = message.clone();
+        let v = self.stack_pop()?;
+        if v.truthy() {
           // Ok
         } else {
           return Err(self.gen_err(format!("Failed assertion: {message}")));
@@ -655,7 +611,9 @@ impl CalxVM {
               BlockData::Block { to, .. } => ops.push(CalxInstr::JmpIf(*to)),
               _ => unreachable!("br target must be block or loop"),
             }
-            stack_size -= 1;
+            stack_size = stack_size
+              .checked_sub(1)
+              .ok_or_else(|| format!("br-if {size} requires a condition value"))?;
 
             let expected_size = target_block.expected_finish_size();
             if stack_size != expected_size {
@@ -709,7 +667,9 @@ impl CalxVM {
           },
           CalxSyntax::Return => {
             let ret_size = self.funcs[i].ret_types.len();
-            stack_size -= ret_size;
+            stack_size = stack_size
+              .checked_sub(ret_size)
+              .ok_or_else(|| format!("insufficient return values in {}", self.funcs[i].name))?;
             if stack_size != 0 {
               return Err(format!(
                 "invalid return size {} for {:?} in {}",
@@ -745,7 +705,12 @@ impl CalxVM {
             }
 
             match prev_block {
-              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(*to)),
+              BlockData::If {
+                to, initial_stack_size, ..
+              } => {
+                ops.push(CalxInstr::Jmp(*to));
+                stack_size = initial_stack_size - 1;
+              }
               _ => unreachable!("end inside if"),
             }
           }
@@ -795,7 +760,15 @@ impl CalxVM {
 
   #[inline(always)]
   fn check_func_return(&self, ret_size: usize) -> Result<(), CalxError> {
-    if self.stack.len() - ret_size != self.top_frame.initial_stack_size {
+    let Some(return_base) = self.stack.len().checked_sub(ret_size) else {
+      return Err(self.gen_err(format!(
+        "stack size {} does not contain {} return values",
+        self.stack.len(),
+        ret_size
+      )));
+    };
+
+    if return_base != self.top_frame.initial_stack_size {
       return Err(self.gen_err(format!(
         "stack size {} does not fit initial size {} plus {:?}",
         self.stack.len(),
@@ -813,9 +786,24 @@ impl CalxVM {
     if stack_len <= self.top_frame.initial_stack_size {
       Err(self.gen_err(String::from("cannot pop from parent stack")))
     } else {
-      // Optimization: use unsafe to avoid repeated bounds checking
-      Ok(unsafe { self.stack.pop().unwrap_unchecked() })
+      match self.stack.pop() {
+        Some(value) => Ok(value),
+        None => Err(self.gen_err(String::from("cannot pop from empty stack"))),
+      }
     }
+  }
+
+  // Keep the internal error shape aligned with CalxVM::step until the public
+  // CalxError boxing/API decision tracked in issue #21 is made.
+  #[allow(clippy::result_large_err)]
+  #[inline(always)]
+  fn stack_pop_right(&mut self) -> Result<(usize, Calx), CalxError> {
+    self.check_before_pop_n(2)?;
+    let right = match self.stack.pop() {
+      Some(value) => value,
+      None => return Err(self.gen_err(String::from("cannot pop right operand"))),
+    };
+    Ok((self.stack.len() - 1, right))
   }
 
   fn check_before_pop(&self) -> Result<(), CalxError> {
