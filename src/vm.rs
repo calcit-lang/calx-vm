@@ -697,9 +697,6 @@ impl CalxVM {
   }
 
   #[inline(always)]
-  // Keep the internal error shape aligned with CalxVM::step until the public
-  // CalxError boxing/API decision tracked in issue #21 is made.
-  #[allow(clippy::result_large_err)]
   fn collect_return_values(&mut self, ret_size: usize) -> Result<(), CalxError> {
     let Some(results_at) = self.stack.len().checked_sub(ret_size) else {
       return Err(self.gen_err(format!(
@@ -725,7 +722,6 @@ impl CalxVM {
     Ok(())
   }
 
-  #[allow(clippy::result_large_err)]
   fn apply_branch_stack(&mut self, base: usize, arity: usize) -> Result<(), CalxError> {
     let absolute_base = self
       .top_frame
@@ -760,9 +756,6 @@ impl CalxVM {
     }
   }
 
-  // Keep the internal error shape aligned with CalxVM::step until the public
-  // CalxError boxing/API decision tracked in issue #21 is made.
-  #[allow(clippy::result_large_err)]
   #[inline(always)]
   fn stack_pop_right(&mut self) -> Result<(usize, Calx), CalxError> {
     self.check_before_pop_n(2)?;
@@ -799,9 +792,11 @@ impl CalxVM {
   fn gen_err(&self, s: String) -> CalxError {
     CalxError {
       message: s,
-      top_frame: self.top_frame.to_owned(),
-      stack: self.stack.to_owned(),
-      globals: self.globals.to_owned(),
+      snapshot: Some(Box::new(CalxErrorSnapshot {
+        top_frame: self.top_frame.to_owned(),
+        stack: self.stack.to_owned(),
+        globals: self.globals.to_owned(),
+      })),
     }
   }
 
@@ -814,27 +809,57 @@ impl CalxVM {
   }
 }
 
+/// Runtime or host error with an optional, out-of-line VM snapshot.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxError {
+  /// Human-readable diagnostic message; not yet a stable error code.
   pub message: String,
+  /// VM state for interpreter-originated traps, absent for raw host errors.
+  pub snapshot: Option<Box<CalxErrorSnapshot>>,
+}
+
+/// VM state captured only when an execution error originates inside a VM.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct CalxErrorSnapshot {
+  /// Operand stack at the failure point.
   pub stack: Vec<Calx>,
+  /// Active frame at the failure point.
   pub top_frame: CalxFrame,
+  /// Globals at the failure point.
   pub globals: Vec<Calx>,
 }
 
 impl fmt::Display for CalxError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}\n{:?}\n{}", self.message, self.stack, self.top_frame)
+    f.write_str(&self.message)?;
+    if let Some(snapshot) = &self.snapshot {
+      write!(f, "\n{:?}\n{}", snapshot.stack, snapshot.top_frame)?;
+    }
+    Ok(())
   }
 }
 
 impl CalxError {
+  /// Creates a host-originated error without inventing VM state.
   pub fn new_raw(s: String) -> Self {
     CalxError {
       message: s,
-      stack: vec![],
-      top_frame: CalxFrame::default(),
-      globals: vec![],
+      snapshot: None,
     }
+  }
+
+  /// Returns the captured operand stack when this error originated in a VM.
+  pub fn stack(&self) -> Option<&[Calx]> {
+    self.snapshot.as_deref().map(|snapshot| snapshot.stack.as_slice())
+  }
+
+  /// Returns the captured active frame when this error originated in a VM.
+  pub fn top_frame(&self) -> Option<&CalxFrame> {
+    self.snapshot.as_deref().map(|snapshot| &snapshot.top_frame)
+  }
+
+  /// Returns the captured globals when this error originated in a VM.
+  pub fn globals(&self) -> Option<&[Calx]> {
+    self.snapshot.as_deref().map(|snapshot| snapshot.globals.as_slice())
   }
 }

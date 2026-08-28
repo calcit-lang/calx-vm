@@ -157,7 +157,7 @@ Calx parser 当前把 else 分支排在扁平 syntax 的前半段，以便 lower
 - `message`；
 - `operand_stack`。
 
-它不包含完整 VM snapshot，因为验证尚未执行程序。运行期 trap 继续使用 `CalxError`；#21 单独处理其大小和公开 API 兼容性。
+它不包含 VM snapshot，因为验证尚未执行程序。运行期 trap 使用轻量 `CalxError`，并通过可选 boxed `CalxErrorSnapshot` 按需保留 stack、frame 和 globals；宿主 `new_raw` 错误没有 VM snapshot。该布局由 #21 完成，避免把大型快照放在每个 `Result` 的 inline `Err` payload 中。
 
 后续 diagnostic 层应增加稳定错误码和 source span，但不得把 parse、validation 和 runtime trap 重新合并成一个含糊字符串。
 

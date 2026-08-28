@@ -148,6 +148,8 @@ The current experimental instruction contract is documented in
 [`docs/instruction-set.md`](docs/instruction-set.md).
 Typed validation and trap boundaries are specified in
 [`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
+The current error phases and optional VM snapshot API are documented in
+[`docs/diagnostics.md`](docs/diagnostics.md).
 
 ### License
 

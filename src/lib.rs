@@ -16,4 +16,6 @@ pub use validator::{
   trace_validation, validate_program, FunctionValidationTrace, ValidationControlKind, ValidationControlState, ValidationError,
   ValidationStep, ValidationType,
 };
-pub use vm::{func::CalxFunc, instr::CalxInstr, instr::CALX_INSTR_EDITION, CalxImportsDict, CalxVM};
+pub use vm::{
+  frame::CalxFrame, func::CalxFunc, instr::CalxInstr, instr::CALX_INSTR_EDITION, CalxError, CalxErrorSnapshot, CalxImportsDict, CalxVM,
+};

@@ -43,13 +43,15 @@ Calx 不是 WebAssembly 的兼容实现，也不以生产部署为目标。它�
 - `return`、不可达代码、循环结果、多返回值和分支目标的栈规则还不完整；
 - CLI 暴露的 binary emit/eval 选项尚未实现，格式也没有 magic/version/兼容策略；
 - 自动测试目前只有 1 个 parser test，demos 主要验证“能运行”，缺少结果断言、负向验证和 trap 测试；
-- 严格 Clippy 当前被 `CalxError` 的大 `Err` 类型阻塞，已有 issue #21 跟踪，不应夹带在无关优化中。
+- `CalxError` 的大型 inline `Err` payload 曾阻塞严格 Clippy；#21 已改为按需 boxed snapshot，后续需防止该 API 再次膨胀。
 
 当前开发分支已完成第一批 M0 止血：修正 `local.tee`、`global.set`、`if` 分支栈恢复和嵌套 label 查找；整数 wrapping/trap 行为已固定；guest `unreachable`/`quit` 不再 panic 或终止宿主；未定义指令在 parser 入口明确拒绝。具体契约见 [`instruction-set.md`](instruction-set.md)。
 
 M1 第一阶段已实现：独立 typed operand/control stack validator 在 lowering 前运行，已知类型错误提前返回 `ValidationError`；无类型 local/global/import 使用显式 `Dynamic` 边界。设计见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
 
 M2 第一阶段已实现：`calx check` 可只解析和验证，`calx explain` 可观察 folded Cirru、展开 syntax、逐指令类型/控制栈变化和 lowering 结果。用法见 [`tutorials/check-and-explain.md`](tutorials/check-and-explain.md)。
+
+M0 错误布局债务 #21 已完成：`CalxError` 缩小为 message 与可选 boxed snapshot，宿主错误不再携带伪 VM 状态，严格 Clippy 可作为常规门禁。错误阶段与兼容性见 [`diagnostics.md`](diagnostics.md)。
 
 ## 3. 目标架构
 
@@ -83,7 +85,7 @@ VM events + result/trap
 - 修正 `local.tee`、`global.set`、真假判断、栈下溢、除零、shift、算术溢出等已知问题；
 - 将 `Unreachable` 定义为 trap，将 `Quit` 限制在 CLI 边界，库执行不得直接 `process::exit`；
 - 未实现指令在 parser/validator 阶段明确拒绝，或者完整实现后再开放；
-- 把 `CalxError` 拆为轻量的错误种类、源位置、调用栈摘要和按需 VM snapshot；与 issue #21 一起评估公开 API 兼容性；
+- 已把 `CalxError` 改为轻量 message 与按需 VM snapshot；稳定错误种类、源位置和调用栈摘要继续按 diagnostic RFC 演进；
 - 将 demos 变成可断言的集成测试，添加每条指令的成功、类型错误、越界和 trap 用例；
 - CI 固定执行 `cargo fmt --check`、`cargo test`、demos/集成测试和 Clippy；nightly 仅在确有教学或诊断价值时保留；
 - 保留 crates.io 无 lockfile 构建检查，避免 parser 宽松 semver 再次破坏已发布 crate。
@@ -204,7 +206,7 @@ issue 与 PR 标题、正文统一使用中英双语。文章和 RFC 可以只�
 13. `rfc: 设计最小线性内存实验 / design a minimal linear-memory experiment`
 14. `rfc: 设计版本化 Calx binary container / design a versioned Calx binary container`
 
-现有 `#21 perf: 评估 CalxError 大返回类型 / evaluate large CalxError returns` 保留，并放入 M0；它应与 trap/diagnostic 结构设计协调，但不要把不相关的 VM 微优化并入同一 PR。
+`#21 perf: 评估 CalxError 大返回类型 / evaluate large CalxError returns` 已在 M0 完成：大型 VM 状态移入可选 boxed snapshot，严格 Clippy 恢复为门禁；该改动没有夹带不相关的 VM 微优化。
 
 ## 6. 双语 issue 与 PR 规范
 
