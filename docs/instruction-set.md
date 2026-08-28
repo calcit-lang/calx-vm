@@ -71,7 +71,7 @@ Cirru/guest 程序不得触发以下宿主行为：
 - `std::process::exit`；
 - Debug/Release 不一致的算术溢出。
 
-当前 `CalxError` 仍是包含 VM snapshot 的过渡结构。后续 RFC 会把 parse error、validation error、trap 和 host error 分开，并增加稳定的错误码及源位置。
+运行期 `CalxError` 是轻量 message 与可选 boxed `CalxErrorSnapshot`：VM 内 trap 按需保留 stack/frame/globals，宿主 `new_raw` 错误不伪造 VM 状态。parse、validation 和 runtime error 已分阶段返回；稳定错误码、trap kind 与 source span 仍待后续设计。详见 [`diagnostics.md`](diagnostics.md)。
 
 当前 `ValidationError` 已与运行期 `CalxError` 分离，定位到 function 和扁平 syntax index。验证算法及 `Dynamic` 的保证边界见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use calx_vm::{parse_function, Calx, CalxFunc, CalxVM};
+use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxVM};
 use cirru_parser::{parse, Cirru};
 
 fn parse_program(source: &str) -> Result<Vec<CalxFunc>, String> {
@@ -232,4 +232,24 @@ fn missing_main_is_a_setup_error_instead_of_a_constructor_panic() {
   let mut vm = CalxVM::new(vec![], vec![], HashMap::new());
   let error = vm.setup_top_frame().expect_err("missing main must be rejected");
   assert_eq!(error, "main function is required");
+}
+
+#[test]
+fn calx_error_keeps_optional_vm_state_out_of_the_result_payload() -> Result<(), String> {
+  assert!(std::mem::size_of::<CalxError>() <= 4 * std::mem::size_of::<usize>());
+
+  let host_error = CalxError::new_raw("host failure".to_string());
+  assert!(host_error.snapshot.is_none());
+  assert_eq!(host_error.to_string(), "host failure");
+
+  let vm_error = prepare_vm(
+    r#"fn main ()
+  unreachable"#,
+  )?
+  .run(vec![])
+  .expect_err("runtime traps must retain a VM snapshot");
+  assert_eq!(vm_error.top_frame().map(|frame| frame.name.as_ref()), Some("main"));
+  assert_eq!(vm_error.stack(), Some([].as_slice()));
+  assert_eq!(vm_error.globals(), Some([].as_slice()));
+  Ok(())
 }
