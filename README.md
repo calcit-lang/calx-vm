@@ -4,6 +4,14 @@
 
 ### Usages
 
+Version 0.2.1 includes the parser ownership compatibility fixes and VM
+allocation/lookup improvements accumulated on `main` after 0.2.0. Native
+Calcit bindings should use this stable crate version instead of a git hash.
+
+0.2.1 包含 0.2.0 之后在 `main` 积累的 parser ownership 兼容修复和 VM
+allocation/lookup 优化。Calcit native binding 应使用稳定 crate 版本，不要引用
+git hash。
+
 ```bash
 cargo install calx-vm
 calx hello.cirru
