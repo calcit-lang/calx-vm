@@ -58,17 +58,20 @@ impl FromStr for Calx {
 }
 
 impl Calx {
+  pub fn value_type(&self) -> CalxType {
+    match self {
+      Calx::Nil => CalxType::Nil,
+      Calx::Bool(_) => CalxType::Bool,
+      Calx::I64(_) => CalxType::I64,
+      Calx::F64(_) => CalxType::F64,
+      Calx::Str(_) => CalxType::Str,
+      Calx::List(_) => CalxType::List,
+    }
+  }
+
   // for runtime type checking
   pub fn typed_as(&self, t: CalxType) -> bool {
-    match self {
-      Calx::Nil => t == CalxType::Nil,
-      Calx::Bool(_) => t == CalxType::Bool,
-      Calx::I64(_) => t == CalxType::I64,
-      Calx::F64(_) => t == CalxType::F64,
-      Calx::Str(_) => t == CalxType::Str,
-      Calx::List(_) => t == CalxType::List,
-      // Calx::Link(_, _, _) => t == CalxType::Link,
-    }
+    self.value_type() == t
   }
 
   pub fn truthy(&self) -> bool {

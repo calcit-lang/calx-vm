@@ -136,6 +136,8 @@ The teaching, validation, and Calcit compilation roadmap is maintained in
 [`docs/roadmap.md`](docs/roadmap.md). 路线图正文以中文维护，issue 与 PR 使用中英双语。
 The current experimental instruction contract is documented in
 [`docs/instruction-set.md`](docs/instruction-set.md).
+Typed validation and trap boundaries are specified in
+[`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
 
 ### License
 

@@ -75,10 +75,14 @@ pub enum CalxInstr {
   Not,
   /// Jump to index
   Jmp(usize),
+  /// Branch to index, preserving `arity` values above the target frame base
+  Branch { target: usize, base: usize, arity: usize },
   /// Jump by offset
   JmpOffset(i32),
   /// Jump to index if top value is true
   JmpIf(usize),
+  /// Conditional branch with target-frame stack cleanup
+  BranchIf { target: usize, base: usize, arity: usize },
   /// Jump by offset if top value is true
   JmpOffsetIf(i32),
   /// pop and println current value
@@ -216,8 +220,10 @@ impl CalxInstr {
       CalxInstr::Not => (1, 1),
       // control stuctures
       CalxInstr::Jmp(_) => (0, 0),
+      CalxInstr::Branch { .. } => (0, 0),
       CalxInstr::JmpOffset(_) => (0, 0),
       CalxInstr::JmpIf(_) => (1, 0),
+      CalxInstr::BranchIf { .. } => (1, 0),
       CalxInstr::JmpOffsetIf(_) => (1, 0),
       CalxInstr::Echo => (1, 0),
       CalxInstr::Call(_) => (0, 0),       // TODO
@@ -236,4 +242,4 @@ impl CalxInstr {
 
 /// TODO not sure whether bincode remains compatible after new instruction added
 /// use string for some semantics
-pub const CALX_INSTR_EDITION: &str = "0.2";
+pub const CALX_INSTR_EDITION: &str = "0.3";

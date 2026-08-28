@@ -34,18 +34,42 @@ impl BlockData {
         params_types,
         ret_types,
         ..
-      } => *initial_stack_size - params_types.len() + ret_types.len(),
+      } => initial_stack_size.saturating_sub(params_types.len()) + ret_types.len(),
       BlockData::Loop {
         initial_stack_size,
         params_types,
         ret_types,
         ..
-      } => *initial_stack_size - params_types.len() + ret_types.len(),
+      } => initial_stack_size.saturating_sub(params_types.len()) + ret_types.len(),
       BlockData::If {
         initial_stack_size,
         ret_types,
         ..
-      } => *initial_stack_size - 1 + ret_types.len(),
+      } => initial_stack_size.saturating_sub(1) + ret_types.len(),
+    }
+  }
+
+  pub fn branch_base(&self) -> usize {
+    match self {
+      BlockData::Block {
+        initial_stack_size,
+        params_types,
+        ..
+      }
+      | BlockData::Loop {
+        initial_stack_size,
+        params_types,
+        ..
+      } => initial_stack_size.saturating_sub(params_types.len()),
+      BlockData::If { initial_stack_size, .. } => initial_stack_size.saturating_sub(1),
+    }
+  }
+
+  pub fn branch_arity(&self) -> usize {
+    match self {
+      BlockData::Block { ret_types, .. } => ret_types.len(),
+      BlockData::Loop { params_types, .. } => params_types.len(),
+      BlockData::If { ret_types, .. } => ret_types.len(),
     }
   }
 }
@@ -62,14 +86,6 @@ impl BlockStack {
 
   pub fn push(&mut self, block: BlockData) {
     self.stack.push(block);
-  }
-
-  pub fn is_empty(&self) -> bool {
-    self.stack.is_empty()
-  }
-
-  pub fn len(&self) -> usize {
-    self.stack.len()
   }
 
   /// expected a `If` result, return error otherwise

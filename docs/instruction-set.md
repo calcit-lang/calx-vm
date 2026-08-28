@@ -39,14 +39,14 @@
 | 整数比较 | `i.eq/ne/lt/le/gt/ge` | 支持 | 两个 `i64`，产生 `bool` |
 | 重载数值 | `add`, `mul` | 部分支持 | 同类型 `i64` 或 `f64`；整数采用 wrapping 语义 |
 | 浮点 | `div`, `neg` | 部分支持 | 仅 `f64`；沿用 IEEE 754/Rust 基础运算结果 |
-| 结构化控制 | `block`, `loop`, `if`, `br`, `br-if` | 部分支持 | 已检查栈高度；typed stack 和不可达栈多态待实现 |
-| 函数 | `call`, `return-call`, `return` | 部分支持 | 按函数索引执行；签名目前只做数量检查 |
+| 结构化控制 | `block`, `loop`, `if`, `br`, `br-if` | 支持 | typed operand/control stack；label 参数/结果与不可达栈多态在 lowering 前验证 |
+| 函数 | `call`, `return-call`, `return` | 支持 | 参数与返回类型在 lowering 前验证；动态 local/import 仍可能保留 runtime 检查 |
 | 宿主 | `call-import` | 部分支持 | import 只声明参数数量，固定返回一个 `Calx` 值 |
 | trap | `unreachable` | 支持 | 返回 VM trap，不触发 Rust panic |
 | 宿主安全 | `quit` | 支持 | 返回 VM trap，不允许 guest 直接终止宿主进程 |
 | 诊断 | `assert`, `echo`, `inspect` | 支持 | 教学/调试扩展，不对应 Wasm core 指令 |
 | 空操作 | `nop` | 支持 | 无状态变化 |
-| lowered control | `Jmp*` | 内部 | lowering 产物，不开放为 Cirru 指令 |
+| lowered control | `Jmp*`, `Branch*` | 内部 | lowering 产物；`Branch*` 携带目标栈 base/arity 并清理中间值，不开放为 Cirru 指令 |
 | 容器 | `new-list`, `list.get`, `list.set` | 保留 | list mutation/ownership 语义未定义 |
 | link | `new-link` | 保留 | 运行时值尚不存在 |
 | 布尔 | `and`, `or`, `not` | 保留 | 操作数类型和短路语义尚未定义 |
@@ -72,6 +72,8 @@ Cirru/guest 程序不得触发以下宿主行为：
 - Debug/Release 不一致的算术溢出。
 
 当前 `CalxError` 仍是包含 VM snapshot 的过渡结构。后续 RFC 会把 parse error、validation error、trap 和 host error 分开，并增加稳定的错误码及源位置。
+
+当前 `ValidationError` 已与运行期 `CalxError` 分离，定位到 function 和扁平 syntax index。验证算法及 `Dynamic` 的保证边界见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
 
 ## 暂不开放的接口
 
