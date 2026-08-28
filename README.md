@@ -15,7 +15,16 @@ git hash。
 ```bash
 cargo install calx-vm
 calx hello.cirru
+calx run hello.cirru
+calx check hello.cirru
+calx explain hello.cirru
 ```
+
+The first form remains a compatibility alias for `calx run`. `check` parses and
+validates without lowering or executing guest code. `explain` shows folded
+Cirru, expanded syntax, typed operand/control-stack transitions, and lowered
+instructions; use `--function NAME` to focus on one function. 中文教程见
+[`docs/tutorials/check-and-explain.md`](docs/tutorials/check-and-explain.md)。
 
 it starts with a `main` function:
 
@@ -47,9 +56,9 @@ $ calx demos/if.cirru -s
 [calx] start preprocessing
 loaded fn: CalxFunc main (-> )
   00 Const(I64(1))
-  01 Call("demo")
+  01 Call(1)
   02 Const(I64(0))
-  03 Call("demo")
+  03 Call(1)
 
 loaded fn: CalxFunc demo (I64 -> )
   local_names: 0_$a .
@@ -121,11 +130,12 @@ Highly inspired by:
 
 ### Preprocess
 
-Before Calx running the instructions, Calx performs preprocessing to them. There are several tasks:
+Before Calx runs instructions, it parses, validates, and lowers the program:
 
-- `block` and `loop` are expanded since there are `block-end` instructions
-- `br` and `br-if` also expanded to `jmp` and `jmp-if` instructions, internally
-- stack size is checked to ensure it's consistent among branches, and tidied up at function end
+- folded Cirru is expanded into flat `CalxSyntax`;
+- a typed operand/control-stack validator checks functions and structured control flow;
+- `block`, `loop`, `if`, `br`, and `br-if` are lowered to executable internal instructions;
+- branch and return instructions preserve declared results while discarding intermediate stack values.
 - local variables are renamed to indexes
 
 The codebase would be updated as I'm learning more about WASM.

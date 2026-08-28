@@ -12,5 +12,8 @@ pub use calx::{Calx, CalxType};
 pub use parser::{extract_nested, parse_function};
 pub use syntax::CalxSyntax;
 pub use util::log_calx_value;
-pub use validator::{validate_program, ValidationError, ValidationType};
+pub use validator::{
+  trace_validation, validate_program, FunctionValidationTrace, ValidationControlKind, ValidationControlState, ValidationError,
+  ValidationStep, ValidationType,
+};
 pub use vm::{func::CalxFunc, instr::CalxInstr, instr::CALX_INSTR_EDITION, CalxImportsDict, CalxVM};

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use calx_vm::{parse_function, validate_program, CalxFunc, CalxVM};
+use calx_vm::{parse_function, trace_validation, validate_program, CalxFunc, CalxVM, ValidationControlKind, ValidationType};
 use cirru_parser::{parse, Cirru};
 
 fn parse_program(source: &str) -> Result<Vec<CalxFunc>, String> {
@@ -162,5 +162,25 @@ fn dynamic_local_defers_unknown_type_to_runtime() -> Result<(), String> {
   vm.setup_top_frame()?;
   let error = vm.run(vec![]).expect_err("Dynamic must preserve the runtime type check");
   assert!(error.message.contains("expected 2 integers to add"), "{error}");
+  Ok(())
+}
+
+#[test]
+fn validation_trace_exposes_operand_and_control_transitions() -> Result<(), String> {
+  let funcs = parse_program(
+    r#"fn main (-> i64)
+  block (-> i64)
+    const 7"#,
+  )?;
+  let traces = trace_validation(&funcs, &[], &HashMap::new()).map_err(|e| e.to_string())?;
+  let steps = &traces[0].steps;
+
+  assert_eq!(steps.len(), 3);
+  assert_eq!(steps[1].operand_stack_before, vec![]);
+  assert_eq!(steps[1].operand_stack_after, vec![ValidationType::Known(calx_vm::CalxType::I64)]);
+  assert_eq!(steps[0].control_stack_before.len(), 1);
+  assert_eq!(steps[0].control_stack_after.len(), 2);
+  assert_eq!(steps[0].control_stack_after[1].kind, ValidationControlKind::Block);
+  assert_eq!(steps[2].control_stack_after.len(), 1);
   Ok(())
 }

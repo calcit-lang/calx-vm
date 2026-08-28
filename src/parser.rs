@@ -299,10 +299,6 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
   }
   chunk.push(CalxSyntax::BlockEnd(looped));
 
-  if looped && !ret_types.is_empty() {
-    println!("return types for loop actuall not checked: {ret_types:?}");
-  }
-
   chunk.insert(
     0,
     CalxSyntax::Block {
