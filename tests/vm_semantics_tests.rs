@@ -59,7 +59,7 @@ fn global_set_accepts_valid_index_and_rejects_invalid_index() -> Result<(), Stri
   global.set 0"#,
   )
   .expect_err("global.set must reject an index that has not been allocated");
-  assert!(error.contains("out of bound in global.set 0"), "{error}");
+  assert!(error.contains("global index 0 is not allocated"), "{error}");
   Ok(())
 }
 
@@ -154,6 +154,67 @@ fn explicit_void_return_produces_nil() -> Result<(), String> {
   return"#,
   )?;
   assert_eq!(result, Calx::Nil);
+  Ok(())
+}
+
+#[test]
+fn branch_and_return_discard_intermediate_values() -> Result<(), String> {
+  let branch_result = run(
+    r#"fn main (-> i64)
+  block (-> i64)
+    const 99
+    const 7
+    br 0
+  return"#,
+  )?;
+  assert_eq!(branch_result, Calx::I64(7));
+
+  let conditional_branch_result = run(
+    r#"fn main (-> i64)
+  local.new $result
+  const 7
+  local.set $result
+  block (-> i64)
+    const 99
+    local.get $result
+    const true
+    br-if 0
+    drop
+    drop
+    local.get $result
+  return"#,
+  )?;
+  assert_eq!(conditional_branch_result, Calx::I64(7));
+
+  let return_result = run(
+    r#"fn main (-> i64)
+  const 99
+  const 7
+  return"#,
+  )?;
+  assert_eq!(return_result, Calx::I64(7));
+
+  let tail_call_result = run(
+    r#"fn identity (i64 -> i64)
+  local.get 0
+  return
+
+fn main (-> i64)
+  const 99
+  const 7
+  return-call identity"#,
+  )?;
+  assert_eq!(tail_call_result, Calx::I64(7));
+  Ok(())
+}
+
+#[test]
+fn function_fallthrough_returns_declared_result() -> Result<(), String> {
+  let result = run(
+    r#"fn main (-> i64)
+  const 7"#,
+  )?;
+  assert_eq!(result, Calx::I64(7));
   Ok(())
 }
 

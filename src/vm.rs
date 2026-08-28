@@ -138,7 +138,7 @@ impl CalxVM {
   pub fn step(&mut self) -> Result<bool, CalxError> {
     if self.top_frame.pointer >= self.top_frame.instrs.len() {
       // println!("status {:?} {}", self.stack, self.top_frame);
-      self.check_func_return(self.top_frame.ret_types.len())?;
+      self.collect_return_values(self.top_frame.ret_types.len())?;
 
       match self.frames.pop() {
         Some(v) => {
@@ -163,6 +163,12 @@ impl CalxVM {
         self.top_frame.pointer = *line;
         return Ok(true); // point reset, goto next loop
       }
+      Branch { target, base, arity } => {
+        let (target, base, arity) = (*target, *base, *arity);
+        self.apply_branch_stack(base, arity)?;
+        self.top_frame.pointer = target;
+        return Ok(true);
+      }
       JmpOffset(l) => {
         self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
         return Ok(true); // point reset, goto next loop
@@ -173,6 +179,15 @@ impl CalxVM {
         if v.truthy() {
           self.top_frame.pointer = line;
           return Ok(true); // point reset, goto next loop
+        }
+      }
+      BranchIf { target, base, arity } => {
+        let (target, base, arity) = (*target, *base, *arity);
+        let condition = self.stack_pop()?;
+        if condition.truthy() {
+          self.apply_branch_stack(base, arity)?;
+          self.top_frame.pointer = target;
+          return Ok(true);
         }
       }
       JmpOffsetIf(l) => {
@@ -222,7 +237,7 @@ impl CalxVM {
 
         let ret_size = self.top_frame.ret_types.len();
 
-        self.check_func_return(ret_size)?;
+        self.collect_return_values(ret_size)?;
 
         if self.frames.is_empty() {
           // top frame return, just return value
@@ -454,17 +469,10 @@ impl CalxVM {
         let n = f.params_types.len();
         self.check_before_pop_n(n)?;
 
-        let next_size = self.stack.len() - n;
-        let locals = self.stack.split_off(next_size);
-
-        let prev_frame = &self.top_frame;
-        if prev_frame.initial_stack_size != next_size {
-          return Err(self.gen_err(format!(
-            "expected constant initial stack size: {}, got: {}",
-            prev_frame.initial_stack_size,
-            self.stack.len()
-          )));
-        }
+        let args_at = self.stack.len() - n;
+        let locals = self.stack.split_off(args_at);
+        let next_size = self.top_frame.initial_stack_size;
+        self.stack.truncate(next_size);
         self.top_frame = CalxFrame {
           name: f_name,
           initial_stack_size: next_size,
@@ -529,6 +537,8 @@ impl CalxVM {
   }
 
   pub fn preprocess(&mut self, verbose: bool) -> Result<(), String> {
+    crate::validate_program(&self.funcs, &self.globals, &self.imports).map_err(|e| e.to_string())?;
+
     for i in 0..self.funcs.len() {
       let mut stack_size = 0;
       let mut ops: Vec<CalxInstr> = vec![];
@@ -558,9 +568,6 @@ impl CalxVM {
             from,
             to,
           } => {
-            if stack_size < params_types.len() {
-              return Err(format!("insufficient params {stack_size} for block: {params_types:?}"));
-            }
             if *looped {
               blocks_track.push(BlockData::Loop {
                 params_types: params_types.clone(),
@@ -580,109 +587,70 @@ impl CalxVM {
             ops.push(CalxInstr::Nop);
           }
           CalxSyntax::Br(size) => {
-            if *size > blocks_track.len() {
-              return Err(format!("br {size} too large"));
-            }
-
             let target_block = blocks_track.peek_block_level(*size)?;
-            let expected_size = target_block.expected_finish_size();
-            if stack_size != expected_size {
-              return Err(format!("br({size}) expected size {expected_size}, got {stack_size}"));
-            }
-
             match target_block {
-              BlockData::Loop { from, .. } => ops.push(CalxInstr::Jmp(*from)),
-              BlockData::Block { to, .. } => ops.push(CalxInstr::Jmp(*to)),
+              BlockData::Loop { from, .. } => ops.push(CalxInstr::Branch {
+                target: *from,
+                base: target_block.branch_base(),
+                arity: target_block.branch_arity(),
+              }),
+              BlockData::Block { to, .. } => ops.push(CalxInstr::Branch {
+                target: *to,
+                base: target_block.branch_base(),
+                arity: target_block.branch_arity(),
+              }),
               _ => unreachable!("br target must be block or loop"),
             }
           }
           CalxSyntax::BrIf(size) => {
-            if blocks_track.is_empty() {
-              return Err(format!("cannot branch with no blocks, {size}"));
-            }
-            if *size > blocks_track.len() {
-              return Err(format!("br {size} too large"));
-            }
-
             let target_block = blocks_track.peek_block_level(*size)?;
 
             match target_block {
-              BlockData::Loop { from, .. } => ops.push(CalxInstr::JmpIf(*from)),
-              BlockData::Block { to, .. } => ops.push(CalxInstr::JmpIf(*to)),
+              BlockData::Loop { from, .. } => ops.push(CalxInstr::BranchIf {
+                target: *from,
+                base: target_block.branch_base(),
+                arity: target_block.branch_arity(),
+              }),
+              BlockData::Block { to, .. } => ops.push(CalxInstr::BranchIf {
+                target: *to,
+                base: target_block.branch_base(),
+                arity: target_block.branch_arity(),
+              }),
               _ => unreachable!("br target must be block or loop"),
             }
-            stack_size = stack_size
-              .checked_sub(1)
-              .ok_or_else(|| format!("br-if {size} requires a condition value"))?;
-
-            let expected_size = target_block.expected_finish_size();
-            if stack_size != expected_size {
-              return Err(format!("brIf({size}) expected size {expected_size}, got {stack_size}"));
-            }
+            stack_size = stack_size.saturating_sub(1);
           }
-          CalxSyntax::BlockEnd(looped) => {
-            // println!("checking: {:?}", blocks_track);
-            if blocks_track.is_empty() {
-              return Err(format!("invalid block end, {blocks_track:?}"));
-            }
-
+          CalxSyntax::BlockEnd(_) => {
             let prev_block = blocks_track.pop_block()?;
-            if *looped {
-              // nothing, branched during runtime
-            } else if stack_size != prev_block.expected_finish_size() {
-              return Err(format!("size mismatch for block end: {stack_size} {prev_block:?}"));
-            }
-
+            stack_size = prev_block.expected_finish_size();
             ops.push(CalxInstr::Nop)
           }
           CalxSyntax::Call(f_name) => match self.find_func_idx(f_name) {
             Some((idx, f)) => {
-              if stack_size < f.params_types.len() {
-                return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
-              }
-              stack_size = stack_size - f.params_types.len() + f.ret_types.len();
+              stack_size = stack_size.saturating_sub(f.params_types.len()) + f.ret_types.len();
               ops.push(CalxInstr::Call(idx));
             }
             None => return Err(format!("cannot find function named: {f_name}")),
           },
           CalxSyntax::ReturnCall(f_name) => match self.find_func_idx(f_name) {
-            Some((idx, f)) => {
-              if stack_size < f.params_types.len() {
-                return Err(format!("insufficient size to call: {} {:?}", stack_size, f.params_types));
-              }
-              stack_size = stack_size - f.params_types.len() + f.ret_types.len();
+            Some((idx, _f)) => {
+              stack_size = 0;
               ops.push(CalxInstr::ReturnCall(idx))
             }
             None => return Err(format!("cannot find function named: {f_name}")),
           },
           CalxSyntax::CallImport(f_name) => match &self.imports.get(f_name) {
             Some((_f, size)) => {
-              if stack_size < *size {
-                return Err(format!("insufficient size to call import: {stack_size} {size:?}"));
-              }
-              stack_size = stack_size - size + 1;
+              stack_size = stack_size.saturating_sub(*size) + 1;
               ops.push(CalxInstr::CallImport(f_name.to_owned()))
             }
             None => return Err(format!("missing imported function {f_name}")),
           },
           CalxSyntax::Return => {
-            let ret_size = self.funcs[i].ret_types.len();
-            stack_size = stack_size
-              .checked_sub(ret_size)
-              .ok_or_else(|| format!("insufficient return values in {}", self.funcs[i].name))?;
-            if stack_size != 0 {
-              return Err(format!(
-                "invalid return size {} for {:?} in {}",
-                stack_size, self.funcs[i].ret_types, self.funcs[i].name
-              ));
-            }
+            stack_size = 0;
             ops.push(CalxInstr::Return);
           }
           CalxSyntax::If { ret_types, else_at, to } => {
-            if stack_size < 1 {
-              return Err(format!("insufficient stack {stack_size} to branch"));
-            }
-
             blocks_track.push(BlockData::If {
               ret_types: ret_types.clone(),
               else_to: *else_at,
@@ -690,40 +658,24 @@ impl CalxVM {
               initial_stack_size: stack_size,
             });
 
-            stack_size -= 1;
+            stack_size = stack_size.saturating_sub(1);
             ops.push(CalxInstr::JmpIf(*else_at));
           }
           CalxSyntax::ElseEnd => {
-            if blocks_track.is_empty() {
-              return Err(format!("invalid else end, {blocks_track:?}"));
-            }
-
             let prev_block = blocks_track.peek_if()?;
-
-            if stack_size != prev_block.expected_finish_size() {
-              return Err(format!("size mismatch for else-end: {stack_size} {prev_block:?}"));
-            }
-
             match prev_block {
               BlockData::If {
                 to, initial_stack_size, ..
               } => {
                 ops.push(CalxInstr::Jmp(*to));
-                stack_size = initial_stack_size - 1;
+                stack_size = initial_stack_size.saturating_sub(1);
               }
               _ => unreachable!("end inside if"),
             }
           }
           CalxSyntax::ThenEnd => {
-            if blocks_track.is_empty() {
-              return Err(format!("invalid else end, {blocks_track:?}"));
-            }
-
             let prev_block = blocks_track.pop_if()?;
-            if stack_size != prev_block.expected_finish_size() {
-              return Err(format!("size mismatch for then-end: {stack_size} {prev_block:?}"));
-            }
-
+            stack_size = prev_block.expected_finish_size();
             match prev_block {
               BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to)),
               _ => unreachable!("end inside if"),
@@ -731,25 +683,11 @@ impl CalxVM {
           }
           a => {
             let instr: CalxInstr = a.try_into()?;
-            // checks
             let (params_size, ret_size) = instr.stack_arity();
-            if stack_size < params_size {
-              return Err(format!("insufficient stack {stack_size} to call {a:?} of {params_size}"));
-            }
-            stack_size = stack_size - params_size + ret_size;
-            // println!(
-            //   "  sizes: {:?} {} {} -> {}",
-            //   a, params_size, ret_size, stack_size
-            // );
+            stack_size = stack_size.saturating_sub(params_size) + ret_size;
             ops.push(instr);
           }
         }
-      }
-      if stack_size != 0 {
-        return Err(format!(
-          "invalid final size {} of {:?} in {}",
-          stack_size, self.funcs[i].ret_types, self.funcs[i].name
-        ));
       }
 
       self.funcs[i].instrs = Rc::new(ops);
@@ -759,8 +697,11 @@ impl CalxVM {
   }
 
   #[inline(always)]
-  fn check_func_return(&self, ret_size: usize) -> Result<(), CalxError> {
-    let Some(return_base) = self.stack.len().checked_sub(ret_size) else {
+  // Keep the internal error shape aligned with CalxVM::step until the public
+  // CalxError boxing/API decision tracked in issue #21 is made.
+  #[allow(clippy::result_large_err)]
+  fn collect_return_values(&mut self, ret_size: usize) -> Result<(), CalxError> {
+    let Some(results_at) = self.stack.len().checked_sub(ret_size) else {
       return Err(self.gen_err(format!(
         "stack size {} does not contain {} return values",
         self.stack.len(),
@@ -768,15 +709,41 @@ impl CalxVM {
       )));
     };
 
-    if return_base != self.top_frame.initial_stack_size {
+    if results_at < self.top_frame.initial_stack_size {
       return Err(self.gen_err(format!(
-        "stack size {} does not fit initial size {} plus {:?}",
+        "stack size {} does not contain return values above frame base {} for {:?}",
         self.stack.len(),
         self.top_frame.initial_stack_size,
         self.top_frame.ret_types
       )));
     }
 
+    if results_at > self.top_frame.initial_stack_size {
+      self.stack.drain(self.top_frame.initial_stack_size..results_at);
+    }
+
+    Ok(())
+  }
+
+  #[allow(clippy::result_large_err)]
+  fn apply_branch_stack(&mut self, base: usize, arity: usize) -> Result<(), CalxError> {
+    let absolute_base = self
+      .top_frame
+      .initial_stack_size
+      .checked_add(base)
+      .ok_or_else(|| self.gen_err("branch stack base overflow".to_string()))?;
+    let Some(values_at) = self.stack.len().checked_sub(arity) else {
+      return Err(self.gen_err(format!("branch requires {arity} result value(s)")));
+    };
+    if values_at < absolute_base {
+      return Err(self.gen_err(format!(
+        "branch result values overlap target frame base: values at {values_at}, base {absolute_base}"
+      )));
+    }
+
+    if values_at > absolute_base {
+      self.stack.drain(absolute_base..values_at);
+    }
     Ok(())
   }
 

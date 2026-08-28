@@ -11,8 +11,8 @@ fn sum (($acc i64) ($x i64) -> i64)
   add
   ;; dup
   ;; echo
-  block (->)
-    block (->)
+  block (i64 -> i64)
+    block (i64 -> i64)
       local.get $x
       const 1
       i.le

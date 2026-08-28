@@ -47,6 +47,8 @@ Calx 不是 WebAssembly 的兼容实现，也不以生产部署为目标。它�
 
 当前开发分支已完成第一批 M0 止血：修正 `local.tee`、`global.set`、`if` 分支栈恢复和嵌套 label 查找；整数 wrapping/trap 行为已固定；guest `unreachable`/`quit` 不再 panic 或终止宿主；未定义指令在 parser 入口明确拒绝。具体契约见 [`instruction-set.md`](instruction-set.md)。
 
+M1 第一阶段已实现：独立 typed operand/control stack validator 在 lowering 前运行，已知类型错误提前返回 `ValidationError`；无类型 local/global/import 使用显式 `Dynamic` 边界。设计见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
+
 ## 3. 目标架构
 
 建议明确四层，并让教学工具可以观察每层：

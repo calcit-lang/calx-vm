@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
 
 cargo run -- -s demos/hello.cirru
 cargo run -- -s demos/sum.cirru
