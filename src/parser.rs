@@ -93,10 +93,10 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           }
           "local.tee" => {
             if xs.len() != 2 {
-              return Err(format!("list.tee expected a position, {xs:?}"));
+              return Err(format!("local.tee expected a position, {xs:?}"));
             }
             let idx: usize = parse_local_idx(&xs[1], collector)?;
-            Ok(vec![CalxSyntax::LocalSet(idx)])
+            Ok(vec![CalxSyntax::LocalTee(idx)])
           }
           "local.new" => Ok(vec![CalxSyntax::LocalNew]),
           "global.get" => {
@@ -155,13 +155,9 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
           "mul" => Ok(vec![CalxSyntax::Mul]),
           "div" => Ok(vec![CalxSyntax::Div]),
           "neg" => Ok(vec![CalxSyntax::Neg]),
-          "new-list" => Ok(vec![CalxSyntax::NewList]),
-          "list.get" => Ok(vec![CalxSyntax::ListGet]),
-          "list.set" => Ok(vec![CalxSyntax::ListSet]),
-          "new-link" => Ok(vec![CalxSyntax::NewLink]),
-          // TODO
-          "and" => Ok(vec![CalxSyntax::And]),
-          "or" => Ok(vec![CalxSyntax::Or]),
+          "new-list" | "list.get" | "list.set" | "new-link" | "and" | "or" | "not" => {
+            Err(format!("instruction `{name}` is reserved but not implemented"))
+          }
           "br-if" => {
             if xs.len() != 2 {
               return Err(format!("br-if expected a position, {xs:?}"));

@@ -102,44 +102,13 @@ impl BlockStack {
     }
   }
 
-  pub fn peek_block(&self) -> Result<&BlockData, String> {
-    loop {
-      let b = self.stack.last();
-      match b {
-        Some(v @ BlockData::Block { .. }) => return Ok(v),
-        Some(v @ BlockData::Loop { .. }) => return Ok(v),
-        Some(BlockData::If { .. }) => continue,
-        None => return Err("BlockStack::peek_block: stack is empty".to_string()),
-      }
-    }
-  }
-
   pub fn peek_block_level(&self, level: usize) -> Result<&BlockData, String> {
-    if level == 0 {
-      return self.peek_block();
-    }
-
-    let mut count = 0;
-    loop {
-      let b = self.stack.get(self.stack.len() - 1 - count);
-      match b {
-        Some(v @ BlockData::Block { .. }) => {
-          if count == level {
-            return Ok(v);
-          } else {
-            count += 1;
-          }
-        }
-        Some(v @ BlockData::Loop { .. }) => {
-          if count == level {
-            return Ok(v);
-          } else {
-            count += 1;
-          }
-        }
-        Some(BlockData::If { .. }) => continue,
-        None => return Err("BlockStack::peek_block: stack is empty".to_string()),
-      }
-    }
+    self
+      .stack
+      .iter()
+      .rev()
+      .filter(|b| matches!(b, BlockData::Block { .. } | BlockData::Loop { .. }))
+      .nth(level)
+      .ok_or_else(|| format!("BlockStack::peek_block_level: invalid label depth {level}"))
   }
 }

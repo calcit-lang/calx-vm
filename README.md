@@ -72,10 +72,6 @@ loaded fn: CalxFunc demo (I64 -> )
 [calx] took 67.250µs: Nil
 ```
 
-`--emit-binary filename` for encode functions into a binary file.
-
-`--eval-binary` for reading a binary input file to run.
-
 ### Syntax Sugar
 
 Code of:
@@ -133,6 +129,13 @@ Before Calx running the instructions, Calx performs preprocessing to them. There
 - local variables are renamed to indexes
 
 The codebase would be updated as I'm learning more about WASM.
+
+### Development roadmap / 强化路线图
+
+The teaching, validation, and Calcit compilation roadmap is maintained in
+[`docs/roadmap.md`](docs/roadmap.md). 路线图正文以中文维护，issue 与 PR 使用中英双语。
+The current experimental instruction contract is documented in
+[`docs/instruction-set.md`](docs/instruction-set.md).
 
 ### License
 
