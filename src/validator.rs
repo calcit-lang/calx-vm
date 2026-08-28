@@ -49,6 +49,54 @@ impl fmt::Display for ValidationError {
 
 impl std::error::Error for ValidationError {}
 
+/// Kind of a control frame exposed by a validation trace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValidationControlKind {
+  Function,
+  Block,
+  Loop,
+  If,
+}
+
+/// Observable state of one validation control frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidationControlState {
+  /// Structure represented by this frame.
+  pub kind: ValidationControlKind,
+  /// Operand-stack height below the frame's parameters.
+  pub height: usize,
+  /// Types accepted by a branch to this frame's label.
+  pub label_types: Vec<ValidationType>,
+  /// Whether the current instruction position is statically unreachable.
+  pub unreachable: bool,
+}
+
+/// Validation state immediately before and after one expanded syntax instruction.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidationStep {
+  /// Zero-based index in the function's flattened `CalxSyntax` sequence.
+  pub instruction_index: usize,
+  /// Instruction validated at this step.
+  pub instruction: CalxSyntax,
+  /// Typed operand stack before the instruction.
+  pub operand_stack_before: Vec<ValidationType>,
+  /// Typed operand stack after the instruction.
+  pub operand_stack_after: Vec<ValidationType>,
+  /// Control stack before the instruction, ordered outermost to innermost.
+  pub control_stack_before: Vec<ValidationControlState>,
+  /// Control stack after the instruction, ordered outermost to innermost.
+  pub control_stack_after: Vec<ValidationControlState>,
+}
+
+/// Ordered validation steps for one function.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionValidationTrace {
+  /// Function name.
+  pub function: String,
+  /// One step per expanded syntax instruction.
+  pub steps: Vec<ValidationStep>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ControlKind {
   Function,
@@ -78,9 +126,31 @@ impl ControlFrame {
 
 pub fn validate_program(fns: &[CalxFunc], globals: &[Calx], imports: &CalxImportsDict) -> Result<(), ValidationError> {
   for func in fns {
-    Validator::new(func, fns, globals, imports).validate()?;
+    Validator::new(func, fns, globals, imports, false).validate()?;
   }
   Ok(())
+}
+
+/// Validates a program and records typed operand/control-stack transitions.
+///
+/// Unlike [`validate_program`], this allocates snapshots intended for teaching
+/// tools and should not be used on the interpreter's execution path.
+pub fn trace_validation(
+  fns: &[CalxFunc],
+  globals: &[Calx],
+  imports: &CalxImportsDict,
+) -> Result<Vec<FunctionValidationTrace>, ValidationError> {
+  fns
+    .iter()
+    .map(|func| {
+      Validator::new(func, fns, globals, imports, true)
+        .validate()
+        .map(|steps| FunctionValidationTrace {
+          function: func.name.to_string(),
+          steps,
+        })
+    })
+    .collect()
 }
 
 struct Validator<'a> {
@@ -92,10 +162,11 @@ struct Validator<'a> {
   locals: Vec<ValidationType>,
   globals: Vec<ValidationType>,
   instruction_index: usize,
+  record_trace: bool,
 }
 
 impl<'a> Validator<'a> {
-  fn new(func: &'a CalxFunc, funcs: &'a [CalxFunc], globals: &[Calx], imports: &'a CalxImportsDict) -> Self {
+  fn new(func: &'a CalxFunc, funcs: &'a [CalxFunc], globals: &[Calx], imports: &'a CalxImportsDict, record_trace: bool) -> Self {
     Self {
       func,
       funcs,
@@ -105,23 +176,55 @@ impl<'a> Validator<'a> {
       locals: func.params_types.iter().copied().map(ValidationType::Known).collect(),
       globals: globals.iter().map(|v| ValidationType::Known(v.value_type())).collect(),
       instruction_index: 0,
+      record_trace,
     }
   }
 
-  fn validate(mut self) -> Result<(), ValidationError> {
+  fn validate(mut self) -> Result<Vec<ValidationStep>, ValidationError> {
+    let mut steps = vec![];
     let returns = self.known_types(&self.func.ret_types);
     self.push_control(ControlKind::Function, vec![], returns)?;
 
     for (index, syntax) in self.func.syntax.iter().enumerate() {
       self.instruction_index = index;
+      let operand_stack_before = self.record_trace.then(|| self.operand_stack.clone());
+      let control_stack_before = self.record_trace.then(|| self.control_state());
       self.validate_instruction(syntax)?;
+      if let (Some(operand_stack_before), Some(control_stack_before)) = (operand_stack_before, control_stack_before) {
+        steps.push(ValidationStep {
+          instruction_index: index,
+          instruction: syntax.clone(),
+          operand_stack_before,
+          operand_stack_after: self.operand_stack.clone(),
+          control_stack_before,
+          control_stack_after: self.control_state(),
+        });
+      }
     }
 
     if self.control_stack.len() != 1 {
       return Err(self.error(format!("{} unclosed control frame(s)", self.control_stack.len() - 1)));
     }
     self.end_control(ControlKind::Function)?;
-    Ok(())
+    Ok(steps)
+  }
+
+  fn control_state(&self) -> Vec<ValidationControlState> {
+    self
+      .control_stack
+      .iter()
+      .map(|frame| ValidationControlState {
+        kind: match frame.kind {
+          ControlKind::Function => ValidationControlKind::Function,
+          ControlKind::Block => ValidationControlKind::Block,
+          ControlKind::Loop => ValidationControlKind::Loop,
+          ControlKind::If { .. } => ValidationControlKind::If,
+        },
+        height: frame.height,
+        label_types: frame.label_types().to_vec(),
+        unreachable: frame.unreachable,
+      })
+      .collect()
   }
 
   fn validate_instruction(&mut self, syntax: &CalxSyntax) -> Result<(), ValidationError> {

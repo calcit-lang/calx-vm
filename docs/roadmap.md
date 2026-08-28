@@ -49,6 +49,8 @@ Calx 不是 WebAssembly 的兼容实现，也不以生产部署为目标。它�
 
 M1 第一阶段已实现：独立 typed operand/control stack validator 在 lowering 前运行，已知类型错误提前返回 `ValidationError`；无类型 local/global/import 使用显式 `Dynamic` 边界。设计见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
 
+M2 第一阶段已实现：`calx check` 可只解析和验证，`calx explain` 可观察 folded Cirru、展开 syntax、逐指令类型/控制栈变化和 lowering 结果。用法见 [`tutorials/check-and-explain.md`](tutorials/check-and-explain.md)。
+
 ## 3. 目标架构
 
 建议明确四层，并让教学工具可以观察每层：
