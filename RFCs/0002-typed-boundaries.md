@@ -1,6 +1,6 @@
 # RFC 0002：类型化 Local、Global 与 Import 边界 / Typed Local, Global, and Import Boundaries
 
-- 状态：提议 / Proposed
+- 状态：已实现 / Implemented
 - 目标版本：0.3
 - 关联 Issue：#31
 - 前置：RFC 0001、#30 source-aware diagnostics
@@ -19,11 +19,11 @@ an explicit marker for legacy source and embedding APIs, but is rejected from
 strict modules. The VM also stops using `nil` as a missing, uninitialized, or
 void sentinel.
 
-本 RFC 只固定设计。实现按不超过三个 PR 拆分：
+本 RFC 的实现按三个 PR 拆分：
 
 1. RFC 与文档索引；
 2. program representation、Rust API 与 parser；
-3. validator、runtime、CLI 与兼容回归。
+3. validator、`ValidatedProgram`、runtime、CLI 与兼容回归。
 
 ## 背景与问题
 
@@ -328,10 +328,9 @@ strict conversion。
 
 ### Profile 选择
 
-- `CalxVM::from_program`、typed builder 以及实现完成后的 `calx run/check/explain` 默认走
-  strict profile；
-- 旧源码必须通过显式 `--legacy` CLI mode 或 `CalxVM::new` / `parse_function` API 运行；
-- 兼容的一参数 CLI alias 可继续识别旧调用，但必须向 stderr 打印 legacy/Dynamic 摘要；
+- 含 typed local/global/import declaration 的 `calx run/check/explain` 走 strict profile；
+- 旧源码继续通过独立 legacy CLI adapter 或 `CalxVM::new` / `parse_function` API 运行；
+- 兼容的一参数 CLI alias 继续识别旧调用；
 - strict profile 不做“发现 Dynamic 后自动重试 legacy”的 fallback；这类 fallback 会掩盖
   性能退化并让 CI 无法阻止新的动态边界；
 - implementation PR 在切换 CLI 默认值前先迁移仓库 demos，因此普通示例继续走 strict path。
@@ -346,7 +345,7 @@ Cirru declarations + functions
 CalxProgram
   -> strict declaration validation (zero Dynamic, zero nil-typed boundary)
   -> function validation
-validated CalxProgram + host bindings
+ValidatedProgram + host bindings
   -> binding signature validation
   -> globals/frame instantiation
 CalxInstr
@@ -396,11 +395,11 @@ legacy validation 使用独立 context，把旧 runtime globals 和 tuple import
 - 每个 declared import 恰有一个 binding；
 - params/result contract 与 declaration 完全相等；
 - `Void` callback 只匹配无 result declaration，`Value` callback 只匹配一个 result；
-- host 可以提供 module 未使用的额外 bindings，它们不进入 guest import context；
+- host 不得提供 module 未声明的额外 bindings，保持 capability boundary 可审计；
 - strict `from_program` 不从 bindings 猜测缺失的 source declaration，undeclared
   `call-import` 在 module validation 阶段失败；
 - 只有旧 `validate_program` / `CalxVM::new` compatibility path 才从
-  `CalxImportsDict` 的 arity 合成 Dynamic contracts。CLI 的未迁移 demos 暂走该路径。
+  `CalxImportsDict` 的 arity 合成 Dynamic contracts。未迁移的 legacy demos 继续走该路径。
 
 callback 执行前仍检查实参数量和所有参数的运行值类型，value callback 返回后检查
 `Known(result)`；void callback 不向 operand stack 压值。这是宿主信任边界，不因 guest

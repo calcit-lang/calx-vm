@@ -102,11 +102,15 @@ fn legacy_run_invocation_remains_supported() {
 }
 
 #[test]
-fn typed_modules_do_not_silently_fall_back_to_legacy_runtime() {
+fn typed_modules_use_the_strict_check_and_runtime_path() {
   let source = fixture("tests/fixtures/typed-module.cirru");
-  let output = calx(&["check", source.to_str().expect("UTF-8 fixture path")]);
-  let stderr = output_text(&output.stderr);
+  let checked = calx(&["check", source.to_str().expect("UTF-8 fixture path")]);
+  let check_stdout = output_text(&checked.stdout);
+  assert!(checked.status.success(), "{}", output_text(&checked.stderr));
+  assert!(check_stdout.contains("strict typed"), "{check_stdout}");
 
-  assert!(!output.status.success());
-  assert!(stderr.contains("refusing legacy fallback"), "{stderr}");
+  let run = calx(&[source.to_str().expect("UTF-8 fixture path")]);
+  let run_stdout = output_text(&run.stdout);
+  assert!(run.status.success(), "{}", output_text(&run.stderr));
+  assert!(run_stdout.contains("Value(I64(7))"), "{run_stdout}");
 }

@@ -21,8 +21,9 @@
 0.3 module parser 已支持 function-prefix `local $name TYPE`、top-level
 `global $name (const|mut TYPE) INITIALIZER` 与 `import-fn NAME (PARAMS... -> [RESULT])`。
 `ParsedProgram::into_program()` 会拒绝 Dynamic、Nil/Link boundary、initializer mismatch 与
-未声明 import；typed declarations 的 validator/runtime/CLI 执行接线将在 #31 最后一阶段完成。
-在此之前 CLI 会明确拒绝 typed module，不会静默回退到 legacy Dynamic runtime。
+未声明 import；`ValidatedProgram` 再使用 declared local/global/import context 完成验证与 lowering。
+typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` 返回显式 Void/Value；
+旧源码仍由独立 legacy adapter 执行，不会在 strict 失败后静默 fallback。
 
 控制条件和 `assert` 统一调用 `Calx::truthy`：
 

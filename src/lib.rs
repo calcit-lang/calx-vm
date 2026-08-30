@@ -16,14 +16,18 @@ pub use diagnostic::{DiagnosticCode, DiagnosticPhase, DiagnosticStack, Diagnosti
 pub use parser::{extract_nested, parse_function, parse_program, ParseError, ParsedProgram};
 pub use program::{
   CalxBoundaryType, CalxGlobalDecl, CalxHostBinding, CalxHostBindings, CalxHostCallback, CalxImportDecl, CalxLocalDecl, CalxMutability,
-  CalxProgram, CalxProgramError, CalxRunResult,
+  CalxProgram, CalxProgramError, CalxRunResult, ValidatedProgram,
 };
 pub use syntax::CalxSyntax;
 pub use util::log_calx_value;
 pub use validator::{
-  trace_validation, validate_program, FunctionValidationTrace, ValidationControlKind, ValidationControlState, ValidationError,
-  ValidationStep, ValidationType,
+  trace_typed_validation, trace_validation, validate_program, validate_typed_program, FunctionValidationTrace, ValidationControlKind,
+  ValidationControlState, ValidationError, ValidationStep, ValidationType,
 };
 pub use vm::{
-  frame::CalxFrame, func::CalxFunc, instr::CalxInstr, instr::CALX_INSTR_EDITION, CalxError, CalxErrorSnapshot, CalxImportsDict, CalxVM,
+  frame::{CalxFrame, CalxSlot},
+  func::CalxFunc,
+  instr::CalxInstr,
+  instr::CALX_INSTR_EDITION,
+  CalxError, CalxErrorSnapshot, CalxImportsDict, CalxVM,
 };

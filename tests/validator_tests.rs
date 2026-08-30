@@ -127,7 +127,7 @@ fn preprocess_runs_validation_before_lowering() -> Result<(), String> {
   let error = vm.preprocess(false).expect_err("preprocess must reject invalid types");
 
   assert!(error.contains("expected I64, found F64"), "{error}");
-  assert!(vm.funcs.iter().all(|func| func.instrs.is_empty()));
+  assert!(vm.functions().iter().all(|func| func.instrs.is_empty()));
   Ok(())
 }
 

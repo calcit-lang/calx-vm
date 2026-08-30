@@ -14,6 +14,11 @@ Version 0.2.2 adds the semantic-safety baseline, typed validation,
 compatibility and VM allocation/lookup improvements from 0.2.1. Native Calcit
 bindings should use this stable crate version instead of a git hash.
 
+The 0.3 development line now has an end-to-end strict path:
+`CalxProgram -> ValidatedProgram -> CalxVM::from_program -> run_typed`.
+Typed modules use declared locals/globals, stable indexed imports, exact host
+signatures, explicit void results, and non-nil Uninitialized slot state.
+
 0.2.2 在 0.2.1 的 parser compatibility 与 VM allocation/lookup 优化之上，
 增加语义安全基线、类型验证、`check`/`explain` 和轻量错误快照。Calcit native
 binding 应使用稳定 crate 版本，不要引用 git hash。

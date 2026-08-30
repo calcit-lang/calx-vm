@@ -1,7 +1,10 @@
 use core::fmt;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::{
-  Calx, CalxFunc, CalxImportsDict, CalxSyntax, CalxType, DiagnosticCode, DiagnosticPhase, DiagnosticStack, DiagnosticView, SourceSpan,
+  Calx, CalxBoundaryType, CalxFunc, CalxImportsDict, CalxMutability, CalxProgram, CalxSyntax, CalxType, DiagnosticCode,
+  DiagnosticPhase, DiagnosticStack, DiagnosticView, SourceSpan,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,7 +150,15 @@ impl ControlFrame {
 
 pub fn validate_program(fns: &[CalxFunc], globals: &[Calx], imports: &CalxImportsDict) -> Result<(), ValidationError> {
   for func in fns {
-    Validator::new(func, fns, globals, imports, false).validate()?;
+    Validator::new_legacy(func, fns, globals, imports, false).validate()?;
+  }
+  Ok(())
+}
+
+/// Validate a strict program using its declared local/global/import context.
+pub fn validate_typed_program(program: &CalxProgram) -> Result<(), ValidationError> {
+  for func in program.functions() {
+    Validator::new_typed(func, program, false).validate()?;
   }
   Ok(())
 }
@@ -164,7 +175,23 @@ pub fn trace_validation(
   fns
     .iter()
     .map(|func| {
-      Validator::new(func, fns, globals, imports, true)
+      Validator::new_legacy(func, fns, globals, imports, true)
+        .validate()
+        .map(|steps| FunctionValidationTrace {
+          function: func.name.to_string(),
+          steps,
+        })
+    })
+    .collect()
+}
+
+/// Record strict typed validation transitions using module declarations.
+pub fn trace_typed_validation(program: &CalxProgram) -> Result<Vec<FunctionValidationTrace>, ValidationError> {
+  program
+    .functions()
+    .iter()
+    .map(|func| {
+      Validator::new_typed(func, program, true)
         .validate()
         .map(|steps| FunctionValidationTrace {
           function: func.name.to_string(),
@@ -177,17 +204,36 @@ pub fn trace_validation(
 struct Validator<'a> {
   func: &'a CalxFunc,
   funcs: &'a [CalxFunc],
-  imports: &'a CalxImportsDict,
+  imports: HashMap<Rc<str>, ImportValidationSignature>,
   operand_stack: Vec<ValidationType>,
   control_stack: Vec<ControlFrame>,
   locals: Vec<ValidationType>,
   globals: Vec<ValidationType>,
+  global_mutability: Option<Vec<CalxMutability>>,
   instruction_index: usize,
   record_trace: bool,
 }
 
+#[derive(Debug, Clone)]
+struct ImportValidationSignature {
+  params: Vec<ValidationType>,
+  result: Option<ValidationType>,
+}
+
 impl<'a> Validator<'a> {
-  fn new(func: &'a CalxFunc, funcs: &'a [CalxFunc], globals: &[Calx], imports: &'a CalxImportsDict, record_trace: bool) -> Self {
+  fn new_legacy(func: &'a CalxFunc, funcs: &'a [CalxFunc], globals: &[Calx], imports: &CalxImportsDict, record_trace: bool) -> Self {
+    let imports = imports
+      .iter()
+      .map(|(name, (_, arity))| {
+        (
+          name.clone(),
+          ImportValidationSignature {
+            params: vec![ValidationType::Dynamic; *arity],
+            result: Some(ValidationType::Dynamic),
+          },
+        )
+      })
+      .collect();
     Self {
       func,
       funcs,
@@ -196,6 +242,41 @@ impl<'a> Validator<'a> {
       control_stack: vec![],
       locals: func.params_types.iter().copied().map(ValidationType::Known).collect(),
       globals: globals.iter().map(|v| ValidationType::Known(v.value_type())).collect(),
+      global_mutability: None,
+      instruction_index: 0,
+      record_trace,
+    }
+  }
+
+  fn new_typed(func: &'a CalxFunc, program: &'a CalxProgram, record_trace: bool) -> Self {
+    let mut locals = func.params_types.iter().copied().map(ValidationType::Known).collect::<Vec<_>>();
+    locals.extend(func.locals.iter().map(|local| boundary_validation_type(local.value_type)));
+    let imports = program
+      .imports()
+      .iter()
+      .map(|import| {
+        (
+          import.name.clone(),
+          ImportValidationSignature {
+            params: import.params.iter().copied().map(boundary_validation_type).collect(),
+            result: import.result.map(boundary_validation_type),
+          },
+        )
+      })
+      .collect();
+    Self {
+      func,
+      funcs: program.functions(),
+      imports,
+      operand_stack: vec![],
+      control_stack: vec![],
+      locals,
+      globals: program
+        .globals()
+        .iter()
+        .map(|global| boundary_validation_type(global.value_type))
+        .collect(),
+      global_mutability: Some(program.globals().iter().map(|global| global.mutability).collect()),
       instruction_index: 0,
       record_trace,
     }
@@ -268,6 +349,14 @@ impl<'a> Validator<'a> {
       }
       LocalNew => self.locals.push(ValidationType::Dynamic),
       GlobalSet(index) => {
+        if self
+          .global_mutability
+          .as_ref()
+          .and_then(|items| items.get(*index))
+          .is_some_and(|mutability| *mutability == CalxMutability::Const)
+        {
+          return Err(self.error(format!("cannot write const global index {index}")));
+        }
         let expected = self.global_type(*index)?;
         self.pop_expect(expected)?;
       }
@@ -368,14 +457,16 @@ impl<'a> Validator<'a> {
         self.mark_unreachable()?;
       }
       CallImport(name) => {
-        let (_, arity) = self
+        let signature = self
           .imports
           .get(name)
           .ok_or_else(|| self.error(format!("unknown import `{name}`")))?;
-        for _ in 0..*arity {
-          self.pop_any()?;
+        let params = signature.params.clone();
+        let result = signature.result;
+        self.pop_types(&params)?;
+        if let Some(result) = result {
+          self.operand_stack.push(result);
         }
-        self.operand_stack.push(ValidationType::Dynamic);
       }
       Return => {
         let returns = self.known_types(&self.func.ret_types);
@@ -593,4 +684,11 @@ fn same_control_kind(actual: ControlKind, expected: ControlKind) -> bool {
       | (ControlKind::Loop, ControlKind::Loop)
       | (ControlKind::If { .. }, ControlKind::If { .. })
   )
+}
+
+fn boundary_validation_type(boundary: CalxBoundaryType) -> ValidationType {
+  match boundary {
+    CalxBoundaryType::Known(value_type) => ValidationType::Known(value_type),
+    CalxBoundaryType::Dynamic => ValidationType::Dynamic,
+  }
 }

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::diagnostic::{DiagnosticCode, DiagnosticPhase, DiagnosticView, SourceSpan};
-use crate::{Calx, CalxError, CalxFunc, CalxSyntax, CalxType};
+use crate::{Calx, CalxError, CalxFunc, CalxSyntax, CalxType, ValidationError};
 
 /// A boundary contract retained by parsed and legacy metadata.
 ///
@@ -157,16 +157,61 @@ impl CalxProgram {
   }
 }
 
+/// A strict program whose declarations, typed instruction effects, and
+/// lowering have all succeeded.
+///
+/// Its fields remain private so safe callers cannot mutate executable state
+/// after validation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidatedProgram {
+  functions: Vec<CalxFunc>,
+  globals: Vec<CalxGlobalDecl>,
+  imports: Vec<CalxImportDecl>,
+}
+
+impl ValidatedProgram {
+  pub fn try_from_program(program: CalxProgram) -> Result<Self, CalxProgramError> {
+    crate::validate_typed_program(&program).map_err(CalxProgramError::from_validation)?;
+    let (mut functions, globals, imports) = program.into_parts();
+    crate::vm::lower_typed_functions(&mut functions, &imports).map_err(|message| CalxProgramError::new(message, None, None))?;
+    Ok(Self {
+      functions,
+      globals,
+      imports,
+    })
+  }
+
+  pub fn functions(&self) -> &[CalxFunc] {
+    &self.functions
+  }
+
+  pub fn globals(&self) -> &[CalxGlobalDecl] {
+    &self.globals
+  }
+
+  pub fn imports(&self) -> &[CalxImportDecl] {
+    &self.imports
+  }
+
+  pub fn into_parts(self) -> (Vec<CalxFunc>, Vec<CalxGlobalDecl>, Vec<CalxImportDecl>) {
+    (self.functions, self.globals, self.imports)
+  }
+}
+
 /// Declaration or strict-profile conversion failure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalxProgramError {
   pub message: String,
   pub function: Option<Rc<str>>,
   pub span: Option<Box<SourceSpan>>,
+  validation: Option<Box<ValidationError>>,
 }
 
 impl CalxProgramError {
   pub fn diagnostic(&self) -> DiagnosticView<'_> {
+    if let Some(error) = self.validation.as_deref() {
+      return error.diagnostic();
+    }
     DiagnosticView {
       code: DiagnosticCode::Validation,
       phase: DiagnosticPhase::Validation,
@@ -179,12 +224,29 @@ impl CalxProgramError {
     }
   }
 
-  fn new(message: impl Into<String>, function: Option<Rc<str>>, span: Option<SourceSpan>) -> Self {
+  pub(crate) fn new(message: impl Into<String>, function: Option<Rc<str>>, span: Option<SourceSpan>) -> Self {
     Self {
       message: message.into(),
       function,
       span: span.map(Box::new),
+      validation: None,
     }
+  }
+
+  fn from_validation(error: ValidationError) -> Self {
+    let message = error.message.clone();
+    let function = Some(Rc::from(error.function.as_str()));
+    let span = error.span.clone();
+    Self {
+      message,
+      function,
+      span,
+      validation: Some(Box::new(error)),
+    }
+  }
+
+  pub fn validation_error(&self) -> Option<&ValidationError> {
+    self.validation.as_deref()
   }
 }
 
