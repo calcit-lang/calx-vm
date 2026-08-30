@@ -1,7 +1,7 @@
 use core::fmt;
 use std::rc::Rc;
 
-use crate::{calx::CalxType, syntax::CalxSyntax};
+use crate::{calx::CalxType, syntax::CalxSyntax, SourceSpan};
 
 use super::instr::CalxInstr;
 
@@ -11,6 +11,8 @@ pub struct CalxFunc {
   pub params_types: Rc<Vec<CalxType>>,
   pub ret_types: Rc<Vec<CalxType>>,
   pub syntax: Rc<Vec<CalxSyntax>>,
+  /// Source ranges parallel to `syntax`. Legacy AST-only parsing leaves this empty.
+  pub source_spans: Rc<Vec<Option<SourceSpan>>>,
   pub instrs: Rc<Vec<CalxInstr>>,
   pub local_names: Rc<Vec<String>>,
 }
@@ -34,7 +36,11 @@ impl fmt::Display for CalxFunc {
       f.write_str(" .")?;
     }
     for (idx, instr) in self.instrs.iter().enumerate() {
-      write!(f, "\n  {idx:02} {instr:?}")?;
+      if let Some(Some(span)) = self.source_spans.get(idx) {
+        write!(f, "\n  {idx:02} {instr:?} @ {span}")?;
+      } else {
+        write!(f, "\n  {idx:02} {instr:?}")?;
+      }
     }
     f.write_str("\n")?;
     Ok(())

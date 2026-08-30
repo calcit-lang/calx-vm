@@ -16,6 +16,7 @@ fn create_arithmetic_func() -> CalxFunc {
       CalxSyntax::IntMul,
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec!["a".to_string(), "b".to_string()]),
   }
@@ -64,6 +65,7 @@ fn create_sum_func() -> CalxFunc {
       CalxSyntax::LocalGet(1),
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec!["n".to_string(), "sum".to_string(), "i".to_string()]),
   }
@@ -106,6 +108,7 @@ fn create_fibonacci_func() -> CalxFunc {
       CalxSyntax::ElseEnd,
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec!["n".to_string()]),
   }
@@ -118,6 +121,7 @@ fn create_main_func(call_target: &str) -> CalxFunc {
     params_types: Rc::new(vec![]),
     ret_types: Rc::new(vec![CalxType::I64]),
     syntax: Rc::new(vec![CalxSyntax::Call(Rc::from(call_target)), CalxSyntax::Return]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec![]),
   }
@@ -194,6 +198,7 @@ fn bench_stack_operations(c: &mut Criterion) {
       CalxSyntax::Drop,
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec![]),
   };

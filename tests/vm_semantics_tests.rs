@@ -241,6 +241,7 @@ fn reserved_instructions_are_rejected_by_parser() {
       params_types: Rc::new(vec![]),
       ret_types: Rc::new(vec![]),
       syntax: Rc::new(vec![syntax]),
+      source_spans: Rc::new(vec![None]),
       instrs: Rc::new(vec![]),
       local_names: Rc::new(vec![]),
     };
@@ -265,6 +266,7 @@ fn reserved_instructions_are_rejected_by_parser() {
       params_types: Rc::new(vec![]),
       ret_types: Rc::new(vec![]),
       syntax: Rc::new(vec![]),
+      source_spans: Rc::new(vec![]),
       instrs: Rc::new(vec![instruction]),
       local_names: Rc::new(vec![]),
     };
@@ -290,7 +292,8 @@ fn calx_error_keeps_optional_vm_state_out_of_the_result_payload() -> Result<(), 
 
   let host_error = CalxError::new_raw("host failure".to_string());
   assert!(host_error.snapshot.is_none());
-  assert_eq!(host_error.to_string(), "host failure");
+  assert_eq!(host_error.code(), calx_vm::DiagnosticCode::HostImport);
+  assert_eq!(host_error.to_string(), "error[CALX_HOST_IMPORT] host: host failure");
 
   let vm_error = prepare_vm(
     r#"fn main ()
@@ -323,6 +326,7 @@ fn malformed_public_instructions_return_errors_instead_of_panicking() {
       params_types: Rc::new(vec![]),
       ret_types: Rc::new(vec![]),
       syntax: Rc::new(vec![]),
+      source_spans: Rc::new(vec![]),
       instrs: Rc::new(instructions),
       local_names: Rc::new(vec![]),
     };

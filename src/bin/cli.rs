@@ -5,12 +5,11 @@ use std::time::Instant;
 use std::{collections::hash_map::HashMap, rc::Rc};
 
 use argh::FromArgs;
-use cirru_parser::{parse, Cirru};
-
 use calx_vm::{
-  log_calx_value, parse_function, trace_validation, validate_program, Calx, CalxFunc, CalxImportsDict, CalxVM, ValidationControlState,
+  log_calx_value, parse_program, trace_validation, validate_program, Calx, CalxFunc, CalxImportsDict, CalxVM, ValidationControlState,
   ValidationType,
 };
+use cirru_parser::Cirru;
 
 #[derive(FromArgs)]
 /// run and inspect Calx programs
@@ -63,11 +62,15 @@ struct ExplainArgs {
   source: String,
 }
 
-fn main() -> Result<(), String> {
-  match parse_args().command {
+fn main() {
+  let result = match parse_args().command {
     Command::Run(args) => run(args),
     Command::Check(args) => check(args),
     Command::Explain(args) => explain(args),
+  };
+  if let Err(error) = result {
+    eprintln!("{error}");
+    process::exit(1);
   }
 }
 
@@ -109,11 +112,7 @@ fn run(args: RunArgs) -> Result<(), String> {
       println!("[calx] took {:.3?}: {ret:?}", now.elapsed());
       Ok(())
     }
-    Err(e) => {
-      println!("VM state: {:?}", vm.stack);
-      println!("{e}");
-      Err(String::from("Failed to run."))
-    }
+    Err(error) => Err(error.to_string()),
   }
 }
 
@@ -158,6 +157,9 @@ fn explain(args: ExplainArgs) -> Result<(), String> {
         .get(step.instruction_index)
         .ok_or_else(|| format!("missing lowered instruction at syntax[{}]", step.instruction_index))?;
       println!("  syntax[{:03}] {:?}", step.instruction_index, step.instruction);
+      if let Some(span) = &step.span {
+        println!("    source: {span}");
+      }
       println!(
         "    operand: {} -> {}",
         format_types(&step.operand_stack_before),
@@ -176,15 +178,8 @@ fn explain(args: ExplainArgs) -> Result<(), String> {
 
 fn load_program(source: &str) -> Result<(Vec<Cirru>, Vec<CalxFunc>), String> {
   let contents = fs::read_to_string(source).map_err(|e| format!("failed to read `{source}`: {e}"))?;
-  let nodes = parse(&contents).map_err(|e| format!("failed to parse `{source}`: {e}"))?;
-  let fns = nodes
-    .iter()
-    .map(|node| match node {
-      Cirru::List(items) => parse_function(items),
-      Cirru::Leaf(_) => Err("expected top-level function expressions".to_string()),
-    })
-    .collect::<Result<Vec<_>, _>>()?;
-  Ok((nodes, fns))
+  let program = parse_program(source, &contents).map_err(|error| error.to_string())?;
+  Ok((program.nodes, program.functions))
 }
 
 fn standard_imports() -> CalxImportsDict {

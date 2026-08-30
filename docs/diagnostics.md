@@ -1,30 +1,50 @@
-# Calx 错误与诊断边界
+# Calx 源码位置与诊断边界 / Source-aware diagnostics
 
-Calx 把失败按发生阶段分开，避免用一个包含所有状态的大对象表示不同问题：
+Calx 保留 parse、validation、runtime、host 四个错误所有者，同时通过
+`DiagnosticView` 提供共同的只读投影。这样 CLI 和工具可以读取统一字段，但不会把
+解析器、验证器、VM snapshot 与宿主状态合并成一个大错误对象。
 
-```text
-Cirru text
-  -> parse error: String
-CalxSyntax
-  -> ValidationError
-CalxInstr execution
-  -> CalxError
+| 阶段 / Phase | 稳定代码 / Stable code | 错误类型 | 上下文 |
+| --- | --- | --- | --- |
+| Parse | `CALX_PARSE_CIRRU` | `ParseError` | Cirru parser position |
+| Parse | `CALX_PARSE_INSTRUCTION` | `ParseError` | function, expanded instruction index, source span |
+| Validation | `CALX_VALIDATION` | `ValidationError` | function, instruction, source span, expected/actual typed stack |
+| Runtime | `CALX_RUNTIME_TRAP` | `CalxError` | function, instruction, source span, boxed VM snapshot |
+| Host | `CALX_HOST_IMPORT` | `CalxError` | message only; no fabricated VM snapshot |
+
+`SourcePosition` 的 line/column 从 1 开始，offset 是从 0 开始的 byte offset；
+`SourceSpan` 是半开区间。文本位置统一显示为 `file:line:column`。稳定代码表示诊断类别，
+message 的具体措辞仍可继续改进。
+
+## 带位置的解析 / Source-aware parsing
+
+需要源码位置时使用 `parse_program`：
+
+```rust
+use calx_vm::parse_program;
+
+let program = parse_program("demo.cirru", "fn main ()\n  nop")?;
+let first_span = program.functions[0].source_spans[0].as_ref();
+# Ok::<(), calx_vm::ParseError>(())
 ```
+
+Cirru AST 目前不保存节点位置。Calx 会将带位置的语义 token 与 Cirru 已解析、已处理
+`$`/`,` 的 AST 确定性对齐，再镜像 folded call 与结构化控制流的展开顺序。最终
+`CalxFunc::source_spans` 与 `syntax` 一一对应，lowering 不改变该索引关系。
+
+旧入口 `parse_function(&[Cirru]) -> Result<CalxFunc, String>` 继续保留，供只有 AST 的
+调用方使用；它生成空的 `source_spans`，验证和执行仍正常，只是诊断不显示源码位置。
 
 ## ValidationError
 
-`ValidationError` 表示执行前可证明的错误，包含：
-
-- 函数名；
-- 函数内扁平 syntax index；
-- 原因；
-- 失败位置的 typed operand stack。
-
-验证阶段没有运行 VM，因此不得附加虚构的运行栈或 frame。`calx check` 和 `calx explain` 直接显示此错误。
+`ValidationError` 包含稳定代码、函数名、扁平 syntax index、原因、可选 source span，
+以及实际 typed operand stack。类型不匹配时还提供可选 expected stack。较大的可选字段
+放在堆上，避免每个 `Result` 的 inline error 膨胀。验证阶段没有运行 VM，不附加虚构的
+运行栈或 frame。
 
 ## CalxError 与按需 snapshot
 
-`CalxError` 的 inline 数据只有：
+`CalxError` 的 inline 数据仍只有 message 和可选 boxed snapshot：
 
 ```rust
 pub struct CalxError {
@@ -33,35 +53,31 @@ pub struct CalxError {
 }
 ```
 
-VM 内部 trap 通过 `CalxErrorSnapshot` 保留当时的 operand stack、top frame 和 globals。快照在错误路径上分配，不增加成功执行时每条指令的分配。
+VM 内部 trap 的 code、source span、operand stack、top frame 和 globals 都存放在已有的
+`CalxErrorSnapshot` 中，只在错误路径分配。宿主 import 可用 `CalxError::new_raw(message)`
+报错；这类错误使用 `CALX_HOST_IMPORT`，且 `snapshot`、function、instruction、span 都为
+`None`，不会伪造 VM 上下文。
 
-宿主 import 可以用 `CalxError::new_raw(message)` 报错。这类错误不假装拥有 VM 内部状态，`snapshot` 为 `None`。调用方可用 `stack()`、`top_frame()` 和 `globals()` 读取可选快照，不需要依赖 boxed 布局。
+## 兼容性与迁移 / Compatibility and migration
 
-## 兼容性
+- `CalxFunc` 新增公开字段 `source_spans`。手工构造 synthetic function 的代码需要增加
+  `source_spans: Rc::new(vec![])`，或提供与 `syntax` 等长的 span 表。
+- 直接依赖的 `cirru_parser` 升级至 0.2.15。直接调用 `cirru_parser::parse` 的下游代码会
+  收到 `CirruError` 而不再是 `String`；如需旧行为可调用 `error.to_string()`。
+- `ValidationError` 的可选 source/expected-stack payload 改为 out-of-line。工具应优先
+  使用 `error.diagnostic()` 获取稳定只读视图。
+- 手工构造 `CalxErrorSnapshot` 的代码需要同时提供 `code` 与 `source_span`；正常 VM
+  执行路径会自动填写这两个字段。
+- `Display` 输出现在以 `error[CODE] phase` 开头。此前匹配完整错误字符串的 consumer
+  应迁移到 `DiagnosticCode` 和结构化字段。
+- #21 把旧的 `CalxError.stack/top_frame/globals` 移入 `CalxErrorSnapshot`；accessor
+  `stack()`、`top_frame()`、`globals()` 继续可用。#30 没有增大 `CalxError` inline layout。
 
-#21 将原先位于 `CalxError` 顶层的 `stack/top_frame/globals` 移入公开的 `CalxErrorSnapshot`，属于实验期 Rust API 调整。`CalxError` 与 `CalxErrorSnapshot` 现从 crate root 导出；使用旧字段的 consumer 应改为 accessor 或 `error.snapshot`。
-
-本地 `calcit-lang` 工作区审计没有发现直接访问这些旧字段的 consumer。未来发布前仍应在实际 Calcit binding 仓库执行编译验证。
+当前只承诺文本 renderer；JSON schema、彩色输出和完整 runtime trace 不在这一阶段。
 
 ## 大小与成功路径测量
 
-调整前 Rust Clippy 报告 `CalxError` 至少为 144 bytes。调整后测试约束其 inline size 不超过 4 个 machine words；64-bit 目标上即不超过 32 bytes。VM snapshot 只在 trap 路径分配一次，`new_raw` 不分配 snapshot。
-
-Criterion 使用独立 `main` checkout 作为 baseline，在同一 target 下对 50 samples、2 秒 warm-up、5 秒 measurement 复测：
-
-- `instruction_execution`：变化置信区间 `-3.02%..+2.61%`，p=0.96；
-- `multiple_calls`：变化置信区间 `-2.98%..+0.74%`，p=0.24。
-
-两项均未检测到统计显著的成功路径性能变化。该调整的主要价值是 API/诊断布局和严格 lint，而不是宣称 VM 加速。
-
-## 尚未承诺的部分
-
-当前 message 仍是面向人的文本，不是稳定匹配接口。后续可以增加：
-
-- `ParseError` 的统一结构；
-- 稳定 diagnostic/trap code；
-- Cirru source span；
-- 精简调用栈摘要；
-- 文本与 JSON renderer。
-
-这些扩展应保留阶段边界，不把 `ValidationError` 和运行期 snapshot 再次合并。
+#21 的基线测试约束 `CalxError` inline size 不超过 4 个 machine words；64-bit 目标上即
+不超过 32 bytes。Criterion 对 `instruction_execution` 和 `multiple_calls` 的复测都未发现
+统计显著的成功路径性能变化。#30 继续保留这一大小测试；新增 diagnostic metadata 仅进入
+解析/验证错误或 runtime 的既有 boxed snapshot。

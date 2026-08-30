@@ -14,6 +14,7 @@ fn create_simple_add_func() -> CalxFunc {
       CalxSyntax::IntAdd,
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec!["a".to_string(), "b".to_string()]),
   }
@@ -34,6 +35,7 @@ fn create_complex_arithmetic_func() -> CalxFunc {
       CalxSyntax::IntMul,      // (a + b) * c
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
   }
@@ -59,6 +61,7 @@ fn create_stack_ops_func() -> CalxFunc {
       CalxSyntax::IntAdd,              // Add 1 -> stack: [x+1]
       CalxSyntax::Return,              // Return x+1
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec!["x".to_string()]),
   }
@@ -85,6 +88,7 @@ fn create_local_vars_func() -> CalxFunc {
       CalxSyntax::IntAdd,      // temp + param
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec!["param".to_string(), "temp".to_string()]),
   }
@@ -101,6 +105,7 @@ fn create_main_func(target_func: &str, args: Vec<CalxSyntax>) -> CalxFunc {
     params_types: Rc::new(vec![]),
     ret_types: Rc::new(vec![CalxType::I64]),
     syntax: Rc::new(syntax),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec![]),
   }
@@ -240,6 +245,7 @@ fn bench_multiple_calls(c: &mut Criterion) {
       CalxSyntax::Call(Rc::from("add_test")),
       CalxSyntax::Return,
     ]),
+    source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
     local_names: Rc::new(vec![]),
   };

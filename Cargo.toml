@@ -18,7 +18,7 @@ path = "src/bin/cli.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cirru_parser = "0.1.31"
+cirru_parser = "0.2.15"
 regex = "1.10.5"
 bincode = "2.0.0-rc.3"
 argh = "0.1.12"
