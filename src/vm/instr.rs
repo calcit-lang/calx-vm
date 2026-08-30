@@ -93,6 +93,8 @@ pub enum CalxInstr {
   ReturnCall(usize),
   /// call import
   CallImport(Rc<str>),
+  /// call a validated typed import by its stable declaration index
+  CallImportIndexed(usize),
   /// unreachable panic
   Unreachable,
   /// no operation placeholder
@@ -229,7 +231,8 @@ impl CalxInstr {
       CalxInstr::Call(_) => (0, 0),       // TODO
       CalxInstr::ReturnCall(_) => (0, 0), // TODO
       CalxInstr::CallImport(_) => (0, 0), // import
-      CalxInstr::Unreachable => (0, 0),   // TODO
+      CalxInstr::CallImportIndexed(_) => (0, 0),
+      CalxInstr::Unreachable => (0, 0), // TODO
       CalxInstr::Nop => (0, 0),
       CalxInstr::Quit(_) => (0, 0),
       CalxInstr::Return => (1, 0), // TODO

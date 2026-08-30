@@ -9,11 +9,14 @@ use std::{fmt, mem, vec};
 
 use crate::calx::Calx;
 use crate::diagnostic::{DiagnosticCode, DiagnosticPhase, DiagnosticStack, DiagnosticView, SourceSpan};
+use crate::program::{
+  CalxHostBinding, CalxHostBindings, CalxHostCallback, CalxImportDecl, CalxProgram, CalxProgramError, CalxRunResult, ValidatedProgram,
+};
 use crate::syntax::CalxSyntax;
 use crate::vm::block_data::BlockStack;
 
 use self::block_data::BlockData;
-use self::frame::CalxFrame;
+use self::frame::{CalxFrame, CalxSlot};
 use self::func::CalxFunc;
 use self::instr::CalxInstr;
 
@@ -28,15 +31,15 @@ pub type CalxImportsDict = HashMap<Rc<str>, (fn(xs: &Vec<Calx>) -> Result<Calx, 
 /// `CalxSyntax` contains some richer info than `CalxInstr`.
 #[derive(Clone)]
 pub struct CalxVM {
-  pub stack: Vec<Calx>,
-  pub globals: Vec<Calx>,
-  pub funcs: Vec<CalxFunc>,
-  pub frames: Vec<CalxFrame>,
-  pub top_frame: CalxFrame,
-  pub imports: CalxImportsDict,
-  /// extra status to tracking runnnig finished
-  pub finished: bool,
-  pub return_value: Calx,
+  stack: Vec<Calx>,
+  globals: Vec<CalxSlot>,
+  funcs: Vec<CalxFunc>,
+  frames: Vec<CalxFrame>,
+  top_frame: CalxFrame,
+  imports: CalxImportsDict,
+  typed_imports: Vec<CalxHostBinding>,
+  strict: bool,
+  result: Option<CalxRunResult>,
 }
 
 impl std::fmt::Debug for CalxVM {
@@ -61,14 +64,71 @@ impl CalxVM {
     };
     CalxVM {
       stack: vec![],
-      globals,
+      globals: globals.into_iter().map(CalxSlot::Value).collect(),
       funcs: fns,
       frames: vec![],
       top_frame: main_frame,
       imports,
-      return_value: Calx::Nil,
-      finished: false,
+      typed_imports: vec![],
+      strict: false,
+      result: None,
     }
+  }
+
+  /// Validate, lower, and instantiate a strict typed program.
+  pub fn from_program(program: CalxProgram, bindings: CalxHostBindings) -> Result<Self, CalxProgramError> {
+    let program = ValidatedProgram::try_from_program(program)?;
+    Self::from_validated_program(program, bindings)
+  }
+
+  /// Instantiate a program that has already passed strict validation.
+  pub fn from_validated_program(program: ValidatedProgram, mut bindings: CalxHostBindings) -> Result<Self, CalxProgramError> {
+    let (functions, globals, imports) = program.into_parts();
+    let mut typed_imports = Vec::with_capacity(imports.len());
+    for declaration in &imports {
+      let binding = bindings.remove(&declaration.name).ok_or_else(|| {
+        CalxProgramError::new(
+          format!("missing host binding for import `{}`", declaration.name),
+          None,
+          declaration.span.clone(),
+        )
+      })?;
+      validate_host_binding(declaration, &binding)?;
+      typed_imports.push(binding);
+    }
+    if let Some(name) = bindings.keys().min() {
+      return Err(CalxProgramError::new(
+        format!("host binding `{name}` has no matching import declaration"),
+        None,
+        None,
+      ));
+    }
+
+    let main_frame = match functions.iter().find(|function| function.name.as_ref() == "main") {
+      Some(main) => CalxFrame {
+        name: main.name.clone(),
+        initial_stack_size: 0,
+        instrs: main.instrs.clone(),
+        pointer: 0,
+        locals: vec![],
+        ret_types: main.ret_types.clone(),
+      },
+      None => {
+        return Err(CalxProgramError::new("main function is required for strict execution", None, None));
+      }
+    };
+
+    Ok(Self {
+      stack: vec![],
+      globals: globals.into_iter().map(|global| CalxSlot::Value(global.initial)).collect(),
+      funcs: functions,
+      frames: vec![],
+      top_frame: main_frame,
+      imports: HashMap::new(),
+      typed_imports,
+      strict: true,
+      result: None,
+    })
   }
 
   pub fn setup_top_frame(&mut self) -> Result<(), String> {
@@ -80,9 +140,12 @@ impl CalxVM {
     Ok(())
   }
 
-  pub fn make_return(&mut self, v: Calx) {
-    self.return_value = v;
-    self.finished = true;
+  pub fn functions(&self) -> &[CalxFunc] {
+    &self.funcs
+  }
+
+  fn make_return(&mut self, result: CalxRunResult) {
+    self.result = Some(result);
   }
 
   pub fn inspect_display(&self, indent_size: u8) -> String {
@@ -105,15 +168,54 @@ impl CalxVM {
   }
 
   pub fn run(&mut self, args: Vec<Calx>) -> Result<Calx, CalxError> {
-    // assign function parameters
-    self.top_frame.locals = args;
+    if self.strict {
+      return Err(CalxError::new_raw(
+        "strict VM requires run_typed(); legacy run() cannot erase a void result".to_string(),
+      ));
+    }
+    match self.run_inner(args)? {
+      CalxRunResult::Void => Ok(Calx::Nil),
+      CalxRunResult::Value(value) => Ok(value),
+    }
+  }
+
+  pub fn run_typed(&mut self, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
+    if !self.strict {
+      return Err(CalxError::new_raw(
+        "legacy VM cannot use run_typed(); construct it with CalxVM::from_program".to_string(),
+      ));
+    }
+    let main = self
+      .funcs
+      .iter()
+      .find(|function| function.name.as_ref() == "main")
+      .ok_or_else(|| CalxError::new_raw("main function is required".to_string()))?;
+    validate_runtime_args(main, &args)?;
+    self.run_inner(args)
+  }
+
+  fn run_inner(&mut self, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
+    self.result = None;
+    self.frames.clear();
+    self.top_frame.pointer = 0;
+    self.top_frame.locals = args.into_iter().map(CalxSlot::Value).collect();
+    if self.strict {
+      let local_count = self
+        .find_func(&self.top_frame.name)
+        .map(|function| function.locals.len())
+        .unwrap_or(0);
+      self
+        .top_frame
+        .locals
+        .extend(std::iter::repeat_n(CalxSlot::Uninitialized, local_count));
+    }
     self.stack.clear();
     loop {
       // println!("Stack {:?}", self.stack);
       // println!("-- op {} {:?}", self.stack.len(), instr);
 
-      if self.finished {
-        return Ok(self.return_value.to_owned());
+      if let Some(result) = self.result.take() {
+        return Ok(result);
       }
 
       let quick_continue = self.step()?;
@@ -137,8 +239,8 @@ impl CalxVM {
           self.top_frame = v;
         }
         None => {
-          let v = self.stack.pop().unwrap_or(Calx::Nil);
-          self.make_return(v);
+          let result = self.take_entry_result(self.top_frame.ret_types.len())?;
+          self.make_return(result);
           return Ok(false);
         }
       }
@@ -196,7 +298,7 @@ impl CalxVM {
         if idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.set {} for {:?}", idx, self.top_frame.locals)));
         } else {
-          self.top_frame.locals[idx] = v
+          self.top_frame.locals[idx].set(v)
         }
       }
       LocalTee(idx) => {
@@ -205,14 +307,15 @@ impl CalxVM {
         if idx >= self.top_frame.locals.len() {
           return Err(self.gen_err(format!("out of bound in local.tee {idx}")));
         } else {
-          v.clone_into(&mut self.top_frame.locals[idx])
+          self.top_frame.locals[idx].set(v.clone())
         }
         self.stack_push(v);
       }
       LocalGet(idx) => {
         if *idx < self.top_frame.locals.len() {
-          // 优化：对Copy类型避免clone
-          let local_val = &self.top_frame.locals[*idx];
+          let Some(local_val) = self.top_frame.locals[*idx].as_value() else {
+            return Err(self.gen_err(format!("trap: read before set for local index {idx}")));
+          };
           match local_val {
             Calx::I64(n) => self.stack.push(Calx::I64(*n)),
             Calx::F64(n) => self.stack.push(Calx::F64(*n)),
@@ -232,18 +335,9 @@ impl CalxVM {
         self.collect_return_values(ret_size)?;
 
         if self.frames.is_empty() {
-          // top frame return, just return value
-          return match (ret_size, self.stack.last()) {
-            (0, _) => {
-              self.make_return(Calx::Nil);
-              Ok(false)
-            }
-            (_, Some(x)) => {
-              self.make_return(x.to_owned());
-              Ok(false)
-            }
-            (_, None) => Err(self.gen_err("return without value".to_string())),
-          };
+          let result = self.take_entry_result(ret_size)?;
+          self.make_return(result);
+          return Ok(false);
         } else {
           let Some(previous_frame) = self.frames.pop() else {
             return Err(self.gen_err("missing caller frame while returning".to_string()));
@@ -251,24 +345,27 @@ impl CalxVM {
           self.top_frame = previous_frame;
         }
       }
-      LocalNew => self.top_frame.locals.push(Calx::Nil),
+      LocalNew => self.top_frame.locals.push(CalxSlot::Uninitialized),
       GlobalSet(idx) => {
         let idx = *idx;
         let v = self.stack_pop()?;
         if idx >= self.globals.len() {
           return Err(self.gen_err(format!("out of bound in global.set {idx}")));
         } else {
-          self.globals[idx] = v
+          self.globals[idx].set(v)
         }
       }
       GlobalGet(idx) => {
         if *idx < self.globals.len() {
-          self.stack_push(self.globals[*idx].to_owned())
+          let Some(value) = self.globals[*idx].as_value().cloned() else {
+            return Err(self.gen_err(format!("trap: read before set for global index {idx}")));
+          };
+          self.stack_push(value)
         } else {
           return Err(self.gen_err(format!("invalid index for global.get {idx}")));
         }
       }
-      GlobalNew => self.globals.push(Calx::Nil),
+      GlobalNew => self.globals.push(CalxSlot::Uninitialized),
       Const(v) => {
         // 优化：对Copy类型避免clone
         match v {
@@ -435,7 +532,10 @@ impl CalxVM {
         let n = f.params_types.len();
         self.check_before_pop_n(n)?;
         let next_size = self.stack.len() - n;
-        let locals = self.stack.split_off(next_size);
+        let mut locals = self.stack.split_off(next_size).into_iter().map(CalxSlot::Value).collect::<Vec<_>>();
+        if self.strict {
+          locals.extend(std::iter::repeat_n(CalxSlot::Uninitialized, f.locals.len()));
+        }
 
         // TODO reduce copy drop
 
@@ -468,7 +568,10 @@ impl CalxVM {
         self.check_before_pop_n(n)?;
 
         let args_at = self.stack.len() - n;
-        let locals = self.stack.split_off(args_at);
+        let mut locals = self.stack.split_off(args_at).into_iter().map(CalxSlot::Value).collect::<Vec<_>>();
+        if self.strict {
+          locals.extend(std::iter::repeat_n(CalxSlot::Uninitialized, f.locals.len()));
+        }
         let next_size = self.top_frame.initial_stack_size;
         self.stack.truncate(next_size);
         self.top_frame = CalxFrame {
@@ -503,6 +606,40 @@ impl CalxVM {
           self.stack_push(v);
         }
       },
+      CallImportIndexed(index) => {
+        let Some(binding) = self.typed_imports.get(*index).cloned() else {
+          return Err(self.gen_err(format!("invalid typed import index {index}")));
+        };
+        let arity = binding.params().len();
+        self.check_before_pop_n(arity)?;
+        let args = self.stack.split_off(self.stack.len() - arity);
+        for (position, (value, expected)) in args.iter().zip(binding.params()).enumerate() {
+          if value.value_type() != *expected {
+            return Err(CalxError::new_raw(format!(
+              "typed host import argument {position} expected {expected:?}, found {:?}",
+              value.value_type()
+            )));
+          }
+        }
+        match binding.callback() {
+          CalxHostCallback::Void(callback) => callback(&args).map_err(host_callback_error)?,
+          CalxHostCallback::Value(callback) => {
+            let value = callback(&args).map_err(host_callback_error)?;
+            let Some(expected) = binding.result() else {
+              return Err(CalxError::new_raw(
+                "value host callback is missing a declared result type".to_string(),
+              ));
+            };
+            if value.value_type() != expected {
+              return Err(CalxError::new_raw(format!(
+                "typed host import result expected {expected:?}, found {:?}",
+                value.value_type()
+              )));
+            }
+            self.stack_push(value);
+          }
+        }
+      }
       Unreachable => {
         return Err(self.gen_err("trap: unreachable instruction executed".to_string()));
       }
@@ -535,163 +672,16 @@ impl CalxVM {
   }
 
   pub fn preprocess(&mut self, verbose: bool) -> Result<(), String> {
-    crate::validate_program(&self.funcs, &self.globals, &self.imports).map_err(|e| e.to_string())?;
-
-    for i in 0..self.funcs.len() {
-      let mut stack_size = 0;
-      let mut ops: Vec<CalxInstr> = vec![];
-      let mut blocks_track = BlockStack::new();
-
-      let f = &self.funcs[i];
-
-      if verbose {
-        println!(
-          "\nFUNC {}\n  initial stack size: {}\n  ret_size {}",
-          f.name,
-          stack_size,
-          f.ret_types.len()
-        );
-      }
-
-      for j in 0..self.funcs[i].syntax.len() {
-        if verbose {
-          println!("{} * {:?}", stack_size, self.funcs[i].syntax[j]);
-        }
-        let syntax = &self.funcs[i].syntax;
-        match &syntax[j] {
-          CalxSyntax::Block {
-            looped,
-            params_types,
-            ret_types,
-            from,
-            to,
-          } => {
-            if *looped {
-              blocks_track.push(BlockData::Loop {
-                params_types: params_types.clone(),
-                ret_types: ret_types.clone(),
-                from: *from,
-                to: *to,
-                initial_stack_size: stack_size,
-              });
-            } else {
-              blocks_track.push(BlockData::Block {
-                params_types: params_types.clone(),
-                ret_types: ret_types.clone(),
-                to: *to,
-                initial_stack_size: stack_size,
-              });
-            }
-            ops.push(CalxInstr::Nop);
-          }
-          CalxSyntax::Br(size) => {
-            let target_block = blocks_track.peek_block_level(*size)?;
-            match target_block {
-              BlockData::Loop { from, .. } => ops.push(CalxInstr::Branch {
-                target: *from,
-                base: target_block.branch_base(),
-                arity: target_block.branch_arity(),
-              }),
-              BlockData::Block { to, .. } => ops.push(CalxInstr::Branch {
-                target: *to,
-                base: target_block.branch_base(),
-                arity: target_block.branch_arity(),
-              }),
-              BlockData::If { .. } => return Err("br target must be block or loop".to_string()),
-            }
-          }
-          CalxSyntax::BrIf(size) => {
-            let target_block = blocks_track.peek_block_level(*size)?;
-
-            match target_block {
-              BlockData::Loop { from, .. } => ops.push(CalxInstr::BranchIf {
-                target: *from,
-                base: target_block.branch_base(),
-                arity: target_block.branch_arity(),
-              }),
-              BlockData::Block { to, .. } => ops.push(CalxInstr::BranchIf {
-                target: *to,
-                base: target_block.branch_base(),
-                arity: target_block.branch_arity(),
-              }),
-              BlockData::If { .. } => return Err("br-if target must be block or loop".to_string()),
-            }
-            stack_size = stack_size.saturating_sub(1);
-          }
-          CalxSyntax::BlockEnd(_) => {
-            let prev_block = blocks_track.pop_block()?;
-            stack_size = prev_block.expected_finish_size();
-            ops.push(CalxInstr::Nop)
-          }
-          CalxSyntax::Call(f_name) => match self.find_func_idx(f_name) {
-            Some((idx, f)) => {
-              stack_size = stack_size.saturating_sub(f.params_types.len()) + f.ret_types.len();
-              ops.push(CalxInstr::Call(idx));
-            }
-            None => return Err(format!("cannot find function named: {f_name}")),
-          },
-          CalxSyntax::ReturnCall(f_name) => match self.find_func_idx(f_name) {
-            Some((idx, _f)) => {
-              stack_size = 0;
-              ops.push(CalxInstr::ReturnCall(idx))
-            }
-            None => return Err(format!("cannot find function named: {f_name}")),
-          },
-          CalxSyntax::CallImport(f_name) => match &self.imports.get(f_name) {
-            Some((_f, size)) => {
-              stack_size = stack_size.saturating_sub(*size) + 1;
-              ops.push(CalxInstr::CallImport(f_name.to_owned()))
-            }
-            None => return Err(format!("missing imported function {f_name}")),
-          },
-          CalxSyntax::Return => {
-            stack_size = 0;
-            ops.push(CalxInstr::Return);
-          }
-          CalxSyntax::If { ret_types, else_at, to } => {
-            blocks_track.push(BlockData::If {
-              ret_types: ret_types.clone(),
-              else_to: *else_at,
-              to: *to,
-              initial_stack_size: stack_size,
-            });
-
-            stack_size = stack_size.saturating_sub(1);
-            ops.push(CalxInstr::JmpIf(*else_at));
-          }
-          CalxSyntax::ElseEnd => {
-            let prev_block = blocks_track.peek_if()?;
-            match prev_block {
-              BlockData::If {
-                to, initial_stack_size, ..
-              } => {
-                ops.push(CalxInstr::Jmp(*to));
-                stack_size = initial_stack_size.saturating_sub(1);
-              }
-              _ => return Err("else marker must be inside if".to_string()),
-            }
-          }
-          CalxSyntax::ThenEnd => {
-            let prev_block = blocks_track.pop_if()?;
-            stack_size = prev_block.expected_finish_size();
-            match prev_block {
-              BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to)),
-              _ => return Err("then marker must be inside if".to_string()),
-            }
-          }
-          a => {
-            let instr: CalxInstr = a.try_into()?;
-            let (params_size, ret_size) = instr.stack_arity();
-            stack_size = stack_size.saturating_sub(params_size) + ret_size;
-            ops.push(instr);
-          }
-        }
-      }
-
-      self.funcs[i].instrs = Rc::new(ops);
-    }
-
-    Ok(())
+    let globals = self
+      .globals
+      .iter()
+      .map(|slot| match slot {
+        CalxSlot::Value(value) => Ok(value.clone()),
+        CalxSlot::Uninitialized => Err("legacy globals must be initialized before preprocessing".to_string()),
+      })
+      .collect::<Result<Vec<_>, _>>()?;
+    crate::validate_program(&self.funcs, &globals, &self.imports).map_err(|e| e.to_string())?;
+    lower_functions(&mut self.funcs, LoweringImports::Legacy(&self.imports), verbose)
   }
 
   #[inline(always)]
@@ -718,6 +708,18 @@ impl CalxVM {
     }
 
     Ok(())
+  }
+
+  fn take_entry_result(&mut self, ret_size: usize) -> Result<CalxRunResult, CalxError> {
+    match ret_size {
+      0 => Ok(CalxRunResult::Void),
+      1 => self
+        .stack
+        .pop()
+        .map(CalxRunResult::Value)
+        .ok_or_else(|| self.gen_err("return without value".to_string())),
+      count => Err(self.gen_err(format!("typed entry result supports zero or one value, found {count}"))),
+    }
   }
 
   fn apply_branch_stack(&mut self, base: usize, arity: usize) -> Result<(), CalxError> {
@@ -817,10 +819,254 @@ impl CalxVM {
   fn find_func(&self, name: &str) -> Option<&CalxFunc> {
     self.funcs.iter().find(|x| &*x.name == name)
   }
+}
 
-  fn find_func_idx(&self, name: &str) -> Option<(usize, &CalxFunc)> {
-    self.funcs.iter().enumerate().find(|pair| &*pair.1.name == name)
+enum LoweringImports<'a> {
+  Legacy(&'a CalxImportsDict),
+  Typed(&'a [CalxImportDecl]),
+}
+
+pub(crate) fn lower_typed_functions(functions: &mut [CalxFunc], imports: &[CalxImportDecl]) -> Result<(), String> {
+  lower_functions(functions, LoweringImports::Typed(imports), false)
+}
+
+fn lower_functions(functions: &mut [CalxFunc], imports: LoweringImports<'_>, verbose: bool) -> Result<(), String> {
+  for index in 0..functions.len() {
+    let mut stack_size = 0;
+    let mut ops = vec![];
+    let mut blocks_track = BlockStack::new();
+    let function = &functions[index];
+
+    if verbose {
+      println!(
+        "\nFUNC {}\n  initial stack size: {}\n  ret_size {}",
+        function.name,
+        stack_size,
+        function.ret_types.len()
+      );
+    }
+
+    for syntax in function.syntax.iter() {
+      if verbose {
+        println!("{stack_size} * {syntax:?}");
+      }
+      match syntax {
+        CalxSyntax::Block {
+          looped,
+          params_types,
+          ret_types,
+          from,
+          to,
+        } => {
+          if *looped {
+            blocks_track.push(BlockData::Loop {
+              params_types: params_types.clone(),
+              ret_types: ret_types.clone(),
+              from: *from,
+              to: *to,
+              initial_stack_size: stack_size,
+            });
+          } else {
+            blocks_track.push(BlockData::Block {
+              params_types: params_types.clone(),
+              ret_types: ret_types.clone(),
+              to: *to,
+              initial_stack_size: stack_size,
+            });
+          }
+          ops.push(CalxInstr::Nop);
+        }
+        CalxSyntax::Br(depth) => {
+          let target_block = blocks_track.peek_block_level(*depth)?;
+          match target_block {
+            BlockData::Loop { from, .. } => ops.push(CalxInstr::Branch {
+              target: *from,
+              base: target_block.branch_base(),
+              arity: target_block.branch_arity(),
+            }),
+            BlockData::Block { to, .. } => ops.push(CalxInstr::Branch {
+              target: *to,
+              base: target_block.branch_base(),
+              arity: target_block.branch_arity(),
+            }),
+            BlockData::If { .. } => return Err("br target must be block or loop".to_string()),
+          }
+        }
+        CalxSyntax::BrIf(depth) => {
+          let target_block = blocks_track.peek_block_level(*depth)?;
+          match target_block {
+            BlockData::Loop { from, .. } => ops.push(CalxInstr::BranchIf {
+              target: *from,
+              base: target_block.branch_base(),
+              arity: target_block.branch_arity(),
+            }),
+            BlockData::Block { to, .. } => ops.push(CalxInstr::BranchIf {
+              target: *to,
+              base: target_block.branch_base(),
+              arity: target_block.branch_arity(),
+            }),
+            BlockData::If { .. } => return Err("br-if target must be block or loop".to_string()),
+          }
+          stack_size = stack_size.saturating_sub(1);
+        }
+        CalxSyntax::BlockEnd(_) => {
+          let previous = blocks_track.pop_block()?;
+          stack_size = previous.expected_finish_size();
+          ops.push(CalxInstr::Nop);
+        }
+        CalxSyntax::Call(name) => {
+          let Some((callee_index, callee)) = functions
+            .iter()
+            .enumerate()
+            .find(|(_, candidate)| candidate.name.as_ref() == name.as_ref())
+          else {
+            return Err(format!("cannot find function named: {name}"));
+          };
+          stack_size = stack_size.saturating_sub(callee.params_types.len()) + callee.ret_types.len();
+          ops.push(CalxInstr::Call(callee_index));
+        }
+        CalxSyntax::ReturnCall(name) => {
+          let Some((callee_index, _)) = functions
+            .iter()
+            .enumerate()
+            .find(|(_, candidate)| candidate.name.as_ref() == name.as_ref())
+          else {
+            return Err(format!("cannot find function named: {name}"));
+          };
+          stack_size = 0;
+          ops.push(CalxInstr::ReturnCall(callee_index));
+        }
+        CalxSyntax::CallImport(name) => match &imports {
+          LoweringImports::Legacy(entries) => {
+            let Some((_, arity)) = entries.get(name) else {
+              return Err(format!("missing imported function {name}"));
+            };
+            stack_size = stack_size.saturating_sub(*arity) + 1;
+            ops.push(CalxInstr::CallImport(name.clone()));
+          }
+          LoweringImports::Typed(entries) => {
+            let Some((import_index, declaration)) = entries
+              .iter()
+              .enumerate()
+              .find(|(_, declaration)| declaration.name.as_ref() == name.as_ref())
+            else {
+              return Err(format!("missing imported function {name}"));
+            };
+            stack_size = stack_size.saturating_sub(declaration.params.len()) + usize::from(declaration.result.is_some());
+            ops.push(CalxInstr::CallImportIndexed(import_index));
+          }
+        },
+        CalxSyntax::Return => {
+          stack_size = 0;
+          ops.push(CalxInstr::Return);
+        }
+        CalxSyntax::If { ret_types, else_at, to } => {
+          blocks_track.push(BlockData::If {
+            ret_types: ret_types.clone(),
+            else_to: *else_at,
+            to: *to,
+            initial_stack_size: stack_size,
+          });
+          stack_size = stack_size.saturating_sub(1);
+          ops.push(CalxInstr::JmpIf(*else_at));
+        }
+        CalxSyntax::ElseEnd => {
+          let previous = blocks_track.peek_if()?;
+          match previous {
+            BlockData::If {
+              to, initial_stack_size, ..
+            } => {
+              ops.push(CalxInstr::Jmp(*to));
+              stack_size = initial_stack_size.saturating_sub(1);
+            }
+            _ => return Err("else marker must be inside if".to_string()),
+          }
+        }
+        CalxSyntax::ThenEnd => {
+          let previous = blocks_track.pop_if()?;
+          stack_size = previous.expected_finish_size();
+          match previous {
+            BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to)),
+            _ => return Err("then marker must be inside if".to_string()),
+          }
+        }
+        other => {
+          let instr: CalxInstr = other.try_into()?;
+          let (params_size, result_size) = instr.stack_arity();
+          stack_size = stack_size.saturating_sub(params_size) + result_size;
+          ops.push(instr);
+        }
+      }
+    }
+
+    functions[index].instrs = Rc::new(ops);
   }
+  Ok(())
+}
+
+fn validate_host_binding(declaration: &CalxImportDecl, binding: &CalxHostBinding) -> Result<(), CalxProgramError> {
+  let declared_params = declaration
+    .params
+    .iter()
+    .map(|boundary| match boundary {
+      crate::CalxBoundaryType::Known(value_type) => Ok(*value_type),
+      crate::CalxBoundaryType::Dynamic => Err(CalxProgramError::new(
+        format!("strict import `{}` cannot bind a Dynamic parameter", declaration.name),
+        None,
+        declaration.span.clone(),
+      )),
+    })
+    .collect::<Result<Vec<_>, _>>()?;
+  let declared_result = match declaration.result {
+    Some(crate::CalxBoundaryType::Known(value_type)) => Some(value_type),
+    Some(crate::CalxBoundaryType::Dynamic) => {
+      return Err(CalxProgramError::new(
+        format!("strict import `{}` cannot bind a Dynamic result", declaration.name),
+        None,
+        declaration.span.clone(),
+      ));
+    }
+    None => None,
+  };
+
+  if binding.params() != declared_params || binding.result() != declared_result {
+    return Err(CalxProgramError::new(
+      format!(
+        "host binding `{}` signature mismatch: guest {:?} -> {:?}, host {:?} -> {:?}",
+        declaration.name,
+        declared_params,
+        declared_result,
+        binding.params(),
+        binding.result()
+      ),
+      None,
+      declaration.span.clone(),
+    ));
+  }
+  Ok(())
+}
+
+fn validate_runtime_args(function: &CalxFunc, args: &[Calx]) -> Result<(), CalxError> {
+  if args.len() != function.params_types.len() {
+    return Err(CalxError::new_raw(format!(
+      "main expected {} argument(s), found {}",
+      function.params_types.len(),
+      args.len()
+    )));
+  }
+  for (index, (value, expected)) in args.iter().zip(function.params_types.iter()).enumerate() {
+    if value.value_type() != *expected {
+      return Err(CalxError::new_raw(format!(
+        "main argument {index} expected {expected:?}, found {:?}",
+        value.value_type()
+      )));
+    }
+  }
+  Ok(())
+}
+
+fn host_callback_error(error: CalxError) -> CalxError {
+  CalxError::new_raw(error.message)
 }
 
 /// Runtime or host error with an optional, out-of-line VM snapshot.
@@ -844,7 +1090,7 @@ pub struct CalxErrorSnapshot {
   /// Active frame at the failure point.
   pub top_frame: CalxFrame,
   /// Globals at the failure point.
-  pub globals: Vec<Calx>,
+  pub globals: Vec<CalxSlot>,
 }
 
 impl fmt::Display for CalxError {
@@ -913,7 +1159,7 @@ impl CalxError {
   }
 
   /// Returns the captured globals when this error originated in a VM.
-  pub fn globals(&self) -> Option<&[Calx]> {
+  pub fn globals(&self) -> Option<&[CalxSlot]> {
     self.snapshot.as_deref().map(|snapshot| snapshot.globals.as_slice())
   }
 }

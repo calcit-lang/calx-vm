@@ -5,10 +5,38 @@ use crate::calx::{Calx, CalxType};
 
 use super::instr::CalxInstr;
 
+/// Storage state for locals and globals.
+///
+/// `Uninitialized` is control state, not the explicit language value
+/// [`Calx::Nil`]. Both strict declarations and legacy allocation instructions
+/// use this state until the first write.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum CalxSlot {
+  Uninitialized,
+  Value(Calx),
+}
+
+impl CalxSlot {
+  pub fn value(value: Calx) -> Self {
+    Self::Value(value)
+  }
+
+  pub fn as_value(&self) -> Option<&Calx> {
+    match self {
+      Self::Uninitialized => None,
+      Self::Value(value) => Some(value),
+    }
+  }
+
+  pub fn set(&mut self, value: Calx) {
+    *self = Self::Value(value);
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxFrame {
   pub name: Rc<str>,
-  pub locals: Vec<Calx>, // params + added locals
+  pub locals: Vec<CalxSlot>, // params + declared or legacy-allocated locals
   /** store return values */
   pub instrs: Rc<Vec<CalxInstr>>,
   pub pointer: usize,
