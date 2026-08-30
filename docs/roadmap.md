@@ -158,10 +158,12 @@ CLI 建议：
 
 首批子集建议：
 
-- `i64`/`f64`/`bool`/`nil`，局部绑定与赋值；
+- Calcit `Number -> F64`、`Bool` 与函数级 `Unit -> void`，局部绑定与赋值；strict
+  boundary 不接受 Nil 或 Dynamic，也不根据数值字面量猜测 I64；
 - 直接函数调用、尾调用、`if`、有界 loop；
 - 少量显式宿主 imports；
-- 固定语义的可变数组或 list builder，暂不复制 Calcit 全部持久化集合语义；
+- 首版限定 scalar kernel；后续按独立 RFC 增加同质 typed buffer，暂不复制 Calcit 全部持久化
+  集合语义；
 - 通过 wrapper 明确 Calcit 动态值与 Calx 类型值的转换成本。
 
 工作项：
@@ -172,6 +174,10 @@ CLI 建议：
 - 选择 `sum`、fibonacci、数值变换、小数组聚合等 5—8 个 kernel，同时比较 Calcit runner、Calx debug/release；
 - benchmark 报告编译/转换成本与纯执行成本，防止只测热循环而误判端到端收益；
 - 达不到收益的特性允许回退到 Calcit，不强求扩大 Calx 语义。
+
+具体子集、closed-call-graph eligibility、all-or-nothing fallback、宿主 ABI 与计量边界见
+[`RFC 0003`](../RFCs/0003-calcit-subset-and-host-abi.md)。Calcit Number 的首批条件分支依赖
+#45 补齐 F64 comparison instructions；不得通过 I64 推断、truthiness 或动态 host import 绕过。
 
 验收：
 
@@ -268,9 +274,10 @@ docs/
   diagnostics.md
 RFCs/
   0001-validation-and-traps.md
-  0002-calcit-subset-and-host-abi.md
-  0003-linear-memory.md
-  0004-binary-container.md
+  0002-typed-boundaries.md
+  0003-calcit-subset-and-host-abi.md
+  0004-linear-memory.md
+  0005-binary-container.md
 ```
 
 RFC 使用中文维护，并固定包含：动机、术语、具体语义、与 Wasm 的相同/不同点、替代方案、测试计划、教学示例、兼容性和未决问题。

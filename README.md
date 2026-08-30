@@ -163,6 +163,9 @@ Typed validation and trap boundaries are specified in
 [`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
 Typed local, global, and host import module contracts are specified in
 [`RFCs/0002-typed-boundaries.md`](RFCs/0002-typed-boundaries.md).
+The initial Calcit compiler subset, all-or-nothing fallback policy, and
+versioned scalar host ABI are specified in
+[`RFCs/0003-calcit-subset-and-host-abi.md`](RFCs/0003-calcit-subset-and-host-abi.md).
 Source-aware parse, validation, runtime, and host diagnostics are documented in
 [`docs/diagnostics.md`](docs/diagnostics.md).
 
