@@ -345,7 +345,8 @@ crossover point。不能从现有手写 Calx demo 的纯 interpreter microbenchm
 依赖顺序：
 
 1. #45 增加 F64 comparisons，并把 typed compiler condition 收紧为 Bool；
-2. #37 提供 source-aware `ProgramBuilder`，只产生待验证 `CalxProgram`；
+2. #37 提供 source-aware `ProgramBuilder`，只产生待验证 `CalxProgram`（API 与兼容性说明见
+   [`docs/program-builder.md`](../docs/program-builder.md)）；
 3. #38 PR A 实现 eligibility、fallback 和三个 scalar golden fixtures；
 4. #38 PR B 接入真实 Calcit `CompiledProgram` snapshot 和 differential corpus；
 5. #39 在 correctness 固定后采集端到端数据；

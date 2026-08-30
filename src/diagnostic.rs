@@ -8,6 +8,7 @@ use crate::{Calx, ValidationType};
 pub enum DiagnosticCode {
   CirruParse,
   InstructionParse,
+  ProgramBuild,
   Validation,
   RuntimeTrap,
   HostImport,
@@ -19,6 +20,7 @@ impl DiagnosticCode {
     match self {
       Self::CirruParse => "CALX_PARSE_CIRRU",
       Self::InstructionParse => "CALX_PARSE_INSTRUCTION",
+      Self::ProgramBuild => "CALX_PROGRAM_BUILD",
       Self::Validation => "CALX_VALIDATION",
       Self::RuntimeTrap => "CALX_RUNTIME_TRAP",
       Self::HostImport => "CALX_HOST_IMPORT",
@@ -36,6 +38,7 @@ impl fmt::Display for DiagnosticCode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DiagnosticPhase {
   Parse,
+  Build,
   Validation,
   Runtime,
   Host,
@@ -45,6 +48,7 @@ impl fmt::Display for DiagnosticPhase {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::Parse => f.write_str("parse"),
+      Self::Build => f.write_str("build"),
       Self::Validation => f.write_str("validation"),
       Self::Runtime => f.write_str("runtime"),
       Self::Host => f.write_str("host"),
@@ -77,6 +81,12 @@ pub struct SourceSpan {
 impl SourceSpan {
   pub fn new(source: Rc<str>, start: SourcePosition, end: SourcePosition) -> Self {
     Self { source, start, end }
+  }
+
+  /// Creates a stable zero-width origin for generated instructions.
+  pub fn synthetic(source: impl Into<Rc<str>>) -> Self {
+    let position = SourcePosition::new(1, 1, 0);
+    Self::new(source.into(), position, position)
   }
 
   /// Compact location used by command-line diagnostics.

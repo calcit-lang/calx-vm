@@ -92,6 +92,21 @@ loaded fn: CalxFunc demo (I64 -> )
 [calx] took 67.250µs: Nil
 ```
 
+### Rust ProgramBuilder API / Rust 构造 API
+
+编译器和 Rust embedding 可以用 `ProgramBuilder`、`FunctionBuilder` 与 opaque declaration
+handles 直接构造严格程序，不需要生成 Cirru 文本。builder 只返回未验证的 `CalxProgram`；执行前
+仍须经过 `ValidatedProgram::try_from_program` 或 `CalxVM::from_program`。严格边界拒绝 `Nil`，API
+也没有隐式 `Dynamic` 入口。中文指南与完整示例见
+[`docs/program-builder.md`](docs/program-builder.md)。
+
+Compilers and Rust embeddings can construct strict programs directly with
+`ProgramBuilder`, `FunctionBuilder`, and opaque declaration handles instead of
+generating Cirru text. The builder returns an unvalidated `CalxProgram`; pass it
+through `ValidatedProgram::try_from_program` or `CalxVM::from_program` before
+execution. See [`docs/program-builder.md`](docs/program-builder.md) for the API,
+source-origin, atomic-error, and compatibility contracts.
+
 ### Syntax Sugar
 
 Code of:

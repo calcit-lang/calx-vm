@@ -2,6 +2,7 @@
 //! It is a stack machine for a strict typed Calcit subset, with an explicit
 //! legacy profile for the original dynamic embedding API.
 
+mod builder;
 mod calx;
 mod diagnostic;
 mod parser;
@@ -11,6 +12,7 @@ mod util;
 mod validator;
 mod vm;
 
+pub use builder::{BodyBuilder, CalxBuildError, CalxBuildErrorKind, FunctionBuilder, GlobalId, ImportId, LocalId, ProgramBuilder};
 pub use calx::{Calx, CalxType};
 pub use diagnostic::{DiagnosticCode, DiagnosticPhase, DiagnosticStack, DiagnosticView, SourcePosition, SourceSpan};
 pub use parser::{extract_nested, parse_function, parse_program, ParseError, ParsedProgram};
