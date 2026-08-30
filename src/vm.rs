@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::{fmt, mem, vec};
 
 use crate::calx::Calx;
+use crate::diagnostic::{DiagnosticCode, DiagnosticPhase, DiagnosticStack, DiagnosticView, SourceSpan};
 use crate::syntax::CalxSyntax;
 use crate::vm::block_data::BlockStack;
 
@@ -796,9 +797,16 @@ impl CalxVM {
   }
 
   fn gen_err(&self, s: String) -> CalxError {
+    let source_span = self
+      .find_func(&self.top_frame.name)
+      .and_then(|function| function.source_spans.get(self.top_frame.pointer))
+      .cloned()
+      .flatten();
     CalxError {
       message: s,
       snapshot: Some(Box::new(CalxErrorSnapshot {
+        code: DiagnosticCode::RuntimeTrap,
+        source_span,
         top_frame: self.top_frame.to_owned(),
         stack: self.stack.to_owned(),
         globals: self.globals.to_owned(),
@@ -818,7 +826,7 @@ impl CalxVM {
 /// Runtime or host error with an optional, out-of-line VM snapshot.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxError {
-  /// Human-readable diagnostic message; not yet a stable error code.
+  /// Human-readable diagnostic message; use `code()` for stable matching.
   pub message: String,
   /// VM state for interpreter-originated traps, absent for raw host errors.
   pub snapshot: Option<Box<CalxErrorSnapshot>>,
@@ -827,6 +835,10 @@ pub struct CalxError {
 /// VM state captured only when an execution error originates inside a VM.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CalxErrorSnapshot {
+  /// Stable diagnostic code for the interpreter-originated failure.
+  pub code: DiagnosticCode,
+  /// Source expression at the active instruction, when source-aware parsing was used.
+  pub source_span: Option<SourceSpan>,
   /// Operand stack at the failure point.
   pub stack: Vec<Calx>,
   /// Active frame at the failure point.
@@ -837,9 +849,9 @@ pub struct CalxErrorSnapshot {
 
 impl fmt::Display for CalxError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.write_str(&self.message)?;
+    self.diagnostic().fmt(f)?;
     if let Some(snapshot) = &self.snapshot {
-      write!(f, "\n{:?}\n{}", snapshot.stack, snapshot.top_frame)?;
+      write!(f, "\n{}", snapshot.top_frame)?;
     }
     Ok(())
   }
@@ -852,6 +864,42 @@ impl CalxError {
       message: s,
       snapshot: None,
     }
+  }
+
+  /// Common structured view without cloning the optional VM snapshot.
+  pub fn diagnostic(&self) -> DiagnosticView<'_> {
+    match self.snapshot.as_deref() {
+      Some(snapshot) => DiagnosticView {
+        code: snapshot.code,
+        phase: DiagnosticPhase::Runtime,
+        message: &self.message,
+        function: Some(&snapshot.top_frame.name),
+        instruction_index: Some(snapshot.top_frame.pointer),
+        span: snapshot.source_span.as_ref(),
+        expected_stack: None,
+        actual_stack: Some(DiagnosticStack::RuntimeValues(&snapshot.stack)),
+      },
+      None => DiagnosticView {
+        code: DiagnosticCode::HostImport,
+        phase: DiagnosticPhase::Host,
+        message: &self.message,
+        function: None,
+        instruction_index: None,
+        span: None,
+        expected_stack: None,
+        actual_stack: None,
+      },
+    }
+  }
+
+  /// Stable diagnostic code for this error.
+  pub fn code(&self) -> DiagnosticCode {
+    self.diagnostic().code
+  }
+
+  /// Source expression for interpreter-originated errors.
+  pub fn source_span(&self) -> Option<&SourceSpan> {
+    self.snapshot.as_deref().and_then(|snapshot| snapshot.source_span.as_ref())
   }
 
   /// Returns the captured operand stack when this error originated in a VM.

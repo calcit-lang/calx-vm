@@ -34,8 +34,35 @@ fn check_reports_validation_errors() {
   let stderr = output_text(&output.stderr);
 
   assert!(!output.status.success());
-  assert!(stderr.contains("validation error in main at syntax[2]"), "{stderr}");
+  assert!(stderr.contains("error[CALX_VALIDATION] validation"), "{stderr}");
+  assert!(stderr.contains("invalid-type.cirru:4:3"), "{stderr}");
+  assert!(stderr.contains("in function main at syntax[2]"), "{stderr}");
   assert!(stderr.contains("expected I64, found F64"), "{stderr}");
+}
+
+#[test]
+fn check_reports_structured_parse_errors() {
+  let source = fixture("tests/fixtures/invalid-parse.cirru");
+  let output = calx(&["check", source.to_str().expect("UTF-8 fixture path")]);
+  let stderr = output_text(&output.stderr);
+
+  assert!(!output.status.success());
+  assert!(stderr.contains("error[CALX_PARSE_CIRRU] parse"), "{stderr}");
+  assert!(stderr.contains("invalid-parse.cirru:2:"), "{stderr}");
+  assert!(stderr.contains("Invalid indentation"), "{stderr}");
+}
+
+#[test]
+fn run_reports_runtime_code_and_source_location() {
+  let source = fixture("tests/fixtures/runtime-trap.cirru");
+  let output = calx(&[source.to_str().expect("UTF-8 fixture path")]);
+  let stderr = output_text(&output.stderr);
+
+  assert!(!output.status.success());
+  assert!(stderr.contains("error[CALX_RUNTIME_TRAP] runtime"), "{stderr}");
+  assert!(stderr.contains("runtime-trap.cirru:4:3"), "{stderr}");
+  assert!(stderr.contains("in function main at syntax[2]"), "{stderr}");
+  assert!(stderr.contains("integer divide by zero"), "{stderr}");
 }
 
 #[test]

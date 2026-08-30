@@ -1,6 +1,8 @@
 use core::fmt;
 
-use crate::{Calx, CalxFunc, CalxImportsDict, CalxSyntax, CalxType};
+use crate::{
+  Calx, CalxFunc, CalxImportsDict, CalxSyntax, CalxType, DiagnosticCode, DiagnosticPhase, DiagnosticStack, DiagnosticView, SourceSpan,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidationType {
@@ -31,19 +33,36 @@ impl fmt::Display for ValidationType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationError {
+  pub code: DiagnosticCode,
   pub function: String,
   pub instruction_index: usize,
   pub message: String,
+  pub span: Option<Box<SourceSpan>>,
+  pub expected_stack: Option<Box<Vec<ValidationType>>>,
   pub operand_stack: Vec<ValidationType>,
+}
+
+impl ValidationError {
+  pub fn diagnostic(&self) -> DiagnosticView<'_> {
+    DiagnosticView {
+      code: self.code,
+      phase: DiagnosticPhase::Validation,
+      message: &self.message,
+      function: Some(&self.function),
+      instruction_index: Some(self.instruction_index),
+      span: self.span.as_deref(),
+      expected_stack: self
+        .expected_stack
+        .as_deref()
+        .map(|stack| DiagnosticStack::ValidationTypes(stack.as_slice())),
+      actual_stack: Some(DiagnosticStack::ValidationTypes(&self.operand_stack)),
+    }
+  }
 }
 
 impl fmt::Display for ValidationError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(
-      f,
-      "validation error in {} at syntax[{}]: {}\noperand stack: {:?}",
-      self.function, self.instruction_index, self.message, self.operand_stack
-    )
+    self.diagnostic().fmt(f)
   }
 }
 
@@ -76,6 +95,8 @@ pub struct ValidationControlState {
 pub struct ValidationStep {
   /// Zero-based index in the function's flattened `CalxSyntax` sequence.
   pub instruction_index: usize,
+  /// Source expression that produced this expanded instruction.
+  pub span: Option<SourceSpan>,
   /// Instruction validated at this step.
   pub instruction: CalxSyntax,
   /// Typed operand stack before the instruction.
@@ -193,6 +214,7 @@ impl<'a> Validator<'a> {
       if let (Some(operand_stack_before), Some(control_stack_before)) = (operand_stack_before, control_stack_before) {
         steps.push(ValidationStep {
           instruction_index: index,
+          span: self.func.source_spans.get(index).cloned().flatten(),
           instruction: syntax.clone(),
           operand_stack_before,
           operand_stack_after: self.operand_stack.clone(),
@@ -494,11 +516,12 @@ impl<'a> Validator<'a> {
   }
 
   fn pop_expect(&mut self, expected: ValidationType) -> Result<ValidationType, ValidationError> {
+    let actual_stack = self.operand_stack.clone();
     let actual = self.pop_any()?;
     if expected.accepts(actual) {
       Ok(actual)
     } else {
-      Err(self.error(format!("expected {expected}, found {actual}")))
+      Err(self.error_with_stacks(format!("expected {expected}, found {actual}"), vec![expected], actual_stack))
     }
   }
 
@@ -534,10 +557,30 @@ impl<'a> Validator<'a> {
 
   fn error(&self, message: impl Into<String>) -> ValidationError {
     ValidationError {
+      code: DiagnosticCode::Validation,
       function: self.func.name.to_string(),
       instruction_index: self.instruction_index,
       message: message.into(),
+      span: self.func.source_spans.get(self.instruction_index).cloned().flatten().map(Box::new),
+      expected_stack: None,
       operand_stack: self.operand_stack.clone(),
+    }
+  }
+
+  fn error_with_stacks(
+    &self,
+    message: impl Into<String>,
+    expected_stack: Vec<ValidationType>,
+    operand_stack: Vec<ValidationType>,
+  ) -> ValidationError {
+    ValidationError {
+      code: DiagnosticCode::Validation,
+      function: self.func.name.to_string(),
+      instruction_index: self.instruction_index,
+      message: message.into(),
+      span: self.func.source_spans.get(self.instruction_index).cloned().flatten().map(Box::new),
+      expected_stack: Some(Box::new(expected_stack)),
+      operand_stack,
     }
   }
 }

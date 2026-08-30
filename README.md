@@ -151,7 +151,7 @@ The per-opcode parser/validator/lowering/interpreter/test audit is maintained in
 [`docs/instruction-matrix.md`](docs/instruction-matrix.md).
 Typed validation and trap boundaries are specified in
 [`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
-The current error phases and optional VM snapshot API are documented in
+Source-aware parse, validation, runtime, and host diagnostics are documented in
 [`docs/diagnostics.md`](docs/diagnostics.md).
 
 ### License
