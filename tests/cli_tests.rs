@@ -82,6 +82,20 @@ fn explain_filters_functions_and_shows_all_pipeline_layers() {
 }
 
 #[test]
+fn check_and_explain_show_f64_comparison_types() {
+  let source = fixture("tests/fixtures/f64-comparison.cirru");
+  let checked = calx(&["check", source.to_str().expect("UTF-8 fixture path")]);
+  assert!(checked.status.success(), "{}", output_text(&checked.stderr));
+
+  let explained = calx(&["explain", source.to_str().expect("UTF-8 fixture path")]);
+  let stdout = output_text(&explained.stdout);
+  assert!(explained.status.success(), "{}", output_text(&explained.stderr));
+  assert!(stdout.contains("syntax[002] F64Lt"), "{stdout}");
+  assert!(stdout.contains("operand: [F64, F64] -> [Bool]"), "{stdout}");
+  assert!(stdout.contains("lowered: F64Lt"), "{stdout}");
+}
+
+#[test]
 fn explain_rejects_an_unknown_function_filter() {
   let source = fixture("demos/if.cirru");
   let output = calx(&["explain", source.to_str().expect("UTF-8 fixture path"), "--function", "missing"]);

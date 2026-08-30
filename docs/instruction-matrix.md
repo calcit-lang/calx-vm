@@ -46,6 +46,12 @@
 | `i.le` | 直接 | `i64 i64 -> bool` | 直接 | 直接 | `matrix/integer`, `demos` | 支持 |
 | `i.gt` | 直接 | `i64 i64 -> bool` | 直接 | 直接 | `matrix/integer` | 支持 |
 | `i.ge` | 直接 | `i64 i64 -> bool` | 直接 | 直接 | `matrix/integer`, `demos` | 支持 |
+| `f.eq` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries`, `cli/f64-comparison` | 支持 |
+| `f.ne` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries` | 支持 |
+| `f.lt` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries`, `cli/f64-comparison` | 支持 |
+| `f.le` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries` | 支持 |
+| `f.gt` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries` | 支持 |
+| `f.ge` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries` | 支持 |
 | `add` | 直接 | 同型 `i64/f64` 或 Dynamic | 直接 | wrapping i64 / f64 | `matrix/float`, `demos` | 部分静态支持 |
 | `mul` | 直接 | 同型 `i64/f64` 或 Dynamic | 直接 | wrapping i64 / f64 | `matrix/float` | 部分静态支持 |
 | `div` | 直接 | `f64 f64 -> f64` | 直接 | IEEE 754 | `matrix/float` | 支持 f64 |

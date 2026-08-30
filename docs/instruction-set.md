@@ -40,17 +40,18 @@ typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` �
 | --- | --- | --- | --- |
 | 常量 | `const` | 支持 | 支持标量常量；不支持 list literal |
 | 栈 | `dup`, `drop` | 支持 | 栈下溢返回 VM 错误 |
-| local | `local.new/get/set/tee` | 支持 | `local.new` 初始化为 `nil`；索引越界返回错误 |
-| global | `global.new/get/set` | 支持 | global 当前没有静态类型和 mutability 声明 |
+| local | `local.new/get/set/tee` | 支持 | strict local 使用 typed declaration；legacy `local.new` 初始化为独立 Uninitialized slot，首次 set 前读取 trap |
+| global | `global.new/get/set` | 支持 | strict global 有类型与 mutability；legacy `global.new` 使用 Uninitialized Dynamic slot |
 | 整数 | `i.add`, `i.mul`, `i.neg` | 支持 | `i64` 二补码 wrapping 语义 |
 | 整数 | `i.div`, `i.rem` | 支持 | 除零 trap；`i.div` 的 `MIN / -1` trap |
 | 整数 | `i.shl`, `i.shr` | 支持 | shift count 按 64 取模；`i.shr` 是有符号右移 |
 | 整数比较 | `i.eq/ne/lt/le/gt/ge` | 支持 | 两个 `i64`，产生 `bool` |
+| 浮点比较 | `f.eq/ne/lt/le/gt/ge` | 支持 | 两个 `f64`，按 IEEE 754/Rust 比较并产生 `bool`；不经过 truthiness |
 | 重载数值 | `add`, `mul` | 部分支持 | 同类型 `i64` 或 `f64`；整数采用 wrapping 语义 |
 | 浮点 | `div`, `neg` | 部分支持 | 仅 `f64`；沿用 IEEE 754/Rust 基础运算结果 |
 | 结构化控制 | `block`, `loop`, `if`, `br`, `br-if` | 支持 | typed operand/control stack；label 参数/结果与不可达栈多态在 lowering 前验证 |
 | 函数 | `call`, `return-call`, `return` | 支持 | 参数与返回类型在 lowering 前验证；动态 local/import 仍可能保留 runtime 检查 |
-| 宿主 | `call-import` | 部分支持 | import 只声明参数数量，固定返回一个 `Calx` 值 |
+| 宿主 | `call-import` | 支持 strict/legacy | strict import 声明 concrete 参数及 zero/single result；legacy tuple 只有 arity 与 Dynamic result |
 | trap | `unreachable` | 支持 | 返回 VM trap，不触发 Rust panic |
 | 宿主安全 | `quit` | 支持 | 返回 VM trap，不允许 guest 直接终止宿主进程 |
 | 诊断 | `assert`, `echo`, `inspect` | 支持 | 教学/调试扩展，不对应 Wasm core 指令 |
@@ -70,6 +71,19 @@ typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` �
 - `i.rem` 在除零时 trap，`i64::MIN % -1` 为 `0`。
 
 Debug 与 Release 构建必须产生相同结果，不能依赖 Rust profile 的 overflow-check 设置。
+
+## 浮点比较语义
+
+`f.eq/ne/lt/le/gt/ge` 只接受两个 `f64` 并产生 `bool`，不参与 `add/mul` 的 legacy 数值重载，
+也不把任一操作数转换为 truthiness。它们直接使用 Rust `f64`/IEEE 754 comparison：
+
+- NaN 与任何值（包括自身）的 `f.eq` 为 false，`f.ne` 为 true；
+- NaN 参与 `f.lt/le/gt/ge` 均为 false；
+- `0.0` 与 `-0.0` 相等，且互相满足 `f.le`/`f.ge`；
+- 正负无穷按 IEEE 754 顺序比较。
+
+这组指令为 Calcit `Number -> F64` compiler subset 提供数值条件。Calcit frontend 仍必须把
+`if` 条件静态证明为 Bool；新增 comparison 不改变 Calx legacy truthiness。
 
 ## 错误边界
 

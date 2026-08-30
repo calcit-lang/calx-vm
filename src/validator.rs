@@ -387,6 +387,11 @@ impl<'a> Validator<'a> {
         self.pop_expect(CalxType::I64.into())?;
         self.operand_stack.push(CalxType::Bool.into());
       }
+      F64Eq | F64Ne | F64Lt | F64Le | F64Gt | F64Ge => {
+        self.pop_expect(CalxType::F64.into())?;
+        self.pop_expect(CalxType::F64.into())?;
+        self.operand_stack.push(CalxType::Bool.into());
+      }
       Add | Mul => self.validate_overloaded_numeric()?,
       Div => {
         self.pop_expect(CalxType::F64.into())?;

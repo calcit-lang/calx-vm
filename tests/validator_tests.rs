@@ -36,6 +36,18 @@ fn rejects_wrong_numeric_operand_type() {
 }
 
 #[test]
+fn float_comparisons_reject_non_f64_operands() {
+  for instruction in ["f.eq", "f.ne", "f.lt", "f.le", "f.gt", "f.ge"] {
+    let source = format!("fn main ()\n  const 1\n  const 2.\n  {instruction}\n  drop");
+    let error = validate(&source).expect_err("float comparisons must require two f64 operands");
+
+    assert!(error.contains("expected F64, found I64"), "{instruction}: {error}");
+    assert!(error.contains("main"), "{instruction}: {error}");
+    assert!(error.contains("syntax[2]"), "{instruction}: {error}");
+  }
+}
+
+#[test]
 fn rejects_wrong_call_argument_type() {
   let error = validate(
     r#"fn identity (i64 -> i64)
