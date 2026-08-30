@@ -491,7 +491,7 @@ fn validate_boundary(
   }
 }
 
-fn validate_strict_type(
+pub(crate) fn validate_strict_type(
   value_type: CalxType,
   boundary_kind: &str,
   function: Option<Rc<str>>,

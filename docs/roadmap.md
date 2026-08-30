@@ -178,6 +178,8 @@ CLI 建议：
 具体子集、closed-call-graph eligibility、all-or-nothing fallback、宿主 ABI 与计量边界见
 [`RFC 0003`](../RFCs/0003-calcit-subset-and-host-abi.md)。Calcit Number 的首批条件分支依赖
 #45 补齐 F64 comparison instructions；不得通过 I64 推断、truthiness 或动态 host import 绕过。
+#37 已建立 source-aware `ProgramBuilder -> CalxProgram -> ValidatedProgram` 路径；后续 translator
+应直接消费 typed preprocessed snapshot，并复用 opaque local/global/import handle 与结构化控制流 API。
 
 验收：
 
