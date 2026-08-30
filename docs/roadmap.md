@@ -6,7 +6,7 @@
 
 ## 1. 定位与边界
 
-Calx 不是 WebAssembly 的兼容实现，也不以生产部署为目标。它应当保留 Cirru/Calcit 风格的可读语法和动态数据实验能力，同时借用 WebAssembly 最有教学价值的设计：类型化操作数栈、结构化控制流、验证与执行分离、显式 trap、函数/宿主边界，以及可选的线性内存。
+Calx 不是 WebAssembly 的兼容实现，也不以生产部署为目标。它应当保留 Cirru/Calcit 风格的可读语法，同时为 Calcit 的计算密集型 typed subset 提供比通用动态运行时更严格的执行层：strict program 中不允许 Dynamic boundary，也不以 `nil` 充当未初始化、缺失或 void 哨兵。旧动态数据行为只留在显式 legacy profile。Calx 同时借用 WebAssembly 最有教学价值的设计：类型化操作数栈、结构化控制流、验证与执行分离、显式 trap、函数/宿主边界，以及可选的线性内存。
 
 强化工作的优先级为：
 
@@ -47,7 +47,9 @@ Calx 不是 WebAssembly 的兼容实现，也不以生产部署为目标。它�
 
 当前开发分支已完成第一批 M0 止血：修正 `local.tee`、`global.set`、`if` 分支栈恢复和嵌套 label 查找；整数 wrapping/trap 行为已固定；guest `unreachable`/`quit` 不再 panic 或终止宿主；未定义指令在 parser 入口明确拒绝。具体契约见 [`instruction-set.md`](instruction-set.md)。
 
-M1 第一阶段已实现：独立 typed operand/control stack validator 在 lowering 前运行，已知类型错误提前返回 `ValidationError`；无类型 local/global/import 使用显式 `Dynamic` 边界。设计见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
+M1 第一阶段已实现：独立 typed operand/control stack validator 在 lowering 前运行，已知类型错误提前返回 `ValidationError`；现有无类型 local/global/import 被显式识别为 legacy `Dynamic` 边界。设计见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
+
+M1 第二阶段的 typed local/global/import module contract 已由 [`RFC 0002`](../RFCs/0002-typed-boundaries.md) 固定；实现拆为 representation/parser 与 validator/runtime 两个后续 PR。strict profile 要求 zero Dynamic、zero nil-typed boundary，并用明确的 void/uninitialized 状态代替 nil 哨兵；旧动态 API 留在单独 legacy profile 渐进迁移。
 
 M2 第一阶段已实现：`calx check` 可只解析和验证，`calx explain` 可观察 folded Cirru、展开 syntax、逐指令类型/控制栈变化和 lowering 结果。用法见 [`tutorials/check-and-explain.md`](tutorials/check-and-explain.md)。
 
@@ -108,6 +110,8 @@ VM events + result/trap
 - 引入 `ValidationContext`、typed operand stack、control frame 和 `ValidationError`；
 - 为每条指令定义输入/输出类型，不再只返回 `(usize, usize)`；
 - 校验 local/global 索引及类型、函数/import 签名、返回值、block/loop/if 参数和结果；
+- strict module 强制 zero Dynamic、禁止 nil-typed storage/function/import boundary；
+- 用 void result 与独立 uninitialized state 取代隐式 `Calx::Nil` 哨兵；
 - 按 WebAssembly 的思路实现不可达状态/栈多态，避免 `return`、`br` 后的死代码产生伪错误；
 - 明确 Calx 与 Wasm 的差异：`i64` 条件、`bool`、`nil`、`str`、`list`、truthiness、动态值和尾调用；
 - 将源 span 从 parser 贯穿到 syntax、lowered instruction 和错误报告；
@@ -116,6 +120,7 @@ VM events + result/trap
 验收：
 
 - 验证通过的程序不会因操作数类型、local/global 类型或控制栈错误在解释器中崩溃；
+- strict program 的 local/global 热路径无需 Dynamic 类型守卫，void/未初始化状态不产生 nil；
 - 每类验证规则同时有正向和负向测试；
 - 错误至少包含函数名、源位置、指令、期望栈和实际栈；
 - RFC 中每项声称“对齐 Wasm”的行为都链接到相应规范规则或测试来源。

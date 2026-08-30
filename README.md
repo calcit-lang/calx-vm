@@ -2,6 +2,11 @@
 
 > Calcit runner can be slow being a dynamic language. Calx VM trying to provide some helper tools for faster computation of very simple but repeated tasks. Ideally Calcit should use WASM for CPU heavy computations.
 
+The 0.3 design moves performance-sensitive programs toward a strict typed
+profile: no `Dynamic` local/global/import contracts and no implicit `nil` for
+uninitialized or void state. Dynamic behavior remains an explicit legacy
+compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
+
 ### Usages
 
 Version 0.2.2 adds the semantic-safety baseline, typed validation,
@@ -151,6 +156,8 @@ The per-opcode parser/validator/lowering/interpreter/test audit is maintained in
 [`docs/instruction-matrix.md`](docs/instruction-matrix.md).
 Typed validation and trap boundaries are specified in
 [`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
+Typed local, global, and host import module contracts are specified in
+[`RFCs/0002-typed-boundaries.md`](RFCs/0002-typed-boundaries.md).
 Source-aware parse, validation, runtime, and host diagnostics are documented in
 [`docs/diagnostics.md`](docs/diagnostics.md).
 

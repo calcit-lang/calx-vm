@@ -148,6 +148,8 @@ Calx parser 当前把 else 分支排在扁平 syntax 的前半段，以便 lower
 
 现有 import 字典只记录 Rust function pointer 和 arity。验证器检查参数数量，参数和单个返回值均视为 `Dynamic`。typed host ABI 应通过单独 RFC 增加完整签名，而不是从 Rust function pointer 猜测。
 
+上述 local/global/import 后续设计已在 [`RFC 0002`](0002-typed-boundaries.md) 中明确。
+
 ## 错误与 Trap
 
 `ValidationError` 当前公开：
