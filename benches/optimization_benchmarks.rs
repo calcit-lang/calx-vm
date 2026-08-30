@@ -8,6 +8,7 @@ fn create_arithmetic_intensive_func() -> CalxFunc {
     name: Rc::from("arithmetic_intensive"),
     params_types: Rc::new(vec![CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // Execute intensive arithmetic operations: ((x + 1) * 2 + 3) * 4 + 5
       CalxSyntax::LocalGet(0), // x
@@ -35,6 +36,7 @@ fn create_stack_intensive_func() -> CalxFunc {
     name: Rc::from("stack_intensive"),
     params_types: Rc::new(vec![CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // Intensive stack operations, ensure only one value remains on stack
       CalxSyntax::LocalGet(0),         // Get parameter -> stack: [x]
@@ -62,6 +64,7 @@ fn create_locals_intensive_func() -> CalxFunc {
     name: Rc::from("locals_intensive"),
     params_types: Rc::new(vec![CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // Create multiple local variables and access them frequently
       CalxSyntax::LocalNew,    // temp1 (index 1)
@@ -101,6 +104,7 @@ fn create_const_intensive_func() -> CalxFunc {
     name: Rc::from("const_intensive"),
     params_types: Rc::new(vec![]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // Intensive constant operations
       CalxSyntax::Const(Calx::I64(1)),
@@ -134,6 +138,7 @@ fn create_main_func(target_func: &str, args: Vec<CalxSyntax>) -> CalxFunc {
     name: Rc::from("main"),
     params_types: Rc::new(vec![]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(syntax),
     source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
@@ -215,6 +220,7 @@ fn bench_mixed_operations(c: &mut Criterion) {
     name: Rc::from("mixed_ops"),
     params_types: Rc::new(vec![CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // Mix various operation types
       CalxSyntax::LocalNew,    // temp (index 1)

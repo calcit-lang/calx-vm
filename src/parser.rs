@@ -4,12 +4,14 @@
 
 mod locals;
 
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use cirru_parser::{parse, Cirru, CirruError};
 
 use crate::calx::CalxType;
 use crate::diagnostic::{DiagnosticCode, DiagnosticPhase, DiagnosticView, SourcePosition, SourceSpan};
+use crate::program::{CalxBoundaryType, CalxGlobalDecl, CalxImportDecl, CalxLocalDecl, CalxMutability, CalxProgram, CalxProgramError};
 use crate::syntax::CalxSyntax;
 use crate::vm::func::CalxFunc;
 
@@ -18,8 +20,61 @@ use self::locals::LocalsCollector;
 /// Source-aware result of parsing a complete Calx file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedProgram {
+  /// Function AST nodes only, parallel to `functions`.
   pub nodes: Vec<Cirru>,
   pub functions: Vec<CalxFunc>,
+  pub globals: Vec<CalxGlobalDecl>,
+  pub imports: Vec<CalxImportDecl>,
+}
+
+impl ParsedProgram {
+  /// Convert parsed metadata into the strict typed profile.
+  pub fn into_program(self) -> Result<CalxProgram, CalxProgramError> {
+    CalxProgram::try_new(self.functions, self.globals, self.imports)
+  }
+
+  /// Count boundaries that force the legacy profile.
+  pub fn dynamic_boundary_count(&self) -> usize {
+    let local_count = self
+      .functions
+      .iter()
+      .flat_map(|function| function.locals.iter())
+      .filter(|local| local.value_type == CalxBoundaryType::Dynamic)
+      .count();
+    let global_count = self
+      .globals
+      .iter()
+      .filter(|global| global.value_type == CalxBoundaryType::Dynamic)
+      .count();
+    let import_count = self
+      .imports
+      .iter()
+      .map(|import| {
+        import
+          .params
+          .iter()
+          .filter(|value_type| **value_type == CalxBoundaryType::Dynamic)
+          .count()
+          + usize::from(import.result == Some(CalxBoundaryType::Dynamic))
+      })
+      .sum::<usize>();
+    let declared_imports = self.imports.iter().map(|import| import.name.as_ref()).collect::<HashSet<_>>();
+    let mut undeclared_imports = HashSet::new();
+    let legacy_global_count = self
+      .functions
+      .iter()
+      .flat_map(|function| function.syntax.iter())
+      .filter(|syntax| match syntax {
+        CalxSyntax::GlobalNew => true,
+        CalxSyntax::CallImport(name) if !declared_imports.contains(name.as_ref()) => {
+          undeclared_imports.insert(name.as_ref());
+          false
+        }
+        _ => false,
+      })
+      .count();
+    local_count + global_count + import_count + legacy_global_count + undeclared_imports.len()
+  }
 }
 
 /// Parse failure with a stable code and optional source location.
@@ -59,33 +114,107 @@ impl std::error::Error for ParseError {}
 /// expanded syntax instructions.
 pub fn parse_program(source_name: impl Into<Rc<str>>, code: &str) -> Result<ParsedProgram, ParseError> {
   let source_name = source_name.into();
-  let nodes = parse(code).map_err(|error| cirru_parse_error(source_name.clone(), error))?;
+  let parsed_nodes = parse(code).map_err(|error| cirru_parse_error(source_name.clone(), error))?;
   let tokens = scan_source_tokens(source_name.clone(), code);
   let mut cursor = 0;
-  let located = nodes
+  let located = parsed_nodes
     .iter()
     .map(|node| locate_node(node, &tokens, &mut cursor))
     .collect::<Result<Vec<_>, _>>()?;
 
-  let mut functions = Vec::with_capacity(nodes.len());
-  for (node, located_node) in nodes.iter().zip(&located) {
+  let mut function_indices = vec![];
+  let mut globals = vec![];
+  let mut imports = vec![];
+  let mut global_names = HashMap::new();
+  let mut import_names = HashMap::new();
+
+  for (index, (node, located_node)) in parsed_nodes.iter().zip(&located).enumerate() {
     let Cirru::List(items) = node else {
       return Err(ParseError {
         code: DiagnosticCode::InstructionParse,
-        message: "expected top-level function expression".to_string(),
+        message: "expected top-level function, global, or import-fn expression".to_string(),
         function: None,
         instruction_index: None,
         span: located_node.span.clone().map(Box::new),
       });
     };
+    match items.first().and_then(leaf_value) {
+      Some("fn" | "defn") => function_indices.push(index),
+      Some("global") => {
+        let declaration = parse_global_decl(items, located_node.span.clone()).map_err(|message| ParseError {
+          code: DiagnosticCode::InstructionParse,
+          message,
+          function: None,
+          instruction_index: None,
+          span: located_node.head_span().or_else(|| located_node.span.clone()).map(Box::new),
+        })?;
+        if global_names.insert(declaration.name.to_string(), globals.len()).is_some() {
+          return Err(ParseError {
+            code: DiagnosticCode::InstructionParse,
+            message: format!("duplicate global declaration `{}`", declaration.name),
+            function: None,
+            instruction_index: None,
+            span: declaration.span.clone().map(Box::new),
+          });
+        }
+        globals.push(declaration);
+      }
+      Some("import-fn") => {
+        let declaration = parse_import_decl(items, located_node.span.clone()).map_err(|message| ParseError {
+          code: DiagnosticCode::InstructionParse,
+          message,
+          function: None,
+          instruction_index: None,
+          span: located_node.head_span().or_else(|| located_node.span.clone()).map(Box::new),
+        })?;
+        if import_names.insert(declaration.name.to_string(), imports.len()).is_some() {
+          return Err(ParseError {
+            code: DiagnosticCode::InstructionParse,
+            message: format!("duplicate import declaration `{}`", declaration.name),
+            function: None,
+            instruction_index: None,
+            span: declaration.span.clone().map(Box::new),
+          });
+        }
+        imports.push(declaration);
+      }
+      Some(name) => {
+        return Err(ParseError {
+          code: DiagnosticCode::InstructionParse,
+          message: format!("unknown top-level declaration `{name}`"),
+          function: None,
+          instruction_index: None,
+          span: located_node.head_span().or_else(|| located_node.span.clone()).map(Box::new),
+        });
+      }
+      None => {
+        return Err(ParseError {
+          code: DiagnosticCode::InstructionParse,
+          message: "expected a top-level declaration name".to_string(),
+          function: None,
+          instruction_index: None,
+          span: located_node.span.clone().map(Box::new),
+        });
+      }
+    }
+  }
+
+  let mut nodes = Vec::with_capacity(function_indices.len());
+  let mut functions = Vec::with_capacity(function_indices.len());
+  for index in function_indices {
+    let node = &parsed_nodes[index];
+    let located_node = &located[index];
+    let Cirru::List(items) = node else {
+      continue;
+    };
     let function_name = items.get(1).and_then(|item| match item {
       Cirru::Leaf(name) => Some(name.to_string()),
       Cirru::List(_) => None,
     });
-    let mut function = match parse_function(items) {
+    let mut function = match parse_function_with_globals(items, &global_names) {
       Ok(function) => function,
       Err(message) => {
-        let (instruction_index, span) = locate_function_parse_failure(items, located_node);
+        let (instruction_index, span) = locate_function_parse_failure(items, located_node, &global_names);
         return Err(ParseError {
           code: DiagnosticCode::InstructionParse,
           message,
@@ -95,6 +224,7 @@ pub fn parse_program(source_name: impl Into<Rc<str>>, code: &str) -> Result<Pars
         });
       }
     };
+    attach_local_source_spans(&mut function, located_node);
     let source_spans = function_source_spans(located_node);
     if source_spans.len() != function.syntax.len() {
       return Err(ParseError {
@@ -110,10 +240,16 @@ pub fn parse_program(source_name: impl Into<Rc<str>>, code: &str) -> Result<Pars
       });
     }
     function.source_spans = Rc::new(source_spans);
+    nodes.push(node.clone());
     functions.push(function);
   }
 
-  Ok(ParsedProgram { nodes, functions })
+  Ok(ParsedProgram {
+    nodes,
+    functions,
+    globals,
+    imports,
+  })
 }
 
 /// parses
@@ -123,6 +259,10 @@ pub fn parse_program(source_name: impl Into<Rc<str>>, code: &str) -> Result<Pars
 ///   echo
 /// ```
 pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
+  parse_function_with_globals(nodes, &HashMap::new())
+}
+
+fn parse_function_with_globals(nodes: &[Cirru], global_names: &HashMap<String, usize>) -> Result<CalxFunc, String> {
   if nodes.len() <= 3 {
     return Err(String::from("function expects at least 3 lines"));
   }
@@ -138,37 +278,163 @@ pub fn parse_function(nodes: &[Cirru]) -> Result<CalxFunc, String> {
   };
 
   let mut body: Vec<CalxSyntax> = vec![];
+  let mut local_declarations = vec![];
   let mut locals_collector: LocalsCollector = LocalsCollector::new();
 
   let (params_types, ret_types) = parse_fn_types(&nodes[2], &mut locals_collector)?;
 
   let mut ptr_base: usize = 0;
-  for (idx, line) in nodes.iter().enumerate() {
-    if idx >= 3 {
-      for expanded in extract_nested(line)? {
-        // println!("expanded {}", expanded);
-        let syntax = parse_instr(ptr_base, &expanded, &mut locals_collector)?;
+  let mut executable_started = false;
+  for line in nodes.iter().skip(3) {
+    match instruction_head(line) {
+      Some("local") if !executable_started => {
+        local_declarations.push(parse_local_decl(line, &mut locals_collector)?);
+      }
+      Some("local.new") if !executable_started => {
+        local_declarations.push(parse_legacy_local_decl(line, &mut locals_collector)?);
+        body.push(CalxSyntax::LocalNew);
+        ptr_base += 1;
+      }
+      Some("local" | "local.new") => {
+        return Err("local declarations must appear before the first executable instruction".to_string());
+      }
+      Some(";;") if !executable_started => {}
+      _ => {
+        executable_started = true;
+        for expanded in extract_nested(line)? {
+          let syntax = parse_instr(ptr_base, &expanded, &mut locals_collector, global_names)?;
 
-        for instr in syntax {
-          ptr_base += 1;
-          body.push(instr);
+          for instr in syntax {
+            ptr_base += 1;
+            body.push(instr);
+          }
         }
       }
     }
   }
 
-  Ok(CalxFunc {
+  Ok(
+    CalxFunc::new(name, params_types, ret_types, body)
+      .with_locals(local_declarations)
+      .with_local_names(locals_collector.locals),
+  )
+}
+
+fn leaf_value(node: &Cirru) -> Option<&str> {
+  match node {
+    Cirru::Leaf(value) => Some(value),
+    Cirru::List(_) => None,
+  }
+}
+
+fn instruction_head(node: &Cirru) -> Option<&str> {
+  match node {
+    Cirru::List(items) => items.first().and_then(leaf_value),
+    Cirru::Leaf(_) => None,
+  }
+}
+
+fn parse_decl_name(node: &Cirru, declaration: &str, require_dollar: bool) -> Result<Rc<str>, String> {
+  let Some(name) = leaf_value(node) else {
+    return Err(format!("{declaration} name must be a token"));
+  };
+  if name.is_empty() || (require_dollar && (name == "$" || !name.starts_with('$'))) {
+    return Err(format!("{declaration} expects a non-empty `$name`, got `{name}`"));
+  }
+  Ok(Rc::from(name))
+}
+
+fn parse_local_decl(node: &Cirru, collector: &mut LocalsCollector) -> Result<CalxLocalDecl, String> {
+  let Cirru::List(items) = node else {
+    return Err("local declaration must be an expression".to_string());
+  };
+  if items.len() != 3 {
+    return Err(format!("local expects `$name TYPE`, got {items:?}"));
+  }
+  let name = parse_decl_name(&items[1], "local", true)?;
+  let Some(value_type) = leaf_value(&items[2]) else {
+    return Err("local type must be a token".to_string());
+  };
+  let value_type = value_type.parse::<CalxType>()?;
+  collector.declare(&name)?;
+  Ok(CalxLocalDecl::new(name, value_type))
+}
+
+fn parse_legacy_local_decl(node: &Cirru, collector: &mut LocalsCollector) -> Result<CalxLocalDecl, String> {
+  let Cirru::List(items) = node else {
+    return Err("local.new must be an expression".to_string());
+  };
+  if items.len() > 2 {
+    return Err(format!("local.new accepts at most one `$name`, got {items:?}"));
+  }
+  let name = match items.get(1) {
+    Some(node) => parse_decl_name(node, "local.new", true)?,
+    None => Rc::from(format!("${}", collector.len())),
+  };
+  collector.declare(&name)?;
+  Ok(CalxLocalDecl {
     name,
-    params_types: params_types.into(),
-    ret_types: Rc::new(ret_types),
-    local_names: Rc::new(locals_collector.locals),
-    syntax: Rc::new(body),
-    source_spans: Rc::new(vec![]),
-    instrs: Rc::new(vec![]),
+    value_type: CalxBoundaryType::Dynamic,
+    span: None,
   })
 }
 
-pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
+fn parse_global_decl(nodes: &[Cirru], span: Option<SourceSpan>) -> Result<CalxGlobalDecl, String> {
+  if nodes.len() != 4 {
+    return Err(format!("global expects `$name (const|mut TYPE) INITIALIZER`, got {nodes:?}"));
+  }
+  let name = parse_decl_name(&nodes[1], "global", true)?;
+  let Cirru::List(contract) = &nodes[2] else {
+    return Err("global contract must be `(const|mut TYPE)`".to_string());
+  };
+  if contract.len() != 2 {
+    return Err(format!("global contract expects mutability and type, got {contract:?}"));
+  }
+  let mutability = match leaf_value(&contract[0]) {
+    Some("const") => CalxMutability::Const,
+    Some("mut") => CalxMutability::Mut,
+    Some(value) => return Err(format!("global mutability must be `const` or `mut`, got `{value}`")),
+    None => return Err("global mutability must be a token".to_string()),
+  };
+  let Some(value_type) = leaf_value(&contract[1]) else {
+    return Err("global type must be a token".to_string());
+  };
+  let value_type = value_type.parse::<CalxType>()?;
+  let Some(initial) = leaf_value(&nodes[3]) else {
+    return Err("global initializer must be a scalar literal".to_string());
+  };
+  let initial = initial.parse::<crate::Calx>()?;
+  Ok(CalxGlobalDecl::new(name, value_type, mutability, initial).with_span(span))
+}
+
+fn parse_import_decl(nodes: &[Cirru], span: Option<SourceSpan>) -> Result<CalxImportDecl, String> {
+  if nodes.len() != 3 {
+    return Err(format!("import-fn expects `NAME (PARAMS... -> [RESULT])`, got {nodes:?}"));
+  }
+  let name = parse_decl_name(&nodes[1], "import-fn", false)?;
+  let Cirru::List(signature) = &nodes[2] else {
+    return Err("import-fn signature must be an expression".to_string());
+  };
+  if signature.iter().any(|node| matches!(node, Cirru::List(_))) {
+    return Err("import-fn parameter and result types must be plain tokens".to_string());
+  }
+  let arrow_count = signature.iter().filter(|node| leaf_value(node) == Some("->")).count();
+  if arrow_count != 1 {
+    return Err(format!("import-fn signature requires exactly one `->`, found {arrow_count}"));
+  }
+  let (params, results) = parse_block_types(&nodes[2])?;
+  if results.len() > 1 {
+    return Err(format!("import-fn supports zero or one result, got {results:?}"));
+  }
+  Ok(CalxImportDecl::new(name, params, results.into_iter().next()).with_span(span))
+}
+
+fn parse_instr(
+  ptr_base: usize,
+  node: &Cirru,
+  collector: &mut LocalsCollector,
+  global_names: &HashMap<String, usize>,
+) -> Result<Vec<CalxSyntax>, String> {
   match node {
     Cirru::Leaf(_) => Err(format!("expected expr of instruction, {node}")),
     Cirru::List(xs) => {
@@ -201,29 +467,19 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
             let idx: usize = parse_local_idx(&xs[1], collector)?;
             Ok(vec![CalxSyntax::LocalTee(idx)])
           }
-          "local.new" => Ok(vec![CalxSyntax::LocalNew]),
+          "local.new" => Err("local.new is only allowed in the function declaration prefix".to_string()),
           "global.get" => {
             if xs.len() != 2 {
               return Err(format!("global.get expected a position, {xs:?}"));
             }
-            let idx: usize = match &xs[1] {
-              Cirru::Leaf(s) => parse_usize(s)?,
-              Cirru::List(_) => {
-                return Err(format!("expected token, got {}", xs[1]));
-              }
-            };
+            let idx = parse_global_idx(&xs[1], global_names)?;
             Ok(vec![CalxSyntax::GlobalGet(idx)])
           }
           "global.set" => {
             if xs.len() != 2 {
               return Err(format!("global.set expected a position, {xs:?}"));
             }
-            let idx: usize = match &xs[1] {
-              Cirru::Leaf(s) => parse_usize(s)?,
-              Cirru::List(_) => {
-                return Err(format!("expected token, got {}", xs[1]));
-              }
-            };
+            let idx = parse_global_idx(&xs[1], global_names)?;
             Ok(vec![CalxSyntax::GlobalSet(idx)])
           }
           "global.new" => Ok(vec![CalxSyntax::GlobalNew]),
@@ -285,8 +541,8 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
             };
             Ok(vec![CalxSyntax::Br(idx)])
           }
-          "block" => parse_block(ptr_base, xs, false, collector),
-          "loop" => parse_block(ptr_base, xs, true, collector),
+          "block" => parse_block(ptr_base, xs, false, collector, global_names),
+          "loop" => parse_block(ptr_base, xs, true, collector, global_names),
           "echo" => Ok(vec![CalxSyntax::Echo]),
           "call" => {
             if xs.len() != 2 {
@@ -353,7 +609,7 @@ pub fn parse_instr(ptr_base: usize, node: &Cirru, collector: &mut LocalsCollecto
             Ok(vec![CalxSyntax::Assert(Rc::from(message))])
           }
           "inspect" => Ok(vec![CalxSyntax::Inspect]),
-          "if" => parse_if(ptr_base, xs, collector),
+          "if" => parse_if(ptr_base, xs, collector, global_names),
           _ => Err(format!("unknown instruction: {name} in {xs:?}")),
         },
       }
@@ -366,7 +622,9 @@ fn parse_local_idx(x: &Cirru, collector: &mut LocalsCollector) -> Result<usize, 
     Cirru::Leaf(s) => match s.chars().next() {
       Some(c) => {
         if c == '$' {
-          Ok(collector.track(s))
+          collector
+            .resolve(s)
+            .ok_or_else(|| format!("unknown local `{s}`; declare it before use"))
         } else {
           parse_usize(s)
         }
@@ -377,6 +635,17 @@ fn parse_local_idx(x: &Cirru, collector: &mut LocalsCollector) -> Result<usize, 
   }
 }
 
+fn parse_global_idx(x: &Cirru, global_names: &HashMap<String, usize>) -> Result<usize, String> {
+  match x {
+    Cirru::Leaf(name) if name.starts_with('$') => global_names
+      .get(name.as_ref())
+      .copied()
+      .ok_or_else(|| format!("unknown global `{name}`")),
+    Cirru::Leaf(index) => parse_usize(index),
+    Cirru::List(_) => Err(format!("expected global name or index, got {x}")),
+  }
+}
+
 pub fn parse_usize(s: &str) -> Result<usize, String> {
   match s.parse::<usize>() {
     Ok(u) => Ok(u),
@@ -384,7 +653,13 @@ pub fn parse_usize(s: &str) -> Result<usize, String> {
   }
 }
 
-pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
+fn parse_block(
+  ptr_base: usize,
+  xs: &[Cirru],
+  looped: bool,
+  collector: &mut LocalsCollector,
+  global_names: &HashMap<String, usize>,
+) -> Result<Vec<CalxSyntax>, String> {
   if xs.len() < 2 {
     return Err(format!(
       "{} expected a type signature, got {xs:?}",
@@ -399,7 +674,7 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
     if idx > 1 {
       let lines = extract_nested(line)?;
       for expanded in &lines {
-        let instrs = parse_instr(p, expanded, collector)?;
+        let instrs = parse_instr(p, expanded, collector, global_names)?;
         for y in instrs {
           p += 1;
           chunk.push(y);
@@ -422,14 +697,23 @@ pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut 
   Ok(chunk)
 }
 
-pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
+fn parse_if(
+  ptr_base: usize,
+  xs: &[Cirru],
+  collector: &mut LocalsCollector,
+  global_names: &HashMap<String, usize>,
+) -> Result<Vec<CalxSyntax>, String> {
   if xs.len() != 4 && xs.len() != 3 {
     return Err(format!("if expected 2 or 3 arguments, got {xs:?}"));
   }
   let types = parse_block_types(&xs[1])?;
   let ret_types = types.1;
-  let then_syntax = parse_do(&xs[2], collector)?;
-  let else_syntax = if xs.len() == 4 { parse_do(&xs[3], collector)? } else { vec![] };
+  let then_syntax = parse_do(&xs[2], collector, global_names)?;
+  let else_syntax = if xs.len() == 4 {
+    parse_do(&xs[3], collector, global_names)?
+  } else {
+    vec![]
+  };
 
   let mut p = ptr_base + 1; // leave a place for if instruction
   let mut chunk: Vec<CalxSyntax> = vec![];
@@ -464,7 +748,7 @@ pub fn parse_if(ptr_base: usize, xs: &[Cirru], collector: &mut LocalsCollector) 
   Ok(chunk)
 }
 
-pub fn parse_do(xs: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
+fn parse_do(xs: &Cirru, collector: &mut LocalsCollector, global_names: &HashMap<String, usize>) -> Result<Vec<CalxSyntax>, String> {
   match xs {
     Cirru::Leaf(_) => Err(format!("expect expression for types, got {xs}")),
     Cirru::List(ys) => {
@@ -480,7 +764,7 @@ pub fn parse_do(xs: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxS
         if idx > 0 {
           let lines = extract_nested(x)?;
           for expanded in &lines {
-            let instrs = parse_instr(idx, expanded, collector)?;
+            let instrs = parse_instr(idx, expanded, collector, global_names)?;
             for y in instrs {
               chunk.push(y);
             }
@@ -513,7 +797,7 @@ pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Ve
               } else {
                 // track names in collector, if NOT named, use a string of index
                 let name = format!("${}", params.len());
-                collector.track(&name);
+                collector.declare(&name)?;
                 params.push(ty);
               }
             }
@@ -534,7 +818,7 @@ pub fn parse_fn_types(xs: &Cirru, collector: &mut LocalsCollector) -> Result<(Ve
               Cirru::Leaf(s) => s.parse()?,
               Cirru::List(_) => return Err(format!("invalid syntax, expected type, got {x:?}")),
             };
-            collector.track(&name_str);
+            collector.declare(&name_str)?;
             params.push(ty);
           }
         }
@@ -706,12 +990,33 @@ fn locate_node<'a>(node: &'a Cirru, tokens: &[SourceToken], cursor: &mut usize) 
 fn function_source_spans(function: &LocatedCirru<'_>) -> Vec<Option<SourceSpan>> {
   let mut spans = vec![];
   for line in function.children.iter().skip(3) {
-    append_expanded_spans(line, &mut spans);
+    match line.head() {
+      Some("local") => {}
+      Some("local.new") => spans.push(line.head_span()),
+      _ => append_expanded_spans(line, &mut spans),
+    }
   }
   spans
 }
 
-fn locate_function_parse_failure(nodes: &[Cirru], function: &LocatedCirru<'_>) -> (Option<usize>, Option<SourceSpan>) {
+fn attach_local_source_spans(function: &mut CalxFunc, located: &LocatedCirru<'_>) {
+  let declarations = Rc::make_mut(&mut function.locals);
+  let mut index = 0;
+  for line in located.children.iter().skip(3) {
+    if matches!(line.head(), Some("local" | "local.new")) {
+      if let Some(declaration) = declarations.get_mut(index) {
+        declaration.span = line.span.clone();
+      }
+      index += 1;
+    }
+  }
+}
+
+fn locate_function_parse_failure(
+  nodes: &[Cirru],
+  function: &LocatedCirru<'_>,
+  global_names: &HashMap<String, usize>,
+) -> (Option<usize>, Option<SourceSpan>) {
   if nodes.len() <= 3 || (!leaf_is(&nodes[0], "fn") && !leaf_is(&nodes[0], "defn")) {
     return (None, function.span.clone());
   }
@@ -725,12 +1030,31 @@ fn locate_function_parse_failure(nodes: &[Cirru], function: &LocatedCirru<'_>) -
   }
 
   let mut instruction_index = 0;
+  let mut executable_started = false;
   for line in function.children.iter().skip(3) {
+    match line.head() {
+      Some("local") if !executable_started => {
+        if parse_local_decl(line.node, &mut collector).is_err() {
+          return (None, line.span.clone());
+        }
+        continue;
+      }
+      Some("local.new") if !executable_started => {
+        if parse_legacy_local_decl(line.node, &mut collector).is_err() {
+          return (Some(instruction_index), line.span.clone());
+        }
+        instruction_index += 1;
+        continue;
+      }
+      Some("local" | "local.new") => return (Some(instruction_index), line.span.clone()),
+      Some(";;") if !executable_started => continue,
+      _ => executable_started = true,
+    }
     let Ok(expanded_nodes) = extract_nested_located(line) else {
       return (Some(instruction_index), line.head_span().or_else(|| line.span.clone()));
     };
     for (expanded, span) in expanded_nodes {
-      match parse_instr(instruction_index, &expanded, &mut collector) {
+      match parse_instr(instruction_index, &expanded, &mut collector, global_names) {
         Ok(syntax) => instruction_index += syntax.len(),
         Err(_) => return (Some(instruction_index), span),
       }

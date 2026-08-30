@@ -1,9 +1,11 @@
 //! Calx VM is a toy VM for learning WebAssembly.
-//! It is a stack machine, and it is dynamically typed. Being an experiment, for Calcit project.
+//! It is a stack machine for a strict typed Calcit subset, with an explicit
+//! legacy profile for the original dynamic embedding API.
 
 mod calx;
 mod diagnostic;
 mod parser;
+mod program;
 mod syntax;
 mod util;
 mod validator;
@@ -12,6 +14,10 @@ mod vm;
 pub use calx::{Calx, CalxType};
 pub use diagnostic::{DiagnosticCode, DiagnosticPhase, DiagnosticStack, DiagnosticView, SourcePosition, SourceSpan};
 pub use parser::{extract_nested, parse_function, parse_program, ParseError, ParsedProgram};
+pub use program::{
+  CalxBoundaryType, CalxGlobalDecl, CalxHostBinding, CalxHostBindings, CalxHostCallback, CalxImportDecl, CalxLocalDecl, CalxMutability,
+  CalxProgram, CalxProgramError, CalxRunResult,
+};
 pub use syntax::CalxSyntax;
 pub use util::log_calx_value;
 pub use validator::{

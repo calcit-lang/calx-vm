@@ -100,3 +100,13 @@ fn legacy_run_invocation_remains_supported() {
   assert!(output.status.success(), "{}", output_text(&output.stderr));
   assert!(stdout.lines().any(|line| line == "hello world"), "{stdout}");
 }
+
+#[test]
+fn typed_modules_do_not_silently_fall_back_to_legacy_runtime() {
+  let source = fixture("tests/fixtures/typed-module.cirru");
+  let output = calx(&["check", source.to_str().expect("UTF-8 fixture path")]);
+  let stderr = output_text(&output.stderr);
+
+  assert!(!output.status.success());
+  assert!(stderr.contains("refusing legacy fallback"), "{stderr}");
+}

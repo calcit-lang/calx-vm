@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxInstr, CalxSyntax, CalxVM};
 use cirru_parser::{parse, Cirru};
@@ -236,15 +235,7 @@ fn reserved_instructions_are_rejected_by_parser() {
     CalxSyntax::Or,
     CalxSyntax::Not,
   ] {
-    let main = CalxFunc {
-      name: Rc::from("main"),
-      params_types: Rc::new(vec![]),
-      ret_types: Rc::new(vec![]),
-      syntax: Rc::new(vec![syntax]),
-      source_spans: Rc::new(vec![None]),
-      instrs: Rc::new(vec![]),
-      local_names: Rc::new(vec![]),
-    };
+    let main = CalxFunc::new("main", vec![], vec![], vec![syntax]).with_source_spans(vec![None]);
     let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
     let error = vm
       .preprocess(false)
@@ -261,15 +252,7 @@ fn reserved_instructions_are_rejected_by_parser() {
     CalxInstr::Or,
     CalxInstr::Not,
   ] {
-    let main = CalxFunc {
-      name: Rc::from("main"),
-      params_types: Rc::new(vec![]),
-      ret_types: Rc::new(vec![]),
-      syntax: Rc::new(vec![]),
-      source_spans: Rc::new(vec![]),
-      instrs: Rc::new(vec![instruction]),
-      local_names: Rc::new(vec![]),
-    };
+    let main = CalxFunc::new("main", vec![], vec![], vec![]).with_instrs(vec![instruction]);
     let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
     vm.setup_top_frame().expect("manually lowered main should be available");
     let error = vm
@@ -321,15 +304,7 @@ fn malformed_public_instructions_return_errors_instead_of_panicking() {
       "instruction pointer moved before function start by offset -2",
     ),
   ] {
-    let main = CalxFunc {
-      name: Rc::from("main"),
-      params_types: Rc::new(vec![]),
-      ret_types: Rc::new(vec![]),
-      syntax: Rc::new(vec![]),
-      source_spans: Rc::new(vec![]),
-      instrs: Rc::new(instructions),
-      local_names: Rc::new(vec![]),
-    };
+    let main = CalxFunc::new("main", vec![], vec![], vec![]).with_instrs(instructions);
     let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
     vm.setup_top_frame().expect("manually lowered main should be available");
     let error = vm.run(vec![]).expect_err("malformed public instruction must return an error");
