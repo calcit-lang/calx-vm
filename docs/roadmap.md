@@ -49,7 +49,7 @@ Calx 不是 WebAssembly 的兼容实现，也不以生产部署为目标。它�
 
 M1 第一阶段已实现：独立 typed operand/control stack validator 在 lowering 前运行，已知类型错误提前返回 `ValidationError`；现有无类型 local/global/import 被显式识别为 legacy `Dynamic` 边界。设计见 [`RFC 0001`](../RFCs/0001-validation-and-traps.md)。
 
-M1 第二阶段的 typed local/global/import module contract 已由 [`RFC 0002`](../RFCs/0002-typed-boundaries.md) 固定；实现拆为 representation/parser 与 validator/runtime 两个后续 PR。strict profile 要求 zero Dynamic、zero nil-typed boundary，并用明确的 void/uninitialized 状态代替 nil 哨兵；旧动态 API 留在单独 legacy profile 渐进迁移。
+M1 第二阶段的 typed local/global/import module contract 已由 [`RFC 0002`](../RFCs/0002-typed-boundaries.md) 固定。representation/API/parser 已实现两遍 module parsing、typed declarations、strict conversion 与 legacy Dynamic 计数；剩余 validator/runtime/CLI integration 由最后一个 PR 完成。strict profile 要求 zero Dynamic、zero nil-typed boundary，并用明确的 void/uninitialized 状态代替 nil 哨兵；旧动态 API 留在单独 legacy profile 渐进迁移。
 
 M2 第一阶段已实现：`calx check` 可只解析和验证，`calx explain` 可观察 folded Cirru、展开 syntax、逐指令类型/控制栈变化和 lowering 结果。用法见 [`tutorials/check-and-explain.md`](tutorials/check-and-explain.md)。
 

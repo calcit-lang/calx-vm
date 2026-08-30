@@ -18,6 +18,12 @@
 
 当前值类型为 `nil`、`bool`、`i64`、`f64`、`str`、`list`。`link` 只有类型和指令占位，没有运行时值。
 
+0.3 module parser 已支持 function-prefix `local $name TYPE`、top-level
+`global $name (const|mut TYPE) INITIALIZER` 与 `import-fn NAME (PARAMS... -> [RESULT])`。
+`ParsedProgram::into_program()` 会拒绝 Dynamic、Nil/Link boundary、initializer mismatch 与
+未声明 import；typed declarations 的 validator/runtime/CLI 执行接线将在 #31 最后一阶段完成。
+在此之前 CLI 会明确拒绝 typed module，不会静默回退到 legacy Dynamic runtime。
+
 控制条件和 `assert` 统一调用 `Calx::truthy`：
 
 | 值 | 结果 |

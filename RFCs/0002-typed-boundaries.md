@@ -211,6 +211,7 @@ fn main (-> i64)
 pub struct CalxLocalDecl {
   pub name: Rc<str>,
   pub value_type: CalxBoundaryType,
+  pub span: Option<SourceSpan>,
 }
 
 pub enum CalxMutability {
@@ -234,11 +235,14 @@ pub struct CalxImportDecl {
 }
 
 pub struct CalxProgram {
-  pub functions: Vec<CalxFunc>,
-  pub globals: Vec<CalxGlobalDecl>,
-  pub imports: Vec<CalxImportDecl>,
+  functions: Vec<CalxFunc>,
+  globals: Vec<CalxGlobalDecl>,
+  imports: Vec<CalxImportDecl>,
 }
 ```
+
+`CalxProgram` 字段由 strict constructor 验证后保持私有，只通过只读 accessor 与 consuming
+`into_parts()` 暴露，防止构造后重新注入 Dynamic/Nil boundary。
 
 `CalxFunc` 增加非参数 `locals: Rc<Vec<CalxLocalDecl>>`。`local_names` 暂时保留以兼容
 debug/display consumer；实现应提供 constructor/builder，避免继续要求下游手写不断增长的
@@ -255,13 +259,17 @@ pub enum CalxHostCallback {
 }
 
 pub struct CalxHostBinding {
-  pub callback: CalxHostCallback,
-  pub params: Rc<Vec<CalxBoundaryType>>,
-  pub result: Option<CalxBoundaryType>,
+  callback: CalxHostCallback,
+  params: Rc<Vec<CalxType>>,
+  result: Option<CalxType>,
 }
 
 pub type CalxHostBindings = HashMap<Rc<str>, CalxHostBinding>;
 ```
+
+typed host binding 直接保存 concrete `CalxType`，因此 Rust 正常构造路径无法表达 Dynamic；
+`CalxHostBinding::void/value` 返回 `Result` 并拒绝 `Nil`/`Link`。parsed declaration 仍使用
+`CalxBoundaryType`，使 legacy Dynamic 在 strict conversion 失败前保持可观察。
 
 新入口：
 
@@ -312,6 +320,11 @@ function index 对应关系。`ParsedProgram::into_program()` 移动 functions/g
 `CalxProgram`；遇到 legacy Dynamic 或 nil-typed boundary 时返回 `CalxProgramError`，而不是
 静默降级。AST-only `parse_function` 继续返回 legacy function，source spans 与 module
 declarations 仍不可用。
+
+representation/parser 阶段采用两遍 module parsing：第一遍收集 global/import declaration 与
+稳定 index，第二遍解析 functions，因此 named global 可以前向引用。`ParsedProgram.nodes`
+只保留 function AST；`dynamic_boundary_count()` 暴露 legacy 边界数量，`into_program()` 执行
+strict conversion。
 
 ### Profile 选择
 

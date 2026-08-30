@@ -4,31 +4,29 @@ use std::{collections::HashMap, rc::Rc};
 
 // Create a simple arithmetic function
 fn create_arithmetic_func() -> CalxFunc {
-  CalxFunc {
-    name: Rc::from("arithmetic"),
-    params_types: Rc::new(vec![CalxType::I64, CalxType::I64]),
-    ret_types: Rc::new(vec![CalxType::I64]),
-    syntax: Rc::new(vec![
+  CalxFunc::new(
+    "arithmetic",
+    vec![CalxType::I64, CalxType::I64],
+    vec![CalxType::I64],
+    vec![
       CalxSyntax::LocalGet(0),
       CalxSyntax::LocalGet(1),
       CalxSyntax::IntAdd,
       CalxSyntax::LocalGet(0),
       CalxSyntax::IntMul,
       CalxSyntax::Return,
-    ]),
-    source_spans: Rc::new(vec![]),
-    instrs: Rc::new(vec![]),
-    local_names: Rc::new(vec!["a".to_string(), "b".to_string()]),
-  }
+    ],
+  )
+  .with_local_names(vec!["a".to_string(), "b".to_string()])
 }
 
 // Create a loop calculation function (sum from 1 to n)
 fn create_sum_func() -> CalxFunc {
-  CalxFunc {
-    name: Rc::from("sum"),
-    params_types: Rc::new(vec![CalxType::I64]),
-    ret_types: Rc::new(vec![CalxType::I64]),
-    syntax: Rc::new(vec![
+  CalxFunc::new(
+    "sum",
+    vec![CalxType::I64],
+    vec![CalxType::I64],
+    vec![
       // Initialize accumulator
       CalxSyntax::LocalNew,
       CalxSyntax::Const(Calx::I64(0)),
@@ -64,20 +62,18 @@ fn create_sum_func() -> CalxFunc {
       // Return accumulator value
       CalxSyntax::LocalGet(1),
       CalxSyntax::Return,
-    ]),
-    source_spans: Rc::new(vec![]),
-    instrs: Rc::new(vec![]),
-    local_names: Rc::new(vec!["n".to_string(), "sum".to_string(), "i".to_string()]),
-  }
+    ],
+  )
+  .with_local_names(vec!["n".to_string(), "sum".to_string(), "i".to_string()])
 }
 
 // Create a recursive fibonacci function
 fn create_fibonacci_func() -> CalxFunc {
-  CalxFunc {
-    name: Rc::from("fibonacci"),
-    params_types: Rc::new(vec![CalxType::I64]),
-    ret_types: Rc::new(vec![CalxType::I64]),
-    syntax: Rc::new(vec![
+  CalxFunc::new(
+    "fibonacci",
+    vec![CalxType::I64],
+    vec![CalxType::I64],
+    vec![
       // if n <= 1 return n
       CalxSyntax::LocalGet(0),
       CalxSyntax::Const(Calx::I64(1)),
@@ -107,24 +103,19 @@ fn create_fibonacci_func() -> CalxFunc {
       ]),
       CalxSyntax::ElseEnd,
       CalxSyntax::Return,
-    ]),
-    source_spans: Rc::new(vec![]),
-    instrs: Rc::new(vec![]),
-    local_names: Rc::new(vec!["n".to_string()]),
-  }
+    ],
+  )
+  .with_local_names(vec!["n".to_string()])
 }
 
 // Create main function
 fn create_main_func(call_target: &str) -> CalxFunc {
-  CalxFunc {
-    name: Rc::from("main"),
-    params_types: Rc::new(vec![]),
-    ret_types: Rc::new(vec![CalxType::I64]),
-    syntax: Rc::new(vec![CalxSyntax::Call(Rc::from(call_target)), CalxSyntax::Return]),
-    source_spans: Rc::new(vec![]),
-    instrs: Rc::new(vec![]),
-    local_names: Rc::new(vec![]),
-  }
+  CalxFunc::new(
+    "main",
+    vec![],
+    vec![CalxType::I64],
+    vec![CalxSyntax::Call(Rc::from(call_target)), CalxSyntax::Return],
+  )
 }
 
 // Benchmark: simple arithmetic operations
@@ -180,11 +171,11 @@ fn bench_fibonacci_recursive(c: &mut Criterion) {
 
 // Benchmark: stack operations performance
 fn bench_stack_operations(c: &mut Criterion) {
-  let stack_func = CalxFunc {
-    name: Rc::from("stack_ops"),
-    params_types: Rc::new(vec![]),
-    ret_types: Rc::new(vec![CalxType::I64]),
-    syntax: Rc::new(vec![
+  let stack_func = CalxFunc::new(
+    "stack_ops",
+    vec![],
+    vec![CalxType::I64],
+    vec![
       // Lots of stack operations: push, dup, drop
       CalxSyntax::Const(Calx::I64(42)),
       CalxSyntax::Dup,
@@ -197,11 +188,8 @@ fn bench_stack_operations(c: &mut Criterion) {
       CalxSyntax::Dup,
       CalxSyntax::Drop,
       CalxSyntax::Return,
-    ]),
-    source_spans: Rc::new(vec![]),
-    instrs: Rc::new(vec![]),
-    local_names: Rc::new(vec![]),
-  };
+    ],
+  );
 
   let main_func = create_main_func("stack_ops");
   let funcs = vec![main_func, stack_func];

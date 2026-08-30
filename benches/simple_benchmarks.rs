@@ -8,6 +8,7 @@ fn create_simple_add_func() -> CalxFunc {
     name: Rc::from("add_test"),
     params_types: Rc::new(vec![CalxType::I64, CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       CalxSyntax::LocalGet(0),
       CalxSyntax::LocalGet(1),
@@ -26,6 +27,7 @@ fn create_complex_arithmetic_func() -> CalxFunc {
     name: Rc::from("complex_math"),
     params_types: Rc::new(vec![CalxType::I64, CalxType::I64, CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // (a + b) * c
       CalxSyntax::LocalGet(0), // a
@@ -47,6 +49,7 @@ fn create_stack_ops_func() -> CalxFunc {
     name: Rc::from("stack_ops"),
     params_types: Rc::new(vec![CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       CalxSyntax::LocalGet(0),         // Get parameter -> stack: [x]
       CalxSyntax::Dup,                 // Duplicate -> stack: [x, x]
@@ -73,6 +76,7 @@ fn create_local_vars_func() -> CalxFunc {
     name: Rc::from("local_vars"),
     params_types: Rc::new(vec![CalxType::I64]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // Create and operate on local variables
       CalxSyntax::LocalNew,    // Create local variable temp (index 1)
@@ -104,6 +108,7 @@ fn create_main_func(target_func: &str, args: Vec<CalxSyntax>) -> CalxFunc {
     name: Rc::from("main"),
     params_types: Rc::new(vec![]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(syntax),
     source_spans: Rc::new(vec![]),
     instrs: Rc::new(vec![]),
@@ -234,6 +239,7 @@ fn bench_multiple_calls(c: &mut Criterion) {
     name: Rc::from("caller"),
     params_types: Rc::new(vec![]),
     ret_types: Rc::new(vec![CalxType::I64]),
+    locals: Rc::new(vec![]),
     syntax: Rc::new(vec![
       // Call add_test multiple times
       CalxSyntax::Const(Calx::I64(1)),

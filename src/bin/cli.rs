@@ -6,10 +6,9 @@ use std::{collections::hash_map::HashMap, rc::Rc};
 
 use argh::FromArgs;
 use calx_vm::{
-  log_calx_value, parse_program, trace_validation, validate_program, Calx, CalxFunc, CalxImportsDict, CalxVM, ValidationControlState,
-  ValidationType,
+  log_calx_value, parse_program, trace_validation, validate_program, Calx, CalxBoundaryType, CalxImportsDict, CalxVM, ParsedProgram,
+  ValidationControlState, ValidationType,
 };
-use cirru_parser::Cirru;
 
 #[derive(FromArgs)]
 /// run and inspect Calx programs
@@ -92,8 +91,9 @@ fn parse_args() -> TopLevel {
 }
 
 fn run(args: RunArgs) -> Result<(), String> {
-  let (_, fns) = load_program(&args.source)?;
-  let mut vm = CalxVM::new(fns, vec![], standard_imports());
+  let program = load_program(&args.source)?;
+  ensure_legacy_runtime_compatible(&program)?;
+  let mut vm = CalxVM::new(program.functions, vec![], standard_imports());
   let now = Instant::now();
 
   println!("[calx] start preprocessing");
@@ -117,7 +117,9 @@ fn run(args: RunArgs) -> Result<(), String> {
 }
 
 fn check(args: CheckArgs) -> Result<(), String> {
-  let (_, fns) = load_program(&args.source)?;
+  let program = load_program(&args.source)?;
+  ensure_legacy_runtime_compatible(&program)?;
+  let fns = program.functions;
   let instruction_count: usize = fns.iter().map(|func| func.syntax.len()).sum();
   validate_program(&fns, &[], &standard_imports()).map_err(|e| e.to_string())?;
   println!(
@@ -128,7 +130,10 @@ fn check(args: CheckArgs) -> Result<(), String> {
 }
 
 fn explain(args: ExplainArgs) -> Result<(), String> {
-  let (nodes, fns) = load_program(&args.source)?;
+  let program = load_program(&args.source)?;
+  ensure_legacy_runtime_compatible(&program)?;
+  let nodes = program.nodes;
+  let fns = program.functions;
   let imports = standard_imports();
   let traces = trace_validation(&fns, &[], &imports).map_err(|e| e.to_string())?;
   let mut vm = CalxVM::new(fns, vec![], imports);
@@ -176,10 +181,25 @@ fn explain(args: ExplainArgs) -> Result<(), String> {
   Ok(())
 }
 
-fn load_program(source: &str) -> Result<(Vec<Cirru>, Vec<CalxFunc>), String> {
+fn load_program(source: &str) -> Result<ParsedProgram, String> {
   let contents = fs::read_to_string(source).map_err(|e| format!("failed to read `{source}`: {e}"))?;
-  let program = parse_program(source, &contents).map_err(|error| error.to_string())?;
-  Ok((program.nodes, program.functions))
+  parse_program(source, &contents).map_err(|error| error.to_string())
+}
+
+fn ensure_legacy_runtime_compatible(program: &ParsedProgram) -> Result<(), String> {
+  let has_typed_locals = program
+    .functions
+    .iter()
+    .flat_map(|function| function.locals.iter())
+    .any(|local| matches!(local.value_type, CalxBoundaryType::Known(_)));
+  if has_typed_locals || !program.globals.is_empty() || !program.imports.is_empty() {
+    Err(
+      "typed module declarations are parsed, but CLI validator/runtime integration is deferred to #31 phase 3; refusing legacy fallback"
+        .to_string(),
+    )
+  } else {
+    Ok(())
+  }
 }
 
 fn standard_imports() -> CalxImportsDict {
