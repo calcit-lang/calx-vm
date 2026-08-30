@@ -5,6 +5,8 @@
 
 本文记录当前可由 Cirru 源码使用的 Calx 指令、运行语义及与 WebAssembly 的主要差异。它是测试和后续验证器的输入，不承诺二进制兼容或长期 API 稳定。
 
+逐 opcode 的 parser、validator、lowering、interpreter 与测试证据见 [`instruction-matrix.md`](instruction-matrix.md)。
+
 状态定义：
 
 - **支持**：parser、lowering、interpreter 均有实现，并纳入自动测试；

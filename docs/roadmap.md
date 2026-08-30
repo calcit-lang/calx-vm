@@ -53,6 +53,8 @@ M2 第一阶段已实现：`calx check` 可只解析和验证，`calx explain` �
 
 M0 错误布局债务 #21 已完成：`CalxError` 缩小为 message 与可选 boxed snapshot，宿主错误不再携带伪 VM 状态，严格 Clippy 可作为常规门禁。错误阶段与兼容性见 [`diagnostics.md`](diagnostics.md)。
 
+M0 收口审计 #29 已完成：逐 opcode 的 parser/validator/lowering/interpreter/test 状态由 [`instruction-matrix.md`](instruction-matrix.md) 跟踪；malformed structured forms 和手工构造的非法 public IR 返回错误而不是 panic；全部 demos 由 `try.sh` 断言稳定结果；CI 与 publish workflow 显式执行严格 Clippy 和 crates.io-style package verification。
+
 ## 3. 目标架构
 
 建议明确四层，并让教学工具可以观察每层：
