@@ -51,6 +51,18 @@ pub enum CalxInstr {
   IntGt,
   /// greater than, or equal, compares two i64 numbers on stack
   IntGe,
+  /// equal of two f64 numbers on stack into a bool
+  F64Eq,
+  /// not equal of two f64 numbers on stack into a bool
+  F64Ne,
+  /// less than, compares two f64 numbers on stack
+  F64Lt,
+  /// less than, or equal, compares two f64 numbers on stack
+  F64Le,
+  /// greater than, compares two f64 numbers on stack
+  F64Gt,
+  /// greater than, or equal, compares two f64 numbers on stack
+  F64Ge,
   /// add two f64 numbers on stack into a f64
   Add,
   /// multiply two f64 numbers on stack into a f64
@@ -137,6 +149,12 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::IntLe => Ok(Self::IntLe),
       CalxSyntax::IntGt => Ok(Self::IntGt),
       CalxSyntax::IntGe => Ok(Self::IntGe),
+      CalxSyntax::F64Eq => Ok(Self::F64Eq),
+      CalxSyntax::F64Ne => Ok(Self::F64Ne),
+      CalxSyntax::F64Lt => Ok(Self::F64Lt),
+      CalxSyntax::F64Le => Ok(Self::F64Le),
+      CalxSyntax::F64Gt => Ok(Self::F64Gt),
+      CalxSyntax::F64Ge => Ok(Self::F64Ge),
       CalxSyntax::Add => Ok(Self::Add),
       CalxSyntax::Mul => Ok(Self::Mul),
       CalxSyntax::Div => Ok(Self::Div),
@@ -205,6 +223,12 @@ impl CalxInstr {
       CalxInstr::IntLe => (2, 1),
       CalxInstr::IntGt => (2, 1),
       CalxInstr::IntGe => (2, 1),
+      CalxInstr::F64Eq => (2, 1),
+      CalxInstr::F64Ne => (2, 1),
+      CalxInstr::F64Lt => (2, 1),
+      CalxInstr::F64Le => (2, 1),
+      CalxInstr::F64Gt => (2, 1),
+      CalxInstr::F64Ge => (2, 1),
       CalxInstr::Add => (2, 1),
       CalxInstr::Mul => (2, 1),
       CalxInstr::Div => (2, 1),

@@ -51,6 +51,18 @@ pub enum CalxSyntax {
   IntGt,
   /// `i.ge`, greater than, or equal, compares two i64 numbers on stack
   IntGe,
+  /// `f.eq`, equal of two f64 numbers on stack into a bool
+  F64Eq,
+  /// `f.ne`, not equal of two f64 numbers on stack into a bool
+  F64Ne,
+  /// `f.lt`, less than, compares two f64 numbers on stack
+  F64Lt,
+  /// `f.le`, less than, or equal, compares two f64 numbers on stack
+  F64Le,
+  /// `f.gt`, greater than, compares two f64 numbers on stack
+  F64Gt,
+  /// `f.ge`, greater than, or equal, compares two f64 numbers on stack
+  F64Ge,
   /// `add`, add two f64 numbers on stack into a f64
   Add,
   /// `mul`, multiply two f64 numbers on stack into a f64

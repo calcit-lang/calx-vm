@@ -303,6 +303,10 @@ fn malformed_public_instructions_return_errors_instead_of_panicking() {
       vec![CalxInstr::Const(Calx::Bool(true)), CalxInstr::JmpOffsetIf(-2)],
       "instruction pointer moved before function start by offset -2",
     ),
+    (
+      vec![CalxInstr::Const(Calx::I64(1)), CalxInstr::Const(Calx::F64(1.0)), CalxInstr::F64Eq],
+      "expected 2 floats to eq compare",
+    ),
   ] {
     let main = CalxFunc::new("main", vec![], vec![], vec![]).with_instrs(instructions);
     let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());

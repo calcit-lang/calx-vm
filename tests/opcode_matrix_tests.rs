@@ -90,11 +90,43 @@ fn overloaded_and_float_opcodes_execute() -> Result<(), String> {
     ("f64", "const 1.5\n  const 2.\n  mul", Calx::F64(3.0)),
     ("f64", "const 5.\n  const 2.\n  div", Calx::F64(2.5)),
     ("f64", "const 2.5\n  neg", Calx::F64(-2.5)),
+    ("bool", "const 2.5\n  const 2.5\n  f.eq", Calx::Bool(true)),
+    ("bool", "const 2.5\n  const 3.5\n  f.ne", Calx::Bool(true)),
+    ("bool", "const 2.5\n  const 3.5\n  f.lt", Calx::Bool(true)),
+    ("bool", "const 2.5\n  const 2.5\n  f.le", Calx::Bool(true)),
+    ("bool", "const 3.5\n  const 2.5\n  f.gt", Calx::Bool(true)),
+    ("bool", "const 2.5\n  const 2.5\n  f.ge", Calx::Bool(true)),
   ];
 
   for (return_type, body, expected) in cases {
     let source = format!("fn main (-> {return_type})\n  {body}\n  return");
     assert_eq!(run(&source)?, expected, "source:\n{source}");
+  }
+  Ok(())
+}
+
+#[test]
+fn float_comparisons_follow_ieee_754_boundaries() -> Result<(), String> {
+  let nan = "const 0.\n  const 0.\n  div";
+  let positive_infinity = "const 1.\n  const 0.\n  div";
+  let negative_infinity = "const -1.\n  const 0.\n  div";
+  let cases = [
+    (format!("{nan}\n  {nan}\n  f.eq"), false),
+    (format!("{nan}\n  {nan}\n  f.ne"), true),
+    (format!("{nan}\n  const 1.\n  f.lt"), false),
+    (format!("{nan}\n  const 1.\n  f.le"), false),
+    (format!("{nan}\n  const 1.\n  f.gt"), false),
+    (format!("{nan}\n  const 1.\n  f.ge"), false),
+    (format!("{positive_infinity}\n  {positive_infinity}\n  f.eq"), true),
+    (format!("{negative_infinity}\n  {positive_infinity}\n  f.lt"), true),
+    ("const 0.\n  const -0.\n  f.eq".to_string(), true),
+    ("const 0.\n  const -0.\n  f.le".to_string(), true),
+    ("const -0.\n  const 0.\n  f.ge".to_string(), true),
+  ];
+
+  for (body, expected) in cases {
+    let source = format!("fn main (-> bool)\n  {body}\n  return");
+    assert_eq!(run(&source)?, Calx::Bool(expected), "source:\n{source}");
   }
   Ok(())
 }

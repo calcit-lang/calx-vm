@@ -486,6 +486,12 @@ impl CalxVM {
           (v1, v2) => return Err(self.gen_err(format!("expected 2 integers to ge compare, {v1:?} {v2:?}"))),
         }
       }
+      F64Eq => self.compare_f64("eq", |left, right| left == right)?,
+      F64Ne => self.compare_f64("ne", |left, right| left != right)?,
+      F64Lt => self.compare_f64("lt", |left, right| left < right)?,
+      F64Le => self.compare_f64("le", |left, right| left <= right)?,
+      F64Gt => self.compare_f64("gt", |left, right| left > right)?,
+      F64Ge => self.compare_f64("ge", |left, right| left >= right)?,
       Add => {
         let (left, right) = self.stack_pop_right()?;
         match (&self.stack[left], &right) {
@@ -750,6 +756,17 @@ impl CalxVM {
       .checked_add(offset as isize)
       .ok_or_else(|| self.gen_err(format!("instruction pointer overflow for offset {offset}")))?;
     usize::try_from(target).map_err(|_| self.gen_err(format!("instruction pointer moved before function start by offset {offset}")))
+  }
+
+  #[inline(always)]
+  fn compare_f64(&mut self, operation: &str, compare: impl FnOnce(f64, f64) -> bool) -> Result<(), CalxError> {
+    let (left, right) = self.stack_pop_right()?;
+    let result = match (&self.stack[left], &right) {
+      (Calx::F64(left), Calx::F64(right)) => compare(*left, *right),
+      (left, right) => return Err(self.gen_err(format!("expected 2 floats to {operation} compare, {left:?} {right:?}"))),
+    };
+    self.stack[left] = Calx::Bool(result);
+    Ok(())
   }
 
   #[inline(always)]

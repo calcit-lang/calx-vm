@@ -147,18 +147,17 @@ Calcit `Number` 的运行表示是 `f64`，因此 literal、参数、local 和 r
 | unary `&- a` | `a; Neg` |
 | `&*` | `Mul` |
 | `&/` | `Div` |
-| `&=` | 待新增 `F64Eq` |
-| `&<` | 待新增 `F64Lt` |
-| `&>` | 待新增 `F64Gt` |
+| `&=` | `F64Eq` / `f.eq` |
+| `&<` | `F64Lt` / `f.lt` |
+| `&>` | `F64Gt` / `f.gt` |
 
 `<=`、`>=`、`not=` 只有在 Calcit preprocessing 将其解析为已确认的 native numeric operation，
 且 Calx 提供对应 `F64Le/F64Ge/F64Ne` 后才开放。禁止通过转换到 `I64`、调用动态相等、Calx
 truthiness 或 host import 模拟比较。
 
-当前 Calx 缺少全部 F64 comparison instruction；因此 #45 是 #38 在 range/Fibonacci fixture 前的
-明确 VM prerequisite：parser、syntax、validator、lowering、interpreter、instruction matrix 和
-正负测试必须一起增加 `f.eq/ne/lt/le/gt/ge`（最终 opcode spelling 由实现 issue 冻结）。减法不
-需要独立 opcode。
+#45 增加 `f.eq/ne/lt/le/gt/ge` 的 parser、syntax、validator、lowering、interpreter、instruction
+matrix 和正负测试，是 #38 range/Fibonacci fixture 的明确 VM prerequisite。减法不需要独立
+opcode。
 
 NaN、正负无穷和 `-0.0` 纳入 differential corpus。只有 Calcit native proc 与 Rust `f64`
 比较/算术结果逐项一致后才标记 expected same；否则该输入先标为 unsupported，不能归入普通
