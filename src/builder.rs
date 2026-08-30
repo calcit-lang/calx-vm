@@ -336,6 +336,7 @@ pub struct FunctionBuilder {
   results: Vec<CalxType>,
   locals: Vec<CalxLocalDecl>,
   local_names: Vec<String>,
+  local_name_set: HashSet<Rc<str>>,
   body: BodyBuilder,
   local_owner: Rc<()>,
 }
@@ -367,6 +368,7 @@ impl FunctionBuilder {
       results,
       locals: vec![],
       local_names: vec![],
+      local_name_set: HashSet::new(),
       local_owner,
     })
   }
@@ -398,7 +400,7 @@ impl FunctionBuilder {
       Some(self.name.clone()),
       self.body.default_span.clone(),
     )?;
-    self.ensure_unique_local(&name, self.body.default_span.clone())?;
+    self.insert_unique_local(name.clone(), self.body.default_span.clone())?;
     let id = LocalId {
       index: self.params.len(),
       value_type,
@@ -424,7 +426,7 @@ impl FunctionBuilder {
     self.ensure_declarations_open("local")?;
     let name = checked_name(name, "local", Some(self.name.clone()), span.clone())?;
     validate_builder_type(value_type, "local", Some(self.name.clone()), span.clone())?;
-    self.ensure_unique_local(&name, span.clone())?;
+    self.insert_unique_local(name.clone(), span.clone())?;
     let id = LocalId {
       index: self.params.len() + self.locals.len(),
       value_type,
@@ -461,8 +463,8 @@ impl FunctionBuilder {
     }
   }
 
-  fn ensure_unique_local(&self, name: &str, span: Option<SourceSpan>) -> Result<(), CalxBuildError> {
-    if self.local_names.iter().any(|candidate| candidate == name) {
+  fn insert_unique_local(&mut self, name: Rc<str>, span: Option<SourceSpan>) -> Result<(), CalxBuildError> {
+    if !self.local_name_set.insert(name.clone()) {
       Err(CalxBuildError::new(
         CalxBuildErrorKind::DuplicateDeclaration,
         format!("duplicate function parameter/local declaration `{name}`"),
