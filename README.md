@@ -9,19 +9,18 @@ compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
 
 ### Usages
 
-Version 0.2.2 adds the semantic-safety baseline, typed validation,
-`check`/`explain`, and lightweight error snapshots on top of the parser
-compatibility and VM allocation/lookup improvements from 0.2.1. Native Calcit
-bindings should use this stable crate version instead of a git hash.
-
-The 0.3 development line now has an end-to-end strict path:
+Version 0.3.0 provides an end-to-end strict path:
 `CalxProgram -> ValidatedProgram -> CalxVM::from_program -> run_typed`.
 Typed modules use declared locals/globals, stable indexed imports, exact host
-signatures, explicit void results, and non-nil Uninitialized slot state.
+signatures, explicit void results, and non-nil Uninitialized slot state. It also
+adds F64 comparisons and the source-aware `ProgramBuilder` API required by the
+Calcit translator experiment. Native Calcit bindings should use this stable
+crate version instead of a git hash.
 
-0.2.2 在 0.2.1 的 parser compatibility 与 VM allocation/lookup 优化之上，
-增加语义安全基线、类型验证、`check`/`explain` 和轻量错误快照。Calcit native
-binding 应使用稳定 crate 版本，不要引用 git hash。
+0.3.0 提供端到端 strict path：声明式 typed locals/globals、稳定索引的 imports、
+精确 host signatures、显式 void 结果和不借用 nil 的 Uninitialized slot state；同时
+加入 F64 comparisons，以及 Calcit translator 实验需要的 source-aware `ProgramBuilder`
+API。Calcit native binding 应使用这个稳定 crate 版本，不要引用 git hash。
 
 ```bash
 cargo install calx-vm
