@@ -151,6 +151,8 @@ The per-opcode parser/validator/lowering/interpreter/test audit is maintained in
 [`docs/instruction-matrix.md`](docs/instruction-matrix.md).
 Typed validation and trap boundaries are specified in
 [`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
+Typed local, global, and host import module contracts are specified in
+[`RFCs/0002-typed-boundaries.md`](RFCs/0002-typed-boundaries.md).
 Source-aware parse, validation, runtime, and host diagnostics are documented in
 [`docs/diagnostics.md`](docs/diagnostics.md).
 
