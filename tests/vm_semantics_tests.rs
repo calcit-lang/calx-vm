@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxVM};
+use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxInstr, CalxSyntax, CalxVM};
 use cirru_parser::{parse, Cirru};
 
 fn parse_program(source: &str) -> Result<Vec<CalxFunc>, String> {
@@ -225,6 +226,55 @@ fn reserved_instructions_are_rejected_by_parser() {
     let error = parse_program(&source).expect_err("reserved instruction must not enter executable IR");
     assert!(error.contains("reserved but not implemented"), "{instruction}: {error}");
   }
+
+  for syntax in [
+    CalxSyntax::NewList,
+    CalxSyntax::ListGet,
+    CalxSyntax::ListSet,
+    CalxSyntax::NewLink,
+    CalxSyntax::And,
+    CalxSyntax::Or,
+    CalxSyntax::Not,
+  ] {
+    let main = CalxFunc {
+      name: Rc::from("main"),
+      params_types: Rc::new(vec![]),
+      ret_types: Rc::new(vec![]),
+      syntax: Rc::new(vec![syntax]),
+      instrs: Rc::new(vec![]),
+      local_names: Rc::new(vec![]),
+    };
+    let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
+    let error = vm
+      .preprocess(false)
+      .expect_err("reserved public syntax must be rejected by validation");
+    assert!(error.contains("reserved but not implemented"), "{error}");
+  }
+
+  for instruction in [
+    CalxInstr::NewList,
+    CalxInstr::ListGet,
+    CalxInstr::ListSet,
+    CalxInstr::NewLink,
+    CalxInstr::And,
+    CalxInstr::Or,
+    CalxInstr::Not,
+  ] {
+    let main = CalxFunc {
+      name: Rc::from("main"),
+      params_types: Rc::new(vec![]),
+      ret_types: Rc::new(vec![]),
+      syntax: Rc::new(vec![]),
+      instrs: Rc::new(vec![instruction]),
+      local_names: Rc::new(vec![]),
+    };
+    let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
+    vm.setup_top_frame().expect("manually lowered main should be available");
+    let error = vm
+      .run(vec![])
+      .expect_err("reserved public instruction must return an execution error");
+    assert!(error.message.contains("unsupported instruction reached execution"), "{error}");
+  }
 }
 
 #[test]
@@ -252,4 +302,33 @@ fn calx_error_keeps_optional_vm_state_out_of_the_result_payload() -> Result<(), 
   assert_eq!(vm_error.stack(), Some([].as_slice()));
   assert_eq!(vm_error.globals(), Some([].as_slice()));
   Ok(())
+}
+
+#[test]
+fn malformed_public_instructions_return_errors_instead_of_panicking() {
+  for (instructions, expected) in [
+    (vec![CalxInstr::Call(1)], "invalid function index for call: 1"),
+    (vec![CalxInstr::ReturnCall(1)], "invalid function index for return-call: 1"),
+    (
+      vec![CalxInstr::JmpOffset(-1)],
+      "instruction pointer moved before function start by offset -1",
+    ),
+    (
+      vec![CalxInstr::Const(Calx::Bool(true)), CalxInstr::JmpOffsetIf(-2)],
+      "instruction pointer moved before function start by offset -2",
+    ),
+  ] {
+    let main = CalxFunc {
+      name: Rc::from("main"),
+      params_types: Rc::new(vec![]),
+      ret_types: Rc::new(vec![]),
+      syntax: Rc::new(vec![]),
+      instrs: Rc::new(instructions),
+      local_names: Rc::new(vec![]),
+    };
+    let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
+    vm.setup_top_frame().expect("manually lowered main should be available");
+    let error = vm.run(vec![]).expect_err("malformed public instruction must return an error");
+    assert!(error.message.contains(expected), "expected {expected:?}, got {:?}", error.message);
+  }
 }

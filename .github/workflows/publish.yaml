@@ -18,19 +18,9 @@ jobs:
 
       - run: cargo fmt --check
       - run: cargo test
-
-      - run: cargo run -- -s demos/hello.cirru
-      - run: cargo run -- -s demos/sum.cirru
-      - run: cargo run -- -s demos/assert.cirru
-      - run: cargo run -- -s demos/nested.cirru
-      - run: cargo run -- -s demos/named.cirru
-      - run: cargo run -- -s demos/recur.cirru
-      - run: cargo run -- -s demos/fibonacci.cirru
-      - run: cargo run -- -s demos/if.cirru
-      - run: cargo run -- -s demos/fibo-if.cirru
-      # - run: cargo run -- --emit-binary target/a.calx demos/named.cirru && cargo run -- --eval-binary target/a.calx
-
-      # - run: cargo test
+      - run: ./try.sh
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo package --allow-dirty
 
       - uses: katyo/publish-crates@v1
         with:

@@ -87,28 +87,19 @@ impl CalxVM {
   pub fn inspect_display(&self, indent_size: u8) -> String {
     let mut output = String::new();
     let indent = "\n".to_string() + &" ".repeat(indent_size as usize);
-    fmt::write(
-      &mut output,
-      format_args!(
-        "{indent}Internal frames: {:?}",
-        self.frames.iter().map(|x| &*x.name).collect::<Vec<_>>()
-      ),
-    )
-    .expect("inspect display");
-
-    fmt::write(&mut output, format_args!("{indent}Top frame: {}", self.top_frame.name)).expect("inspect display");
-    fmt::write(&mut output, format_args!("{indent}Locals: {:?}", self.top_frame.locals)).expect("inspect display");
-    fmt::write(&mut output, format_args!("{indent}Stack({}): {:?}", self.stack.len(), self.stack)).expect("inspect display");
-    fmt::write(
-      &mut output,
-      format_args!(
-        "{indent}Sizes: {} + {}",
-        self.top_frame.initial_stack_size,
-        self.top_frame.ret_types.len()
-      ),
-    )
-    .expect("inspect display");
-    fmt::write(&mut output, format_args!("{indent}Pointer: {}", self.top_frame.pointer)).expect("inspect display");
+    output.push_str(&format!(
+      "{indent}Internal frames: {:?}",
+      self.frames.iter().map(|x| &*x.name).collect::<Vec<_>>()
+    ));
+    output.push_str(&format!("{indent}Top frame: {}", self.top_frame.name));
+    output.push_str(&format!("{indent}Locals: {:?}", self.top_frame.locals));
+    output.push_str(&format!("{indent}Stack({}): {:?}", self.stack.len(), self.stack));
+    output.push_str(&format!(
+      "{indent}Sizes: {} + {}",
+      self.top_frame.initial_stack_size,
+      self.top_frame.ret_types.len()
+    ));
+    output.push_str(&format!("{indent}Pointer: {}", self.top_frame.pointer));
     output
   }
 
@@ -170,7 +161,7 @@ impl CalxVM {
         return Ok(true);
       }
       JmpOffset(l) => {
-        self.top_frame.pointer = (self.top_frame.pointer as i32 + l) as usize;
+        self.top_frame.pointer = self.pointer_with_offset(*l)?;
         return Ok(true); // point reset, goto next loop
       }
       JmpIf(line) => {
@@ -194,7 +185,7 @@ impl CalxVM {
         let offset = *l;
         let v = self.stack_pop()?;
         if v.truthy() {
-          self.top_frame.pointer = (self.top_frame.pointer as i32 + offset) as usize;
+          self.top_frame.pointer = self.pointer_with_offset(offset)?;
           return Ok(true); // point reset, goto next loop
         }
       }
@@ -253,8 +244,10 @@ impl CalxVM {
             (_, None) => Err(self.gen_err("return without value".to_string())),
           };
         } else {
-          // let prev_frame = self.top_frame;
-          self.top_frame = self.frames.pop().unwrap();
+          let Some(previous_frame) = self.frames.pop() else {
+            return Err(self.gen_err("missing caller frame while returning".to_string()));
+          };
+          self.top_frame = previous_frame;
         }
       }
       LocalNew => self.top_frame.locals.push(Calx::Nil),
@@ -431,7 +424,9 @@ impl CalxVM {
       }
       Call(idx) => {
         // println!("frame size: {}", self.frames.len());
-        let f = &self.funcs[*idx];
+        let Some(f) = self.funcs.get(*idx) else {
+          return Err(self.gen_err(format!("invalid function index for call: {idx}")));
+        };
         let instrs = &f.instrs;
         let ret_types = f.ret_types.clone();
         let f_name = f.name.clone();
@@ -459,7 +454,9 @@ impl CalxVM {
       }
       ReturnCall(idx) => {
         // println!("frame size: {}", self.frames.len());
-        let f = &self.funcs[*idx];
+        let Some(f) = self.funcs.get(*idx) else {
+          return Err(self.gen_err(format!("invalid function index for return-call: {idx}")));
+        };
 
         // println!("examine stack: {:?}", self.stack);
         let instrs = &f.instrs;
@@ -599,7 +596,7 @@ impl CalxVM {
                 base: target_block.branch_base(),
                 arity: target_block.branch_arity(),
               }),
-              _ => unreachable!("br target must be block or loop"),
+              BlockData::If { .. } => return Err("br target must be block or loop".to_string()),
             }
           }
           CalxSyntax::BrIf(size) => {
@@ -616,7 +613,7 @@ impl CalxVM {
                 base: target_block.branch_base(),
                 arity: target_block.branch_arity(),
               }),
-              _ => unreachable!("br target must be block or loop"),
+              BlockData::If { .. } => return Err("br-if target must be block or loop".to_string()),
             }
             stack_size = stack_size.saturating_sub(1);
           }
@@ -670,7 +667,7 @@ impl CalxVM {
                 ops.push(CalxInstr::Jmp(*to));
                 stack_size = initial_stack_size.saturating_sub(1);
               }
-              _ => unreachable!("end inside if"),
+              _ => return Err("else marker must be inside if".to_string()),
             }
           }
           CalxSyntax::ThenEnd => {
@@ -678,7 +675,7 @@ impl CalxVM {
             stack_size = prev_block.expected_finish_size();
             match prev_block {
               BlockData::If { to, .. } => ops.push(CalxInstr::Jmp(to)),
-              _ => unreachable!("end inside if"),
+              _ => return Err("then marker must be inside if".to_string()),
             }
           }
           a => {
@@ -741,6 +738,15 @@ impl CalxVM {
       self.stack.drain(absolute_base..values_at);
     }
     Ok(())
+  }
+
+  fn pointer_with_offset(&self, offset: i32) -> Result<usize, CalxError> {
+    let pointer = isize::try_from(self.top_frame.pointer)
+      .map_err(|_| self.gen_err("instruction pointer does not fit a signed offset".to_string()))?;
+    let target = pointer
+      .checked_add(offset as isize)
+      .ok_or_else(|| self.gen_err(format!("instruction pointer overflow for offset {offset}")))?;
+    usize::try_from(target).map_err(|_| self.gen_err(format!("instruction pointer moved before function start by offset {offset}")))
   }
 
   #[inline(always)]

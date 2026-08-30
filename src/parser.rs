@@ -282,6 +282,13 @@ pub fn parse_usize(s: &str) -> Result<usize, String> {
 }
 
 pub fn parse_block(ptr_base: usize, xs: &[Cirru], looped: bool, collector: &mut LocalsCollector) -> Result<Vec<CalxSyntax>, String> {
+  if xs.len() < 2 {
+    return Err(format!(
+      "{} expected a type signature, got {xs:?}",
+      if looped { "loop" } else { "block" }
+    ));
+  }
+
   let mut p = ptr_base + 1;
   let mut chunk: Vec<CalxSyntax> = vec![];
   let (params_types, ret_types) = parse_block_types(&xs[1])?;
@@ -358,7 +365,9 @@ pub fn parse_do(xs: &Cirru, collector: &mut LocalsCollector) -> Result<Vec<CalxS
   match xs {
     Cirru::Leaf(_) => Err(format!("expect expression for types, got {xs}")),
     Cirru::List(ys) => {
-      let x0 = &ys[0];
+      let Some(x0) = ys.first() else {
+        return Err("expected `do`, got an empty expression".to_string());
+      };
       if !leaf_is(x0, "do") {
         return Err(format!("expected do, got {x0}"));
       }

@@ -36,7 +36,9 @@ impl FromStr for Calx {
       "false" => Ok(Calx::Bool(false)),
       "" => Err(String::from("unknown empty string")),
       _ => {
-        let s0 = s.chars().next().unwrap();
+        let Some(s0) = s.chars().next() else {
+          return Err(String::from("unknown empty string"));
+        };
         if s0 == '|' || s0 == ':' {
           Ok(Calx::Str(Rc::from(&s[1..s.len()])))
         } else if FLOAT_PATTERN.is_match(s) {

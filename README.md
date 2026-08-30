@@ -4,13 +4,14 @@
 
 ### Usages
 
-Version 0.2.1 includes the parser ownership compatibility fixes and VM
-allocation/lookup improvements accumulated on `main` after 0.2.0. Native
-Calcit bindings should use this stable crate version instead of a git hash.
+Version 0.2.2 adds the semantic-safety baseline, typed validation,
+`check`/`explain`, and lightweight error snapshots on top of the parser
+compatibility and VM allocation/lookup improvements from 0.2.1. Native Calcit
+bindings should use this stable crate version instead of a git hash.
 
-0.2.1 包含 0.2.0 之后在 `main` 积累的 parser ownership 兼容修复和 VM
-allocation/lookup 优化。Calcit native binding 应使用稳定 crate 版本，不要引用
-git hash。
+0.2.2 在 0.2.1 的 parser compatibility 与 VM allocation/lookup 优化之上，
+增加语义安全基线、类型验证、`check`/`explain` 和轻量错误快照。Calcit native
+binding 应使用稳定 crate 版本，不要引用 git hash。
 
 ```bash
 cargo install calx-vm
@@ -146,6 +147,8 @@ The teaching, validation, and Calcit compilation roadmap is maintained in
 [`docs/roadmap.md`](docs/roadmap.md). 路线图正文以中文维护，issue 与 PR 使用中英双语。
 The current experimental instruction contract is documented in
 [`docs/instruction-set.md`](docs/instruction-set.md).
+The per-opcode parser/validator/lowering/interpreter/test audit is maintained in
+[`docs/instruction-matrix.md`](docs/instruction-matrix.md).
 Typed validation and trap boundaries are specified in
 [`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
 The current error phases and optional VM snapshot API are documented in
