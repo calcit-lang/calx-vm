@@ -2,6 +2,11 @@
 
 > Calcit runner can be slow being a dynamic language. Calx VM trying to provide some helper tools for faster computation of very simple but repeated tasks. Ideally Calcit should use WASM for CPU heavy computations.
 
+The 0.3 design moves performance-sensitive programs toward a strict typed
+profile: no `Dynamic` local/global/import contracts and no implicit `nil` for
+uninitialized or void state. Dynamic behavior remains an explicit legacy
+compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
+
 ### Usages
 
 Version 0.2.2 adds the semantic-safety baseline, typed validation,
