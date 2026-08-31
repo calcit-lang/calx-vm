@@ -1,6 +1,6 @@
 # RFC 0004：严格 F64Buffer 类型与宿主 ABI
 
-- 状态：提议
+- 状态：实现中（#52）
 - 目标版本：0.5 typed-buffer vertical slice
 - 关联 Issue：#50、#51
 - 前置：RFC 0002 typed boundaries、RFC 0003 Calcit subset/host ABI

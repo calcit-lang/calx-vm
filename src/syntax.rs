@@ -63,6 +63,12 @@ pub enum CalxSyntax {
   F64Gt,
   /// `f.ge`, greater than, or equal, compares two f64 numbers on stack
   F64Ge,
+  /// `f64-buffer.len`, return the number of unboxed elements as i64
+  F64BufferLen,
+  /// `f64.to-i64-index`, checked conversion for buffer indexing
+  F64ToI64Index,
+  /// `f64-buffer.get`, read one unboxed element by an i64 index
+  F64BufferGet,
   /// `add`, add two f64 numbers on stack into a f64
   Add,
   /// `mul`, multiply two f64 numbers on stack into a f64

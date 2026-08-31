@@ -365,14 +365,18 @@ impl<'a> Validator<'a> {
         self.operand_stack.push(ty);
       }
       GlobalNew => self.globals.push(ValidationType::Dynamic),
+      Const(Calx::F64Buffer(_)) => {
+        return Err(self.error("F64Buffer constants are not supported; use an entry or import value"));
+      }
       Const(value) => self.operand_stack.push(ValidationType::Known(value.value_type())),
       Dup => {
         let value = self.pop_any()?;
         self.operand_stack.extend([value, value]);
       }
-      Drop | Echo | Assert(_) => {
+      Drop | Echo => {
         self.pop_any()?;
       }
+      Assert(_) => self.pop_condition()?,
       IntAdd | IntMul | IntDiv | IntRem | IntShr | IntShl => {
         self.pop_expect(CalxType::I64.into())?;
         self.pop_expect(CalxType::I64.into())?;
@@ -391,6 +395,19 @@ impl<'a> Validator<'a> {
         self.pop_expect(CalxType::F64.into())?;
         self.pop_expect(CalxType::F64.into())?;
         self.operand_stack.push(CalxType::Bool.into());
+      }
+      F64BufferLen => {
+        self.pop_expect(CalxType::F64Buffer.into())?;
+        self.operand_stack.push(CalxType::I64.into());
+      }
+      F64ToI64Index => {
+        self.pop_expect(CalxType::F64.into())?;
+        self.operand_stack.push(CalxType::I64.into());
+      }
+      F64BufferGet => {
+        self.pop_expect(CalxType::I64.into())?;
+        self.pop_expect(CalxType::F64Buffer.into())?;
+        self.operand_stack.push(CalxType::F64.into());
       }
       Add | Mul => self.validate_overloaded_numeric()?,
       Div => {
@@ -418,7 +435,7 @@ impl<'a> Validator<'a> {
         self.mark_unreachable()?;
       }
       BrIf(depth) => {
-        self.pop_any()?;
+        self.pop_condition()?;
         let label_types = self.branch_types(*depth)?;
         let actual = self.pop_types(&label_types)?;
         self.operand_stack.extend(actual);
@@ -427,7 +444,7 @@ impl<'a> Validator<'a> {
         self.end_control(if *looped { ControlKind::Loop } else { ControlKind::Block })?;
       }
       If { ret_types, .. } => {
-        self.pop_any()?;
+        self.pop_condition()?;
         let end_types = self.known_types(ret_types);
         self.push_control(ControlKind::If { else_seen: false }, vec![], end_types)?;
       }
@@ -499,6 +516,15 @@ impl<'a> Validator<'a> {
     };
     self.operand_stack.push(result);
     Ok(())
+  }
+
+  fn pop_condition(&mut self) -> Result<(), ValidationError> {
+    let actual = self.pop_any()?;
+    if actual == ValidationType::Known(CalxType::F64Buffer) {
+      Err(self.error("F64Buffer does not participate in truthiness"))
+    } else {
+      Ok(())
+    }
   }
 
   fn local_type(&self, index: usize) -> Result<ValidationType, ValidationError> {

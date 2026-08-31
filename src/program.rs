@@ -430,6 +430,13 @@ fn validate_globals(globals: &[CalxGlobalDecl]) -> Result<(), CalxProgramError> 
     }
     validate_boundary(global.value_type, "global", global.name.as_ref(), None, global.span.clone())?;
     let expected = match global.value_type {
+      CalxBoundaryType::Known(CalxType::F64Buffer) => {
+        return Err(CalxProgramError::new(
+          format!("strict global `{}` cannot use F64Buffer", global.name),
+          None,
+          global.span.clone(),
+        ));
+      }
       CalxBoundaryType::Known(value_type) => value_type,
       CalxBoundaryType::Dynamic => {
         return Err(CalxProgramError::new(
@@ -508,6 +515,6 @@ pub(crate) fn validate_strict_type(
       function,
       span,
     )),
-    CalxType::Bool | CalxType::I64 | CalxType::F64 | CalxType::Str | CalxType::List => Ok(()),
+    CalxType::Bool | CalxType::I64 | CalxType::F64 | CalxType::F64Buffer | CalxType::Str | CalxType::List => Ok(()),
   }
 }

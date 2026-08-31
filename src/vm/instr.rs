@@ -63,6 +63,12 @@ pub enum CalxInstr {
   F64Gt,
   /// greater than, or equal, compares two f64 numbers on stack
   F64Ge,
+  /// return an F64Buffer element count as i64
+  F64BufferLen,
+  /// checked non-negative integral f64 to i64 index conversion
+  F64ToI64Index,
+  /// read one F64Buffer element by i64 index
+  F64BufferGet,
   /// add two f64 numbers on stack into a f64
   Add,
   /// multiply two f64 numbers on stack into a f64
@@ -155,6 +161,9 @@ impl TryFrom<&CalxSyntax> for CalxInstr {
       CalxSyntax::F64Le => Ok(Self::F64Le),
       CalxSyntax::F64Gt => Ok(Self::F64Gt),
       CalxSyntax::F64Ge => Ok(Self::F64Ge),
+      CalxSyntax::F64BufferLen => Ok(Self::F64BufferLen),
+      CalxSyntax::F64ToI64Index => Ok(Self::F64ToI64Index),
+      CalxSyntax::F64BufferGet => Ok(Self::F64BufferGet),
       CalxSyntax::Add => Ok(Self::Add),
       CalxSyntax::Mul => Ok(Self::Mul),
       CalxSyntax::Div => Ok(Self::Div),
@@ -229,6 +238,9 @@ impl CalxInstr {
       CalxInstr::F64Le => (2, 1),
       CalxInstr::F64Gt => (2, 1),
       CalxInstr::F64Ge => (2, 1),
+      CalxInstr::F64BufferLen => (1, 1),
+      CalxInstr::F64ToI64Index => (1, 1),
+      CalxInstr::F64BufferGet => (2, 1),
       CalxInstr::Add => (2, 1),
       CalxInstr::Mul => (2, 1),
       CalxInstr::Div => (2, 1),
@@ -269,4 +281,4 @@ impl CalxInstr {
 
 /// TODO not sure whether bincode remains compatible after new instruction added
 /// use string for some semantics
-pub const CALX_INSTR_EDITION: &str = "0.3";
+pub const CALX_INSTR_EDITION: &str = "0.5";
