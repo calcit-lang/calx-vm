@@ -22,6 +22,29 @@ crate version instead of a git hash.
 加入 F64 comparisons，以及 Calcit translator 实验需要的 source-aware `ProgramBuilder`
 API。Calcit native binding 应使用这个稳定 crate 版本，不要引用 git hash。
 
+#### 当前开发分支：严格 F64Buffer
+
+0.5 开发分支增加不可变的 `F64Buffer` concrete value。函数参数、单返回值、local、
+block/loop 与 typed host import 可以传递共享的连续 `f64` storage；global 和 constant literal
+会被明确拒绝。`f64-buffer.len`、`f64.to-i64-index` 与 `f64-buffer.get` 提供最小读取路径，
+非法数值转换和越界访问都会 trap，不返回 `Nil`，也不接受 `Dynamic` 或 `List` 替代。
+Rust embedding 可按所有权意图选择 `f64_buffer_share`、`f64_buffer_adopt` 或
+`f64_buffer_copy_from_slice`。源码路径可用 `calx check demos/f64-buffer.cirru` 验证；运行时
+buffer 由 typed entry argument 或 host import 提供。
+
+#### Current development branch: strict F64Buffer
+
+The 0.5 development branch adds an immutable concrete `F64Buffer` value. Shared
+contiguous `f64` storage may cross function parameters, a single result, locals,
+blocks/loops, and typed host imports; globals and constant literals are rejected.
+`f64-buffer.len`, `f64.to-i64-index`, and `f64-buffer.get` form the minimal read
+path. Invalid numeric conversions and bounds access trap instead of returning
+`Nil`, and neither `Dynamic` nor `List` is accepted as a substitute. Rust hosts
+choose the explicit `f64_buffer_share`, `f64_buffer_adopt`, or
+`f64_buffer_copy_from_slice` constructor according to ownership intent. Validate
+the source path with `calx check demos/f64-buffer.cirru`; runtime buffers enter
+through typed entry arguments or host imports.
+
 ```bash
 cargo install calx-vm
 calx hello.cirru

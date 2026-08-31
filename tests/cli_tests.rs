@@ -96,6 +96,26 @@ fn check_and_explain_show_f64_comparison_types() {
 }
 
 #[test]
+fn check_and_explain_show_strict_f64_buffer_pipeline() {
+  let source = fixture("demos/f64-buffer.cirru");
+  let checked = calx(&["check", source.to_str().expect("UTF-8 fixture path")]);
+  let check_stdout = output_text(&checked.stdout);
+  assert!(checked.status.success(), "{}", output_text(&checked.stderr));
+  assert!(
+    check_stdout.contains("[calx check] ok: 1 function(s), 7 syntax instruction(s), strict typed"),
+    "{check_stdout}"
+  );
+
+  let explained = calx(&["explain", source.to_str().expect("UTF-8 fixture path")]);
+  let stdout = output_text(&explained.stdout);
+  assert!(explained.status.success(), "{}", output_text(&explained.stderr));
+  let golden = include_str!("fixtures/f64-buffer-explain.golden.txt");
+  for expected in golden.lines().filter(|line| !line.is_empty()) {
+    assert!(stdout.contains(expected), "missing `{expected}` in:\n{stdout}");
+  }
+}
+
+#[test]
 fn explain_rejects_an_unknown_function_filter() {
   let source = fixture("demos/if.cirru");
   let output = calx(&["explain", source.to_str().expect("UTF-8 fixture path"), "--function", "missing"]);

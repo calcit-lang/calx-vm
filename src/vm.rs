@@ -270,7 +270,7 @@ impl CalxVM {
       JmpIf(line) => {
         let line = *line;
         let v = self.stack_pop()?;
-        if v.truthy() {
+        if self.condition_truthy(&v)? {
           self.top_frame.pointer = line;
           return Ok(true); // point reset, goto next loop
         }
@@ -278,7 +278,7 @@ impl CalxVM {
       BranchIf { target, base, arity } => {
         let (target, base, arity) = (*target, *base, *arity);
         let condition = self.stack_pop()?;
-        if condition.truthy() {
+        if self.condition_truthy(&condition)? {
           self.apply_branch_stack(base, arity)?;
           self.top_frame.pointer = target;
           return Ok(true);
@@ -287,7 +287,7 @@ impl CalxVM {
       JmpOffsetIf(l) => {
         let offset = *l;
         let v = self.stack_pop()?;
-        if v.truthy() {
+        if self.condition_truthy(&v)? {
           self.top_frame.pointer = self.pointer_with_offset(offset)?;
           return Ok(true); // point reset, goto next loop
         }
@@ -492,6 +492,51 @@ impl CalxVM {
       F64Le => self.compare_f64("le", |left, right| left <= right)?,
       F64Gt => self.compare_f64("gt", |left, right| left > right)?,
       F64Ge => self.compare_f64("ge", |left, right| left >= right)?,
+      F64BufferLen => {
+        self.check_before_pop()?;
+        let top = self.stack.len() - 1;
+        let length = match &self.stack[top] {
+          Calx::F64Buffer(values) => values.len(),
+          value => return Err(self.gen_err(format!("f64-buffer.len expected F64Buffer, found {:?}", value.value_type()))),
+        };
+        let length =
+          i64::try_from(length).map_err(|_| self.gen_err(format!("trap: f64-buffer.len length {length} does not fit i64")))?;
+        self.stack[top] = Calx::I64(length);
+      }
+      F64ToI64Index => {
+        self.check_before_pop()?;
+        let top = self.stack.len() - 1;
+        let value = match self.stack[top] {
+          Calx::F64(value) => value,
+          ref value => return Err(self.gen_err(format!("f64.to-i64-index expected F64, found {:?}", value.value_type()))),
+        };
+        const I64_INDEX_UPPER_EXCLUSIVE: f64 = 9_223_372_036_854_775_808.0;
+        if !value.is_finite() || value.fract() != 0.0 || !(0.0..I64_INDEX_UPPER_EXCLUSIVE).contains(&value) {
+          return Err(self.gen_err(format!(
+            "trap: f64.to-i64-index invalid value {value:?}; expected finite integral 0 <= value < 2^63"
+          )));
+        }
+        self.stack[top] = Calx::I64(value as i64);
+      }
+      F64BufferGet => {
+        let (buffer_at, index) = self.stack_pop_right()?;
+        let index = match index {
+          Calx::I64(index) => index,
+          value => return Err(self.gen_err(format!("f64-buffer.get expected I64 index, found {:?}", value.value_type()))),
+        };
+        let values = match &self.stack[buffer_at] {
+          Calx::F64Buffer(values) => values,
+          value => return Err(self.gen_err(format!("f64-buffer.get expected F64Buffer, found {:?}", value.value_type()))),
+        };
+        let length = values.len();
+        let element_at = usize::try_from(index)
+          .map_err(|_| self.gen_err(format!("trap: f64-buffer.get index {index} is out of bounds for length {length}")))?;
+        let value = values
+          .get(element_at)
+          .copied()
+          .ok_or_else(|| self.gen_err(format!("trap: f64-buffer.get index {index} is out of bounds for length {length}")))?;
+        self.stack[buffer_at] = Calx::F64(value);
+      }
       Add => {
         let (left, right) = self.stack_pop_right()?;
         match (&self.stack[left], &right) {
@@ -662,7 +707,7 @@ impl CalxVM {
       Assert(message) => {
         let message = message.clone();
         let v = self.stack_pop()?;
-        if v.truthy() {
+        if self.condition_truthy(&v)? {
           // Ok
         } else {
           return Err(self.gen_err(format!("Failed assertion: {message}")));
@@ -808,6 +853,13 @@ impl CalxVM {
       return Err(self.gen_err(String::from("cannot pop from parent stack")));
     }
     Ok(())
+  }
+
+  fn condition_truthy(&self, value: &Calx) -> Result<bool, CalxError> {
+    match value {
+      Calx::F64Buffer(_) => Err(self.gen_err(String::from("F64Buffer does not participate in truthiness"))),
+      _ => Ok(value.truthy()),
+    }
   }
 
   #[inline(always)]
@@ -1178,5 +1230,47 @@ impl CalxError {
   /// Returns the captured globals when this error originated in a VM.
   pub fn globals(&self) -> Option<&[CalxSlot]> {
     self.snapshot.as_deref().map(|snapshot| snapshot.globals.as_slice())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{CalxImportDecl, CalxType};
+
+  fn first_buffer_value(values: &[Calx]) -> Result<Calx, CalxError> {
+    let [Calx::F64Buffer(buffer)] = values else {
+      return Err(CalxError::new_raw(format!("expected one F64Buffer, got {values:?}")));
+    };
+    Ok(Calx::F64(buffer.first().copied().unwrap_or(0.0)))
+  }
+
+  #[test]
+  fn typed_import_runtime_rechecks_actual_buffer_argument_variant() {
+    let main = CalxFunc::new(
+      "main",
+      vec![CalxType::F64Buffer],
+      vec![CalxType::F64],
+      vec![
+        CalxSyntax::LocalGet(0),
+        CalxSyntax::CallImport(Rc::from("first-value")),
+        CalxSyntax::Return,
+      ],
+    );
+    let import = CalxImportDecl::new("first-value", vec![CalxType::F64Buffer], Some(CalxType::F64));
+    let program = CalxProgram::try_new(vec![main], vec![], vec![import]).expect("valid typed buffer program");
+    let mut bindings = CalxHostBindings::new();
+    bindings.insert(
+      Rc::from("first-value"),
+      CalxHostBinding::value(vec![CalxType::F64Buffer], CalxType::F64, first_buffer_value).expect("valid binding"),
+    );
+    let mut vm = CalxVM::from_program(program, bindings).expect("instantiate strict VM");
+
+    // Bypass the public entry check to exercise the host boundary's
+    // defense-in-depth check against malformed runtime state.
+    let error = vm
+      .run_inner(vec![Calx::List(vec![Calx::F64(1.0)])])
+      .expect_err("actual List argument must not cross an F64Buffer import boundary");
+    assert!(error.message.contains("argument 0 expected F64Buffer, found List"), "{error}");
   }
 }

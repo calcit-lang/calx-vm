@@ -1,6 +1,6 @@
 # Calx 指令实现与测试矩阵
 
-> 适用版本：0.2.x / 0.3 开发基线  
+> 适用版本：0.3 / 0.5 开发基线
 > 状态：每次增加、删除或改变 opcode 时必须同步更新
 
 本矩阵把 [`instruction-set.md`](instruction-set.md) 的语义说明映射到 parser、validator、lowering、interpreter 和自动测试。它不表示 Calx 与 WebAssembly 二进制兼容。
@@ -18,6 +18,7 @@
 - `semantics/*`：`tests/vm_semantics_tests.rs`；
 - `validator/*`：`tests/validator_tests.rs`；
 - `demos`：`try.sh` 对全部 demo 的稳定输出断言。
+- `f64-buffer/*`：`tests/f64_buffer_tests.rs` 与 CLI golden。
 
 ## Cirru source opcodes
 
@@ -52,6 +53,9 @@
 | `f.le` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries` | 支持 |
 | `f.gt` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries` | 支持 |
 | `f.ge` | 直接 | `f64 f64 -> bool` | 直接 | IEEE 754/Rust | `matrix/float`, `matrix/float-boundaries` | 支持 |
+| `f64-buffer.len` | 直接 | `F64Buffer -> I64` | 直接 | checked length | `f64-buffer/parser-runtime`, `demos` | 支持；global/literal 拒绝 |
+| `f64.to-i64-index` | 直接 | `F64 -> I64` | 直接 | checked half-open domain | `f64-buffer/conversion`, `cli/golden` | 支持；非法数值 trap |
+| `f64-buffer.get` | 直接 | `F64Buffer I64 -> F64` | 直接 | checked bounds | `f64-buffer/bounds`, `cli/golden` | 支持；负数/越界 trap |
 | `add` | 直接 | 同型 `i64/f64` 或 Dynamic | 直接 | wrapping i64 / f64 | `matrix/float`, `demos` | 部分静态支持 |
 | `mul` | 直接 | 同型 `i64/f64` 或 Dynamic | 直接 | wrapping i64 / f64 | `matrix/float` | 部分静态支持 |
 | `div` | 直接 | `f64 f64 -> f64` | 直接 | IEEE 754 | `matrix/float` | 支持 f64 |
@@ -99,6 +103,7 @@
 - validator 在 lowering 前拒绝栈、类型、label、local/global 和函数签名错误；
 - guest 的 `unreachable`、`quit`、算术 trap 和 assert failure 返回错误，不 panic 或退出宿主；
 - 即使 embedding consumer 手工构造非法 function index 或 offset instruction，公开 VM API 也返回 `CalxError`；
+- 即使 embedding consumer 手工构造 buffer opcode 或 buffer control condition，错误类型也返回 `CalxError`，不 panic；
 - `process::exit` 只允许用于 CLI 参数 parser 的正常 help/error 退出，不可由 guest instruction 到达；
 - 静态 regex 的构造属于启动期宿主不变量，不接受 guest pattern、索引或控制数据。
 

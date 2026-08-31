@@ -1,0 +1,6 @@
+syntax[004] F64ToI64Index
+operand: [F64Buffer, F64] -> [F64Buffer, I64]
+lowered: F64ToI64Index
+syntax[005] F64BufferGet
+operand: [F64Buffer, I64] -> [F64]
+lowered: F64BufferGet

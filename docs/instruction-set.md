@@ -1,6 +1,6 @@
 # Calx 指令语义与实现状态
 
-> 适用版本：0.2.x 开发分支  
+> 适用版本：0.3 / 0.5 开发分支
 > 状态：实验性语义基线
 
 本文记录当前可由 Cirru 源码使用的 Calx 指令、运行语义及与 WebAssembly 的主要差异。它是测试和后续验证器的输入，不承诺二进制兼容或长期 API 稳定。
@@ -16,7 +16,8 @@
 
 ## 值与真假规则
 
-当前值类型为 `nil`、`bool`、`i64`、`f64`、`str`、`list`。`link` 只有类型和指令占位，没有运行时值。
+当前值类型为 `nil`、`bool`、`i64`、`f64`、`str`、`list` 与不可变 `f64-buffer`。
+`link` 只有类型和指令占位，没有运行时值。
 
 0.3 module parser 已支持 function-prefix `local $name TYPE`、top-level
 `global $name (const|mut TYPE) INITIALIZER` 与 `import-fn NAME (PARAMS... -> [RESULT])`。
@@ -31,6 +32,7 @@ typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` �
 | --- | --- |
 | `nil`、`false`、整数 `0`、浮点 `0.0` | false |
 | `true`、非零整数、非零浮点、字符串、列表 | true |
+| `f64-buffer` | 拒绝；不能作为控制条件或 `assert` 输入 |
 
 这是 Calx/Calcit 风格扩展，不是 WebAssembly 条件语义。后续 typed validator 必须显式决定允许哪些条件类型，不能依赖隐式的 Rust 类型分支。
 
@@ -38,7 +40,7 @@ typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` �
 
 | 类别 | Cirru 指令 | 状态 | 当前语义与限制 |
 | --- | --- | --- | --- |
-| 常量 | `const` | 支持 | 支持标量常量；不支持 list literal |
+| 常量 | `const` | 支持 | 支持标量常量；不支持 list 或 F64Buffer literal |
 | 栈 | `dup`, `drop` | 支持 | 栈下溢返回 VM 错误 |
 | local | `local.new/get/set/tee` | 支持 | strict local 使用 typed declaration；legacy `local.new` 初始化为独立 Uninitialized slot，首次 set 前读取 trap |
 | global | `global.new/get/set` | 支持 | strict global 有类型与 mutability；legacy `global.new` 使用 Uninitialized Dynamic slot |
@@ -47,6 +49,9 @@ typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` �
 | 整数 | `i.shl`, `i.shr` | 支持 | shift count 按 64 取模；`i.shr` 是有符号右移 |
 | 整数比较 | `i.eq/ne/lt/le/gt/ge` | 支持 | 两个 `i64`，产生 `bool` |
 | 浮点比较 | `f.eq/ne/lt/le/gt/ge` | 支持 | 两个 `f64`，按 IEEE 754/Rust 比较并产生 `bool`；不经过 truthiness |
+| buffer | `f64-buffer.len` | 支持 | `F64Buffer -> I64`；长度无法表示为 I64 时 trap |
+| buffer index | `f64.to-i64-index` | 支持 | `F64 -> I64`；只接受 finite、整数值且 `0 <= n < 2^63` |
+| buffer | `f64-buffer.get` | 支持 | `F64Buffer I64 -> F64`；负数或越界索引 trap，不返回 Nil |
 | 重载数值 | `add`, `mul` | 部分支持 | 同类型 `i64` 或 `f64`；整数采用 wrapping 语义 |
 | 浮点 | `div`, `neg` | 部分支持 | 仅 `f64`；沿用 IEEE 754/Rust 基础运算结果 |
 | 结构化控制 | `block`, `loop`, `if`, `br`, `br-if` | 支持 | typed operand/control stack；label 参数/结果与不可达栈多态在 lowering 前验证 |
@@ -84,6 +89,20 @@ Debug 与 Release 构建必须产生相同结果，不能依赖 Rust profile 的
 
 这组指令为 Calcit `Number -> F64` compiler subset 提供数值条件。Calcit frontend 仍必须把
 `if` 条件静态证明为 Bool；新增 comparison 不改变 Calx legacy truthiness。
+
+## F64Buffer 语义
+
+`F64Buffer` 是独立 concrete type，使用共享的不可变连续 `f64` backing；clone 只复制 handle，
+diagnostic 只显示长度，不展开元素。它可用于 strict function 参数/单返回值、local、typed
+block/loop 和 typed host import，但不能用于 global、constant literal、truthiness、算术或比较。
+host parameter/result 会按实际 `Calx::F64Buffer` variant 再检查一次，`List`、`Nil` 和 `Dynamic`
+都不能跨越该边界。
+
+`f64.to-i64-index` 是窄的 checked conversion，不是 truncation：NaN、Infinity、小数、负数以及
+达到 `2^63` 的输入全部 trap，`-0.0` 映射为 `0`。随后 `f64-buffer.get` 独立检查 I64 非负、
+可转换为 `usize` 且严格小于 element count；错误至少报告 instruction、index 和 length。
+完整 ownership、ABI edition 与 fallback 契约见
+[`RFC 0004`](../RFCs/0004-f64-buffer-abi.md)。
 
 ## 错误边界
 

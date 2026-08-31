@@ -218,6 +218,14 @@ impl ProgramBuilder {
     span: Option<SourceSpan>,
   ) -> Result<GlobalId, CalxBuildError> {
     let name = checked_name(name, "global", None, span.clone())?;
+    if value_type == CalxType::F64Buffer {
+      return Err(CalxBuildError::new(
+        CalxBuildErrorKind::InvalidType,
+        "strict global cannot use F64Buffer; pass immutable buffers through function or import boundaries",
+        None,
+        span,
+      ));
+    }
     validate_builder_type(value_type, "global", None, span.clone())?;
     if initial.value_type() != value_type {
       return Err(CalxBuildError::new(
@@ -522,6 +530,21 @@ impl BodyBuilder {
     self.emit(CalxSyntax::Const(value))
   }
 
+  /// Emit `f64-buffer.len` using the current source origin.
+  pub fn f64_buffer_len(&mut self) -> Result<&mut Self, CalxBuildError> {
+    self.emit(CalxSyntax::F64BufferLen)
+  }
+
+  /// Emit the checked `f64.to-i64-index` conversion.
+  pub fn f64_to_i64_index(&mut self) -> Result<&mut Self, CalxBuildError> {
+    self.emit(CalxSyntax::F64ToI64Index)
+  }
+
+  /// Emit `f64-buffer.get` using the current source origin.
+  pub fn f64_buffer_get(&mut self) -> Result<&mut Self, CalxBuildError> {
+    self.emit(CalxSyntax::F64BufferGet)
+  }
+
   pub fn local_get(&mut self, local: &LocalId) -> Result<&mut Self, CalxBuildError> {
     self.ensure_local_owner(local)?;
     self.push(CalxSyntax::LocalGet(local.index), self.default_span.clone());
@@ -749,6 +772,14 @@ impl BodyBuilder {
   }
 
   fn emit_with_span(&mut self, syntax: CalxSyntax, span: Option<SourceSpan>) -> Result<&mut Self, CalxBuildError> {
+    if matches!(&syntax, CalxSyntax::Const(Calx::F64Buffer(_))) {
+      return Err(CalxBuildError::new(
+        CalxBuildErrorKind::InvalidInstruction,
+        "F64Buffer constants are not part of the v1 typed-buffer syntax; use an entry or import value",
+        Some(self.function.clone()),
+        span,
+      ));
+    }
     if matches!(
       syntax,
       CalxSyntax::LocalSet(_)

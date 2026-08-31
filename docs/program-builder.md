@@ -60,6 +60,30 @@ let validated = ValidatedProgram::try_from_program(program)?;
 声明或半个 structured control region，因此 translator 可以把错误直接映射成整个 closed call
 graph 的 fallback。
 
+## F64Buffer 边界与读取
+
+`CalxType::F64Buffer` 可用于 function 参数/单返回值、local、block/loop 和 typed import。
+`BodyBuilder` 提供 source-aware 的 `f64_buffer_len`、`f64_to_i64_index` 和
+`f64_buffer_get` helper：
+
+```rust
+let buffer = function.parameter("$buffer", CalxType::F64Buffer)?;
+let index = function.parameter("$index", CalxType::F64)?;
+function
+  .body()
+  .local_get(&buffer)?
+  .local_get(&index)?
+  .f64_to_i64_index()?
+  .f64_buffer_get()?
+  .return_()?;
+```
+
+host value 可用 `Calx::f64_buffer_share(Rc<[f64]>)`、
+`Calx::f64_buffer_adopt(Vec<f64>)` 或 `Calx::f64_buffer_copy_from_slice(&[f64])`
+显式表达所有权意图。builder 会拒绝 F64Buffer global 与 constant；不能借此把 List、Nil 或
+Dynamic 转为 buffer。构造 API 产生的程序仍必须经过 `ValidatedProgram`，host import 参数和结果
+在运行时也会再次核对实际 variant。
+
 ## Structured control
 
 `BodyBuilder::block`、`loop_` 和 `if_else` 接受闭包，并计算 parser 所使用的 canonical flattened
