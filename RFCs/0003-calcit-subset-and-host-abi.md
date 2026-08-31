@@ -331,13 +331,14 @@ crossover point。不能从现有手写 Calx demo 的纯 interpreter microbenchm
 
 ## 12. 后续 typed buffer 方向
 
-标量闭环完成前不设计容器。后续如真实任务证明边界转换是主要瓶颈，单独 RFC 可定义
-`F64Buffer`（优先）及可能的 `I64Buffer`：
+标量闭环完成后，严格 typed-buffer 语义由
+[`RFC 0004`](0004-f64-buffer-abi.md) 单独定义。首版只开放 `F64Buffer`；`I64Buffer` 继续等待
+显式 source Int 类型或 intrinsic：
 
 - element type 必须同质并进入 Calx type system，不复用非泛型 `Calx::List`；
 - 明确 owned/borrowed、可变性、长度、越界 trap 和 host lifetime；
 - Calcit Number buffer 自然映射 F64；I64Buffer 必须有显式 source intrinsic/conversion；
-- benchmark 同时报告复制、pin/borrow 和纯 loop 成本；
+- benchmark 同时报告 allocation、adopt/share/copy boundary 和纯 loop 成本；
 - 不借 buffer ABI 引入完整 persistent collection 或 GC。
 
 ## 13. 实现顺序与完成条件

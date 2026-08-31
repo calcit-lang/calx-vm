@@ -163,7 +163,8 @@ CLI 建议：
 - 直接函数调用、尾调用、`if`、有界 loop；
 - 少量显式宿主 imports；
 - 首版限定 scalar kernel；后续按独立 RFC 增加同质 typed buffer，暂不复制 Calcit 全部持久化
-  集合语义；
+  集合语义；严格 `F64Buffer` 的类型、ownership、index/trap 与 ABI edition 见
+  [`RFC 0004`](../RFCs/0004-f64-buffer-abi.md)；
 - 通过 wrapper 明确 Calcit 动态值与 Calx 类型值的转换成本。
 
 工作项：
@@ -278,8 +279,9 @@ RFCs/
   0001-validation-and-traps.md
   0002-typed-boundaries.md
   0003-calcit-subset-and-host-abi.md
-  0004-linear-memory.md
-  0005-binary-container.md
+  0004-f64-buffer-abi.md
+  0005-linear-memory.md
+  0006-binary-container.md
 ```
 
 RFC 使用中文维护，并固定包含：动机、术语、具体语义、与 Wasm 的相同/不同点、替代方案、测试计划、教学示例、兼容性和未决问题。
