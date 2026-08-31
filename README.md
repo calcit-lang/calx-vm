@@ -180,6 +180,9 @@ Typed local, global, and host import module contracts are specified in
 The initial Calcit compiler subset, all-or-nothing fallback policy, and
 versioned scalar host ABI are specified in
 [`RFCs/0003-calcit-subset-and-host-abi.md`](RFCs/0003-calcit-subset-and-host-abi.md).
+The strict immutable `F64Buffer` type, indexing traps, ownership rules, and
+typed-buffer ABI edition are specified in
+[`RFCs/0004-f64-buffer-abi.md`](RFCs/0004-f64-buffer-abi.md).
 Source-aware parse, validation, runtime, and host diagnostics are documented in
 [`docs/diagnostics.md`](docs/diagnostics.md).
 
