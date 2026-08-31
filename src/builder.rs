@@ -775,7 +775,7 @@ impl BodyBuilder {
     if matches!(&syntax, CalxSyntax::Const(Calx::F64Buffer(_))) {
       return Err(CalxBuildError::new(
         CalxBuildErrorKind::InvalidInstruction,
-        "F64Buffer constants are not part of the v1 typed-buffer syntax; use an entry or import value",
+        "F64Buffer constants are not part of the initial typed-buffer syntax; use an entry or import value",
         Some(self.function.clone()),
         span,
       ));

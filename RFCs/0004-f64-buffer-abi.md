@@ -108,7 +108,7 @@ truthiness 或 legacy list instructions。
 strict validation 必须：
 
 - 把 F64Buffer 当作已知 concrete `ValidationType`；
-- 对两条指令执行上表的精确 stack check；
+- 对三条指令执行上表的精确 stack check；
 - 拒绝以 List、Nil、Dynamic、F64 或 byte Buffer 替代 F64Buffer；
 - 拒绝 F64Buffer global；
 - 保持 unreachable/control-stack 规则与 scalar type 相同；
