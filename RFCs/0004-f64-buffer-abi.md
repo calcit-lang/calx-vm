@@ -90,8 +90,10 @@ strict host binding 仍是信任边界：声明为 F64Buffer 的参数/结果必
 `len` 在 backing 长度无法表示为 I64 时 trap。Rust 实现不得用 unchecked cast；当前平台上应使用
 checked conversion。
 
-`f64.to-i64-index` 要求输入 finite、非负、无小数部分且不超过 `i64::MAX`；失败产生结构化
-conversion trap。它不是通用 truncation，也不接受 rounding、saturation 或 wrapping。
+`f64.to-i64-index` 要求输入 finite、无小数部分且位于 `0 <= n < 2^63`；`-0.0` 明确映射为
+`0`。失败产生结构化 conversion trap。实现必须先按该半开区间检查，再转换为 I64；不能用
+`i64::MAX as f64` 作为包含式上界，因为该转换会舍入为 `2^63`。这不是通用 truncation，也不接受
+rounding、saturation 或 wrapping。
 
 `get` 先要求 index 非负，再 checked-convert 为 `usize`，最后检查 `index < len`。任一步失败都
 返回结构化 bounds trap，至少包含 instruction、index 与 length；不得 panic、wrap、clamp、返回
@@ -131,11 +133,12 @@ Calcit `Number(f64)` 到 Calx index 的转换必须是显式 checked intrinsic�
 - NaN 与正负 Infinity；
 - 小数；
 - 负数；
-- 超过 I64 或目标 buffer 可索引范围的值。
+- 达到或超过 `2^63` 的值。
 
 静态类型不是 Number 时在 eligibility 阶段 fallback；Number runtime value 不满足上述条件时由
 `f64.to-i64-index` 产生 runtime trap。不得从 `1.0` 的字面量形状推断 source-level I64，也不得用
 Nil、Option 或默认值表示转换失败。Calcit native reference 必须以同样条件报错，不做 rounding。
+转换得到合法 I64 后，目标 buffer 的实际长度仍只由 `f64-buffer.get` 检查。
 
 Calcit native reference 与 Calx execution 必须消费相同 element sequence。若 embedding 从 Calcit
 collection 显式构造 F64Buffer，该构造是用户可见 conversion，必须在 boundary 阶段计量，不能被
