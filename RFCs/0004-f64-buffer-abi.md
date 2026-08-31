@@ -118,8 +118,9 @@ strict validation 必须：
 并提供 source-aware `f64_buffer_len`、`f64_to_i64_index`、`f64_buffer_get` helper。builder 只构造
 未验证 program，仍由 `ValidatedProgram` 完成最终证明。
 
-文本 parser 识别 `f64-buffer` type token 和两条 instruction，但不增加 buffer literal。可执行
-buffer 从 typed entry argument 或 typed host import 获得；这避免在 RFC 中额外设计大常量编码。
+文本 parser 识别 `f64-buffer` type token，以及 `f64-buffer.len`、`f64.to-i64-index`、
+`f64-buffer.get` 三条 instruction，但不增加 buffer literal。可执行 buffer 从 typed entry argument
+或 typed host import 获得；这避免在 RFC 中额外设计大常量编码。
 
 ## 7. Calcit producer 与索引转换
 

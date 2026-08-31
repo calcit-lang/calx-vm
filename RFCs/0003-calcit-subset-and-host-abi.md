@@ -350,8 +350,10 @@ crossover point。不能从现有手写 Calx demo 的纯 interpreter microbenchm
    [`docs/program-builder.md`](../docs/program-builder.md)）；
 3. #38 PR A 实现 eligibility、fallback 和三个 scalar golden fixtures；
 4. #38 PR B 接入真实 Calcit `CompiledProgram` snapshot 和 differential corpus；
-5. #39 在 correctness 固定后采集端到端数据；
-6. 只有数据证明需要批量 boundary，才启动 typed-buffer RFC。
+5. #39 在 correctness 固定后采集端到端 scalar 数据；calcit#548 / PR #551 的公平 cached-callable
+   baseline 仍证明 hot scalar execution 有界受益，同时显示 compile 与 bulk boundary 需要独立证据；
+6. 上述证据已启动 [`RFC 0004`](0004-f64-buffer-abi.md) 与 #50；后续按 #51 RFC → #52 VM/validator
+   → #53 Calcit adapter/benchmark 推进，不再等待 #39 整体关闭。
 
 本 RFC 完成的判据是：类型/语法表、Bool/truthiness/number/void 语义、all-or-nothing fallback、
 versioned ABI、三个 kernel 的纸面映射、性能阶段边界和已知 VM prerequisite 都有唯一解释，#37

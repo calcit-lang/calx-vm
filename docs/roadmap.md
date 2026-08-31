@@ -280,9 +280,10 @@ RFCs/
   0002-typed-boundaries.md
   0003-calcit-subset-and-host-abi.md
   0004-f64-buffer-abi.md
-  0005-linear-memory.md
-  0006-binary-container.md
 ```
+
+linear memory 与 binary container 仍是未立项的 M4 候选；在对应 issue/RFC 实际创建前不预占文件名
+或编号，避免路线图把计划误写成现有文档。
 
 RFC 使用中文维护，并固定包含：动机、术语、具体语义、与 Wasm 的相同/不同点、替代方案、测试计划、教学示例、兼容性和未决问题。
 
