@@ -323,20 +323,7 @@ impl CalxVM {
     mut observer: Option<&mut dyn VmObserver>,
     limit: usize,
   ) -> Result<CalxRunResult, CalxTraceError> {
-    self.result = None;
-    self.frames.clear();
-    self.top_frame.pointer = 0;
-    self.top_frame.locals = args.into_iter().map(CalxSlot::Value).collect();
-    if self.strict {
-      let local_count = self
-        .find_func(&self.top_frame.name)
-        .map(|function| function.locals.len())
-        .unwrap_or(0);
-      self
-        .top_frame
-        .locals
-        .extend(std::iter::repeat_n(CalxSlot::Uninitialized, local_count));
-    }
+    self.reset_entry_state(args)?;
     self.stack.clear();
     let mut step_count = 0;
     loop {
@@ -1031,6 +1018,28 @@ impl CalxVM {
     self.stack.push(x)
   }
 
+  fn reset_entry_state(&mut self, args: Vec<Calx>) -> Result<(), CalxTraceError> {
+    let (name, instrs, ret_types, local_count) = self
+      .find_func("main")
+      .map(|main| (main.name.clone(), main.instrs.clone(), main.ret_types.clone(), main.locals.len()))
+      .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("main function is required".to_string())))?;
+    let mut locals: Vec<CalxSlot> = args.into_iter().map(CalxSlot::Value).collect();
+    if self.strict {
+      locals.extend(std::iter::repeat_n(CalxSlot::Uninitialized, local_count));
+    }
+    self.result = None;
+    self.frames.clear();
+    self.top_frame = CalxFrame {
+      name,
+      locals,
+      instrs,
+      pointer: 0,
+      initial_stack_size: 0,
+      ret_types,
+    };
+    Ok(())
+  }
+
   fn trace_context(&self) -> VmTraceContext {
     let instruction_index = self.top_frame.pointer;
     let instruction = self.top_frame.instrs.get(instruction_index).cloned();
@@ -1064,8 +1073,8 @@ impl CalxVM {
         target: *target,
         taken: quick_continue,
       },
-      Some(CalxInstr::JmpOffset(_)) | Some(CalxInstr::JmpOffsetIf(_)) => VmEventKind::Branch {
-        target: self.top_frame.pointer,
+      Some(CalxInstr::JmpOffset(offset)) | Some(CalxInstr::JmpOffsetIf(offset)) => VmEventKind::Branch {
+        target: trace_offset_target(context.instruction_index, *offset),
         taken: quick_continue,
       },
       Some(CalxInstr::Return) | None => VmEventKind::Return,
@@ -1082,14 +1091,20 @@ impl CalxVM {
   }
 
   fn trace_event(&self, step: usize, context: VmTraceContext, kind: VmEventKind) -> VmEvent {
-    let local = context.local_before.map(|mut change| {
-      change.after = self.top_frame.locals.get(change.index).cloned();
-      change
-    });
-    let global = context.global_before.map(|mut change| {
-      change.after = self.globals.get(change.index).cloned();
-      change
-    });
+    let (local, global) = if matches!(kind, VmEventKind::Trap { .. }) {
+      (None, None)
+    } else {
+      (
+        context.local_before.map(|mut change| {
+          change.after = self.top_frame.locals.get(change.index).cloned();
+          change
+        }),
+        context.global_before.map(|mut change| {
+          change.after = self.globals.get(change.index).cloned();
+          change
+        }),
+      )
+    };
     let kind = match (context.instruction.as_ref(), kind) {
       (Some(CalxInstr::Call(index)), VmEventKind::Instruction) => VmEventKind::Call {
         callee: self
@@ -1159,6 +1174,10 @@ fn trace_local_slot(instruction: &Option<CalxInstr>, frame: &CalxFrame) -> Optio
     before: frame.locals.get(index).cloned(),
     after: None,
   })
+}
+
+fn trace_offset_target(instruction_index: usize, offset: i32) -> usize {
+  instruction_index.checked_add_signed(offset as isize).unwrap_or(instruction_index)
 }
 
 fn trace_global_slot(instruction: &Option<CalxInstr>, globals: &[CalxSlot]) -> Option<VmSlotChange> {

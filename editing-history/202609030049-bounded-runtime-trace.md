@@ -26,6 +26,6 @@ cap is 10,000 transitions; exhaustion uses `CALX_TRACE_LIMIT` to identify the ne
 unbounded loop output. The function option filters display only: execution still starts at main with the real call
 order and guest semantics.
 
-Coverage fixes calls, taken/not-taken branches, implicit returns, source locations, local/global slot transitions,
+Coverage includes calls, taken/not-taken branches, implicit returns, source locations, local/global slot transitions,
 traps, limits, function filtering, and existing legacy/strict runtime paths. A JSON renderer, TUI, and async
 runtime remain out of scope.
