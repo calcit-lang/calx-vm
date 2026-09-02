@@ -148,3 +148,81 @@ fn typed_modules_use_the_strict_check_and_runtime_path() {
   assert!(run.status.success(), "{}", output_text(&run.stderr));
   assert!(run_stdout.contains("Value(I64(7))"), "{run_stdout}");
 }
+
+#[test]
+fn trace_reuses_real_call_branch_and_return_transitions() {
+  let source = fixture("demos/if.cirru");
+  let output = calx(&["trace", source.to_str().expect("UTF-8 fixture path"), "--limit", "64"]);
+  let stdout = output_text(&output.stdout);
+
+  assert!(output.status.success(), "{}", output_text(&output.stderr));
+  assert!(stdout.contains("step 000001 main@1 call demo Call(1)"), "{stdout}");
+  assert!(stdout.contains("demo@1 branch target=5 taken=true JmpIf(5)"), "{stdout}");
+  assert!(stdout.contains("demo@1 branch target=5 taken=false JmpIf(5)"), "{stdout}");
+  assert!(stdout.contains("demo@10 return <implicit-return>"), "{stdout}");
+  assert!(stdout.contains("if.cirru:11:3"), "{stdout}");
+  assert!(stdout.contains("[calx trace] result: Void"), "{stdout}");
+}
+
+#[test]
+fn trace_prints_the_trapping_transition_before_the_runtime_diagnostic() {
+  let source = fixture("tests/fixtures/runtime-trap.cirru");
+  let output = calx(&["trace", source.to_str().expect("UTF-8 fixture path"), "--limit", "16"]);
+  let stdout = output_text(&output.stdout);
+  let stderr = output_text(&output.stderr);
+
+  assert!(!output.status.success());
+  assert!(
+    stdout.contains("step 000002 main@2 trap \"trap: integer divide by zero\" IntDiv"),
+    "{stdout}"
+  );
+  assert!(stderr.contains("error[CALX_RUNTIME_TRAP] runtime"), "{stderr}");
+}
+
+#[test]
+fn trace_stops_at_its_explicit_step_limit() {
+  let source = fixture("demos/recur.cirru");
+  let output = calx(&["trace", source.to_str().expect("UTF-8 fixture path"), "--limit", "3"]);
+  let stdout = output_text(&output.stdout);
+  let stderr = output_text(&output.stderr);
+
+  assert!(!output.status.success());
+  assert!(stdout.contains("step 000002"), "{stdout}");
+  assert!(!stdout.contains("step 000003"), "{stdout}");
+  assert!(stderr.contains("error[CALX_TRACE_LIMIT] runtime"), "{stderr}");
+  assert!(stderr.contains("trace step limit 3 exhausted"), "{stderr}");
+}
+
+#[test]
+fn trace_filters_output_by_function_without_changing_execution() {
+  let source = fixture("demos/if.cirru");
+  let output = calx(&[
+    "trace",
+    source.to_str().expect("UTF-8 fixture path"),
+    "--function",
+    "demo",
+    "--limit",
+    "64",
+  ]);
+  let stdout = output_text(&output.stdout);
+
+  assert!(output.status.success(), "{}", output_text(&output.stderr));
+  assert!(stdout.contains("demo@0 instruction LocalGet(0)"), "{stdout}");
+  assert!(!stdout.contains("main@0 instruction"), "{stdout}");
+  assert!(stdout.contains("[calx trace] result: Void"), "{stdout}");
+}
+
+#[test]
+fn trace_shows_local_and_global_slot_writes() {
+  let source = fixture("tests/fixtures/trace-slots.cirru");
+  let output = calx(&["trace", source.to_str().expect("UTF-8 fixture path"), "--limit", "32"]);
+  let stdout = output_text(&output.stdout);
+
+  assert!(output.status.success(), "{}", output_text(&output.stderr));
+  assert!(stdout.contains("global-write index=0 GlobalNew"), "{stdout}");
+  assert!(stdout.contains("global[0]: None -> Some(Uninitialized)"), "{stdout}");
+  assert!(stdout.contains("global[0]: Some(Uninitialized) -> Some(Value(I64(8)))"), "{stdout}");
+  assert!(stdout.contains("local-write index=1 LocalNew"), "{stdout}");
+  assert!(stdout.contains("local[1]: None -> Some(Uninitialized)"), "{stdout}");
+  assert!(stdout.contains("local[0]: Some(Value(I64(1))) -> Some(Value(I64(3)))"), "{stdout}");
+}

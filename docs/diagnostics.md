@@ -73,7 +73,9 @@ VM 内部 trap 的 code、source span、operand stack、top frame 和 globals �
 - #21 把旧的 `CalxError.stack/top_frame/globals` 移入 `CalxErrorSnapshot`；accessor
   `stack()`、`top_frame()`、`globals()` 继续可用。#30 没有增大 `CalxError` inline layout。
 
-当前只承诺文本 renderer；JSON schema、彩色输出和完整 runtime trace 不在这一阶段。
+当前承诺文本 renderer 和有界 runtime trace；JSON schema 与彩色输出仍不在这一阶段。`calx trace FILE`
+复用真实 interpreter 的事件流，默认限制 10,000 个 VM transition；详情见
+[有界运行时 trace](./tutorials/runtime-trace.md)。
 
 ## 大小与成功路径测量
 

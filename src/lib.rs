@@ -31,5 +31,6 @@ pub use vm::{
   func::CalxFunc,
   instr::CalxInstr,
   instr::CALX_INSTR_EDITION,
-  CalxError, CalxErrorSnapshot, CalxImportsDict, CalxVM,
+  CalxError, CalxErrorSnapshot, CalxImportsDict, CalxTraceError, CalxVM, VmEvent, VmEventKind, VmObserver, VmSlotChange,
+  DEFAULT_TRACE_STEP_LIMIT,
 };
