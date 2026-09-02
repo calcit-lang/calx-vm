@@ -20,6 +20,104 @@ use self::frame::{CalxFrame, CalxSlot};
 use self::func::CalxFunc;
 use self::instr::CalxInstr;
 
+/// Default maximum number of executed VM steps emitted by the trace API and CLI.
+pub const DEFAULT_TRACE_STEP_LIMIT: usize = 10_000;
+
+/// Receives owned snapshots from an explicitly traced VM execution.
+///
+/// Ordinary [`CalxVM::run`] and [`CalxVM::run_typed`] never construct these
+/// snapshots. Consumers that need tracing opt in through
+/// [`CalxVM::run_traced`].
+pub trait VmObserver {
+  fn on_event(&mut self, event: VmEvent);
+}
+
+/// The execution transition represented by one [`VmEvent`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum VmEventKind {
+  Instruction,
+  Call { callee: Rc<str>, tail: bool },
+  Return,
+  Branch { target: usize, taken: bool },
+  LocalWrite { index: usize },
+  GlobalWrite { index: usize },
+  Trap { message: String },
+}
+
+/// One local or global slot changed by a traced instruction.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VmSlotChange {
+  pub index: usize,
+  pub before: Option<CalxSlot>,
+  pub after: Option<CalxSlot>,
+}
+
+/// An owned, deterministic snapshot of one real VM transition.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VmEvent {
+  pub step: usize,
+  pub kind: VmEventKind,
+  pub function: Rc<str>,
+  pub instruction_index: usize,
+  pub instruction: Option<CalxInstr>,
+  pub source_span: Option<SourceSpan>,
+  pub frame_depth_before: usize,
+  pub frame_depth_after: usize,
+  pub stack_before: Vec<Calx>,
+  pub stack_after: Vec<Calx>,
+  pub local: Option<VmSlotChange>,
+  pub global: Option<VmSlotChange>,
+}
+
+/// Explicit reason why a traced execution stopped.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CalxTraceError {
+  Runtime(CalxError),
+  LimitExceeded {
+    limit: usize,
+    function: Rc<str>,
+    instruction_index: usize,
+    source_span: Option<SourceSpan>,
+  },
+}
+
+impl fmt::Display for CalxTraceError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Runtime(error) => error.fmt(f),
+      Self::LimitExceeded {
+        limit,
+        function,
+        instruction_index,
+        source_span,
+      } => {
+        write!(f, "error[CALX_TRACE_LIMIT] runtime")?;
+        if let Some(span) = source_span {
+          write!(f, " at {span}")?;
+        }
+        write!(
+          f,
+          " in function {function} at instruction[{instruction_index}]: trace step limit {limit} exhausted"
+        )
+      }
+    }
+  }
+}
+
+impl std::error::Error for CalxTraceError {}
+
+#[derive(Debug, Clone)]
+struct VmTraceContext {
+  function: Rc<str>,
+  instruction_index: usize,
+  instruction: Option<CalxInstr>,
+  source_span: Option<SourceSpan>,
+  frame_depth: usize,
+  stack: Vec<Calx>,
+  local_before: Option<VmSlotChange>,
+  global_before: Option<VmSlotChange>,
+}
+
 pub type CalxImportsDict = HashMap<Rc<str>, (fn(xs: &Vec<Calx>) -> Result<Calx, CalxError>, usize)>;
 
 /// Virtual Machine for Calx
@@ -194,22 +292,40 @@ impl CalxVM {
     self.run_inner(args)
   }
 
-  fn run_inner(&mut self, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
-    self.result = None;
-    self.frames.clear();
-    self.top_frame.pointer = 0;
-    self.top_frame.locals = args.into_iter().map(CalxSlot::Value).collect();
+  /// Execute with an observer over real VM transitions and a hard event limit.
+  ///
+  /// Strict VMs validate their entry arguments exactly as [`Self::run_typed`]
+  /// does. Legacy VMs retain their historic dynamic argument behavior, while
+  /// still return an explicit void/value result for tracing.
+  pub fn run_traced(&mut self, args: Vec<Calx>, limit: usize, observer: &mut dyn VmObserver) -> Result<CalxRunResult, CalxTraceError> {
     if self.strict {
-      let local_count = self
-        .find_func(&self.top_frame.name)
-        .map(|function| function.locals.len())
-        .unwrap_or(0);
-      self
-        .top_frame
-        .locals
-        .extend(std::iter::repeat_n(CalxSlot::Uninitialized, local_count));
+      let main = self
+        .funcs
+        .iter()
+        .find(|function| function.name.as_ref() == "main")
+        .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("main function is required".to_string())))?;
+      validate_runtime_args(main, &args).map_err(CalxTraceError::Runtime)?;
     }
+    self.run_inner_observed(args, Some(observer), limit)
+  }
+
+  fn run_inner(&mut self, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
+    match self.run_inner_observed(args, None, 0) {
+      Ok(result) => Ok(result),
+      Err(CalxTraceError::Runtime(error)) => Err(error),
+      Err(CalxTraceError::LimitExceeded { .. }) => unreachable!("unobserved execution has no trace limit"),
+    }
+  }
+
+  fn run_inner_observed(
+    &mut self,
+    args: Vec<Calx>,
+    mut observer: Option<&mut dyn VmObserver>,
+    limit: usize,
+  ) -> Result<CalxRunResult, CalxTraceError> {
+    self.reset_entry_state(args)?;
     self.stack.clear();
+    let mut step_count = 0;
     loop {
       // println!("Stack {:?}", self.stack);
       // println!("-- op {} {:?}", self.stack.len(), instr);
@@ -218,7 +334,42 @@ impl CalxVM {
         return Ok(result);
       }
 
-      let quick_continue = self.step()?;
+      let trace = observer.as_ref().map(|_| self.trace_context());
+      if let Some(context) = &trace {
+        if step_count >= limit {
+          return Err(CalxTraceError::LimitExceeded {
+            limit,
+            function: context.function.clone(),
+            instruction_index: context.instruction_index,
+            source_span: context.source_span.clone(),
+          });
+        }
+      }
+
+      let quick_continue = match self.step() {
+        Ok(value) => value,
+        Err(error) => {
+          if let Some(context) = trace {
+            if let Some(observer) = observer.as_deref_mut() {
+              observer.on_event(self.trace_event(
+                step_count,
+                context,
+                VmEventKind::Trap {
+                  message: error.message.clone(),
+                },
+              ));
+            }
+          }
+          return Err(CalxTraceError::Runtime(error));
+        }
+      };
+      if let Some(context) = trace {
+        if let Some(observer) = observer.as_deref_mut() {
+          let kind = self.trace_event_kind(&context, quick_continue);
+          observer.on_event(self.trace_event(step_count, context, kind));
+        }
+      }
+      step_count += 1;
       if quick_continue {
         continue;
       }
@@ -867,6 +1018,128 @@ impl CalxVM {
     self.stack.push(x)
   }
 
+  fn reset_entry_state(&mut self, args: Vec<Calx>) -> Result<(), CalxTraceError> {
+    let (name, instrs, ret_types, local_count) = self
+      .find_func("main")
+      .map(|main| (main.name.clone(), main.instrs.clone(), main.ret_types.clone(), main.locals.len()))
+      .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("main function is required".to_string())))?;
+    let mut locals: Vec<CalxSlot> = args.into_iter().map(CalxSlot::Value).collect();
+    if self.strict {
+      locals.extend(std::iter::repeat_n(CalxSlot::Uninitialized, local_count));
+    }
+    self.result = None;
+    self.frames.clear();
+    self.top_frame = CalxFrame {
+      name,
+      locals,
+      instrs,
+      pointer: 0,
+      initial_stack_size: 0,
+      ret_types,
+    };
+    Ok(())
+  }
+
+  fn trace_context(&self) -> VmTraceContext {
+    let instruction_index = self.top_frame.pointer;
+    let instruction = self.top_frame.instrs.get(instruction_index).cloned();
+    let local_before = trace_local_slot(&instruction, &self.top_frame);
+    let global_before = trace_global_slot(&instruction, &self.globals);
+    let source_span = self
+      .find_func(&self.top_frame.name)
+      .and_then(|function| function.source_spans.get(instruction_index))
+      .cloned()
+      .flatten();
+    VmTraceContext {
+      function: self.top_frame.name.clone(),
+      instruction_index,
+      instruction,
+      source_span,
+      frame_depth: self.frames.len(),
+      stack: self.stack.clone(),
+      local_before,
+      global_before,
+    }
+  }
+
+  fn trace_event_kind(&self, context: &VmTraceContext, quick_continue: bool) -> VmEventKind {
+    match context.instruction.as_ref() {
+      Some(CalxInstr::Call(_)) | Some(CalxInstr::ReturnCall(_)) => VmEventKind::Instruction,
+      Some(CalxInstr::Jmp(target)) | Some(CalxInstr::Branch { target, .. }) => VmEventKind::Branch {
+        target: *target,
+        taken: true,
+      },
+      Some(CalxInstr::JmpIf(target)) | Some(CalxInstr::BranchIf { target, .. }) => VmEventKind::Branch {
+        target: *target,
+        taken: quick_continue,
+      },
+      Some(CalxInstr::JmpOffset(offset)) | Some(CalxInstr::JmpOffsetIf(offset)) => VmEventKind::Branch {
+        target: trace_offset_target(context.instruction_index, *offset),
+        taken: quick_continue,
+      },
+      Some(CalxInstr::Return) | None => VmEventKind::Return,
+      Some(CalxInstr::LocalSet(index)) | Some(CalxInstr::LocalTee(index)) => VmEventKind::LocalWrite { index: *index },
+      Some(CalxInstr::LocalNew) => VmEventKind::LocalWrite {
+        index: self.top_frame.locals.len().saturating_sub(1),
+      },
+      Some(CalxInstr::GlobalSet(index)) => VmEventKind::GlobalWrite { index: *index },
+      Some(CalxInstr::GlobalNew) => VmEventKind::GlobalWrite {
+        index: self.globals.len().saturating_sub(1),
+      },
+      _ => VmEventKind::Instruction,
+    }
+  }
+
+  fn trace_event(&self, step: usize, context: VmTraceContext, kind: VmEventKind) -> VmEvent {
+    let (local, global) = if matches!(kind, VmEventKind::Trap { .. }) {
+      (None, None)
+    } else {
+      (
+        context.local_before.map(|mut change| {
+          change.after = self.top_frame.locals.get(change.index).cloned();
+          change
+        }),
+        context.global_before.map(|mut change| {
+          change.after = self.globals.get(change.index).cloned();
+          change
+        }),
+      )
+    };
+    let kind = match (context.instruction.as_ref(), kind) {
+      (Some(CalxInstr::Call(index)), VmEventKind::Instruction) => VmEventKind::Call {
+        callee: self
+          .funcs
+          .get(*index)
+          .map(|function| function.name.clone())
+          .unwrap_or_else(|| Rc::from("<invalid-call>")),
+        tail: false,
+      },
+      (Some(CalxInstr::ReturnCall(index)), VmEventKind::Instruction) => VmEventKind::Call {
+        callee: self
+          .funcs
+          .get(*index)
+          .map(|function| function.name.clone())
+          .unwrap_or_else(|| Rc::from("<invalid-call>")),
+        tail: true,
+      },
+      (_, kind) => kind,
+    };
+    VmEvent {
+      step,
+      kind,
+      function: context.function,
+      instruction_index: context.instruction_index,
+      instruction: context.instruction,
+      source_span: context.source_span,
+      frame_depth_before: context.frame_depth,
+      frame_depth_after: self.frames.len(),
+      stack_before: context.stack,
+      stack_after: self.stack.clone(),
+      local,
+      global,
+    }
+  }
+
   fn gen_err(&self, s: String) -> CalxError {
     let source_span = self
       .find_func(&self.top_frame.name)
@@ -888,6 +1161,36 @@ impl CalxVM {
   fn find_func(&self, name: &str) -> Option<&CalxFunc> {
     self.funcs.iter().find(|x| &*x.name == name)
   }
+}
+
+fn trace_local_slot(instruction: &Option<CalxInstr>, frame: &CalxFrame) -> Option<VmSlotChange> {
+  let index = match instruction {
+    Some(CalxInstr::LocalSet(index)) | Some(CalxInstr::LocalTee(index)) => *index,
+    Some(CalxInstr::LocalNew) => frame.locals.len(),
+    _ => return None,
+  };
+  Some(VmSlotChange {
+    index,
+    before: frame.locals.get(index).cloned(),
+    after: None,
+  })
+}
+
+fn trace_offset_target(instruction_index: usize, offset: i32) -> usize {
+  instruction_index.checked_add_signed(offset as isize).unwrap_or(instruction_index)
+}
+
+fn trace_global_slot(instruction: &Option<CalxInstr>, globals: &[CalxSlot]) -> Option<VmSlotChange> {
+  let index = match instruction {
+    Some(CalxInstr::GlobalSet(index)) => *index,
+    Some(CalxInstr::GlobalNew) => globals.len(),
+    _ => return None,
+  };
+  Some(VmSlotChange {
+    index,
+    before: globals.get(index).cloned(),
+    after: None,
+  })
 }
 
 enum LoweringImports<'a> {

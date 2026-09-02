@@ -8,7 +8,7 @@ use argh::FromArgs;
 use calx_vm::{
   log_calx_value, parse_program, trace_typed_validation, trace_validation, validate_program, Calx, CalxBoundaryType, CalxError,
   CalxHostBinding, CalxHostBindings, CalxImportDecl, CalxImportsDict, CalxProgram, CalxVM, ParsedProgram, ValidatedProgram,
-  ValidationControlState, ValidationType,
+  ValidationControlState, ValidationType, VmEvent, VmEventKind, VmObserver, DEFAULT_TRACE_STEP_LIMIT,
 };
 
 #[derive(FromArgs)]
@@ -24,6 +24,7 @@ enum Command {
   Run(RunArgs),
   Check(CheckArgs),
   Explain(ExplainArgs),
+  Trace(TraceArgs),
 }
 
 #[derive(FromArgs)]
@@ -62,11 +63,27 @@ struct ExplainArgs {
   source: String,
 }
 
+#[derive(FromArgs)]
+/// trace real VM execution with a bounded event stream
+#[argh(subcommand, name = "trace")]
+struct TraceArgs {
+  /// maximum VM transitions to emit before stopping
+  #[argh(option, default = "DEFAULT_TRACE_STEP_LIMIT")]
+  limit: usize,
+  /// only print events originating in the named function
+  #[argh(option)]
+  function: Option<String>,
+  /// cirru source file
+  #[argh(positional)]
+  source: String,
+}
+
 fn main() {
   let result = match parse_args().command {
     Command::Run(args) => run(args),
     Command::Check(args) => check(args),
     Command::Explain(args) => explain(args),
+    Command::Trace(args) => trace(args),
   };
   if let Err(error) = result {
     eprintln!("{error}");
@@ -76,7 +93,7 @@ fn main() {
 
 fn parse_args() -> TopLevel {
   let mut args: Vec<String> = env::args().collect();
-  if args.len() > 1 && !matches!(args[1].as_str(), "run" | "check" | "explain" | "--help" | "help") {
+  if args.len() > 1 && !matches!(args[1].as_str(), "run" | "check" | "explain" | "trace" | "--help" | "help") {
     args.insert(1, "run".to_string());
   }
 
@@ -89,6 +106,103 @@ fn parse_args() -> TopLevel {
     }
     process::exit(if early_exit.status.is_ok() { 0 } else { 1 });
   })
+}
+
+fn trace(args: TraceArgs) -> Result<(), String> {
+  let program = load_program(&args.source)?;
+  println!("[calx trace] {} (limit {})", args.source, args.limit);
+  if uses_typed_module(&program) {
+    let program = program.into_program().map_err(|error| error.to_string())?;
+    let bindings = standard_typed_imports(program.imports())?;
+    let mut vm = CalxVM::from_program(program, bindings).map_err(|error| error.to_string())?;
+    ensure_trace_function(&vm, args.function.as_deref())?;
+    let mut observer = CliTraceObserver::new(args.function);
+    let result = vm
+      .run_traced(vec![], args.limit, &mut observer)
+      .map_err(|error| error.to_string())?;
+    println!("[calx trace] result: {result:?}");
+    return Ok(());
+  }
+
+  let mut vm = CalxVM::new(program.functions, vec![], standard_imports());
+  vm.preprocess(false)?;
+  vm.setup_top_frame()?;
+  ensure_trace_function(&vm, args.function.as_deref())?;
+  let mut observer = CliTraceObserver::new(args.function);
+  let result = vm
+    .run_traced(vec![Calx::I64(1)], args.limit, &mut observer)
+    .map_err(|error| error.to_string())?;
+  println!("[calx trace] result: {result:?}");
+  Ok(())
+}
+
+fn ensure_trace_function(vm: &CalxVM, selected: Option<&str>) -> Result<(), String> {
+  if let Some(name) = selected {
+    if !vm.functions().iter().any(|function| function.name.as_ref() == name) {
+      return Err(format!("unknown function `{name}`"));
+    }
+  }
+  Ok(())
+}
+
+struct CliTraceObserver {
+  function: Option<String>,
+}
+
+impl CliTraceObserver {
+  fn new(function: Option<String>) -> Self {
+    Self { function }
+  }
+}
+
+impl VmObserver for CliTraceObserver {
+  fn on_event(&mut self, event: VmEvent) {
+    if self.function.as_deref().is_some_and(|name| event.function.as_ref() != name) {
+      return;
+    }
+    let source = event
+      .source_span
+      .as_ref()
+      .map(ToString::to_string)
+      .unwrap_or_else(|| "<generated>".to_string());
+    let instruction = event
+      .instruction
+      .as_ref()
+      .map(|instruction| format!("{instruction:?}"))
+      .unwrap_or_else(|| "<implicit-return>".to_string());
+    println!(
+      "step {:06} {}@{} {} {} stack {:?} -> {:?}",
+      event.step,
+      event.function,
+      event.instruction_index,
+      trace_kind(&event.kind),
+      instruction,
+      event.stack_before,
+      event.stack_after
+    );
+    println!(
+      "  source: {source}; frames {} -> {}",
+      event.frame_depth_before, event.frame_depth_after
+    );
+    if let Some(change) = event.local {
+      println!("  local[{}]: {:?} -> {:?}", change.index, change.before, change.after);
+    }
+    if let Some(change) = event.global {
+      println!("  global[{}]: {:?} -> {:?}", change.index, change.before, change.after);
+    }
+  }
+}
+
+fn trace_kind(kind: &VmEventKind) -> String {
+  match kind {
+    VmEventKind::Instruction => "instruction".to_string(),
+    VmEventKind::Call { callee, tail } => format!("{}call {callee}", if *tail { "tail-" } else { "" }),
+    VmEventKind::Return => "return".to_string(),
+    VmEventKind::Branch { target, taken } => format!("branch target={target} taken={taken}"),
+    VmEventKind::LocalWrite { index } => format!("local-write index={index}"),
+    VmEventKind::GlobalWrite { index } => format!("global-write index={index}"),
+    VmEventKind::Trap { message } => format!("trap {message:?}"),
+  }
 }
 
 fn run(args: RunArgs) -> Result<(), String> {

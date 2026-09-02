@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use calx_vm::{parse_function, Calx, CalxError, CalxFunc, CalxInstr, CalxSyntax, CalxVM};
+use calx_vm::{
+  parse_function, Calx, CalxError, CalxFunc, CalxInstr, CalxSyntax, CalxTraceError, CalxVM, VmEvent, VmEventKind, VmObserver,
+};
 use cirru_parser::{parse, Cirru};
 
 fn parse_program(source: &str) -> Result<Vec<CalxFunc>, String> {
@@ -23,6 +25,15 @@ fn prepare_vm(source: &str) -> Result<CalxVM, String> {
 
 fn run(source: &str) -> Result<Calx, String> {
   prepare_vm(source)?.run(vec![]).map_err(|e| e.to_string())
+}
+
+#[derive(Default)]
+struct RecordingObserver(Vec<VmEvent>);
+
+impl VmObserver for RecordingObserver {
+  fn on_event(&mut self, event: VmEvent) {
+    self.0.push(event);
+  }
 }
 
 #[test]
@@ -314,4 +325,77 @@ fn malformed_public_instructions_return_errors_instead_of_panicking() {
     let error = vm.run(vec![]).expect_err("malformed public instruction must return an error");
     assert!(error.message.contains(expected), "expected {expected:?}, got {:?}", error.message);
   }
+}
+
+#[test]
+fn traced_offset_branch_reports_its_destination_when_not_taken() {
+  let main =
+    CalxFunc::new("main", vec![], vec![], vec![]).with_instrs(vec![CalxInstr::Const(Calx::Bool(false)), CalxInstr::JmpOffsetIf(2)]);
+  let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
+  vm.setup_top_frame().expect("manually lowered main should be available");
+  let mut observer = RecordingObserver::default();
+
+  vm.run_traced(vec![], 8, &mut observer)
+    .expect("not-taken offset branch should complete");
+
+  assert!(matches!(observer.0[1].kind, VmEventKind::Branch { target: 3, taken: false }));
+}
+
+#[test]
+fn traced_trap_does_not_report_an_unwritten_slot() {
+  let main = CalxFunc::new("main", vec![], vec![], vec![]).with_instrs(vec![CalxInstr::LocalSet(0)]);
+  let mut vm = CalxVM::new(vec![main], vec![], HashMap::new());
+  vm.setup_top_frame().expect("manually lowered main should be available");
+  let mut observer = RecordingObserver::default();
+
+  let error = vm
+    .run_traced(vec![], 8, &mut observer)
+    .expect_err("empty-stack local.set must trap");
+
+  assert!(matches!(error, CalxTraceError::Runtime(_)));
+  assert!(matches!(observer.0[0].kind, VmEventKind::Trap { .. }));
+  assert!(observer.0[0].local.is_none());
+  assert!(observer.0[0].global.is_none());
+}
+
+#[test]
+fn interrupted_trace_resets_to_main_before_the_next_run() {
+  let main = CalxFunc::new("main", vec![], vec![], vec![]).with_instrs(vec![CalxInstr::Call(1)]);
+  let callee = CalxFunc::new("callee", vec![], vec![], vec![]).with_instrs(vec![]);
+  let mut vm = CalxVM::new(vec![main, callee], vec![], HashMap::new());
+  vm.setup_top_frame().expect("manually lowered main should be available");
+  let mut interrupted = RecordingObserver::default();
+
+  let limit = vm
+    .run_traced(vec![], 1, &mut interrupted)
+    .expect_err("one event limit must interrupt in the callee");
+  assert!(matches!(limit, CalxTraceError::LimitExceeded { .. }));
+  assert_eq!(interrupted.0[0].function.as_ref(), "main");
+
+  let mut rerun = RecordingObserver::default();
+  vm.run_traced(vec![], 8, &mut rerun)
+    .expect("a reused VM must restart at main after an interrupted trace");
+  assert_eq!(rerun.0[0].function.as_ref(), "main");
+  assert!(matches!(rerun.0[0].kind, VmEventKind::Call { .. }));
+}
+
+#[test]
+fn trapped_callee_resets_to_main_before_the_next_run() {
+  let main = CalxFunc::new("main", vec![], vec![], vec![]).with_instrs(vec![CalxInstr::Call(1)]);
+  let callee = CalxFunc::new("callee", vec![], vec![], vec![]).with_instrs(vec![CalxInstr::Unreachable]);
+  let mut vm = CalxVM::new(vec![main, callee], vec![], HashMap::new());
+  vm.setup_top_frame().expect("manually lowered main should be available");
+  let mut trapped = RecordingObserver::default();
+
+  let error = vm
+    .run_traced(vec![], 8, &mut trapped)
+    .expect_err("unreachable in the callee must trap");
+  assert!(matches!(error, CalxTraceError::Runtime(_)));
+  assert_eq!(trapped.0[1].function.as_ref(), "callee");
+
+  let mut rerun = RecordingObserver::default();
+  vm.run_traced(vec![], 8, &mut rerun)
+    .expect_err("the rerun still reaches the callee trap through main");
+  assert_eq!(rerun.0[0].function.as_ref(), "main");
+  assert!(matches!(rerun.0[0].kind, VmEventKind::Call { .. }));
 }
