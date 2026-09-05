@@ -772,6 +772,9 @@ impl BodyBuilder {
   }
 
   fn emit_with_span(&mut self, syntax: CalxSyntax, span: Option<SourceSpan>) -> Result<&mut Self, CalxBuildError> {
+    if let CalxSyntax::Const(value) = &syntax {
+      validate_builder_type(value.value_type(), "constant", Some(self.function.clone()), span.clone())?;
+    }
     if matches!(&syntax, CalxSyntax::Const(Calx::F64Buffer(_))) {
       return Err(CalxBuildError::new(
         CalxBuildErrorKind::InvalidInstruction,

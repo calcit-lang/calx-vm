@@ -179,7 +179,7 @@ fn globals_constants_wrong_stack_types_and_truthiness_are_rejected() -> TestResu
   assert!(error.message.contains("constants are not supported"), "{error}");
 
   for source in [
-    r#"fn main (list -> i64)
+    r#"fn main (str -> i64)
   local.get 0
   f64-buffer.len
   return"#,
@@ -296,7 +296,7 @@ fn main (-> f64)
   let mut signature_bindings = CalxHostBindings::new();
   signature_bindings.insert(
     Rc::from("source-buffer"),
-    CalxHostBinding::value(vec![], CalxType::List, return_wrong_buffer).map_err(|error| error.to_string())?,
+    CalxHostBinding::value(vec![], CalxType::Str, return_wrong_buffer).map_err(|error| error.to_string())?,
   );
   signature_bindings.insert(
     Rc::from("first-value"),

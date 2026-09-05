@@ -54,6 +54,8 @@ let validated = ValidatedProgram::try_from_program(program)?;
 - handle 只 clone 小型索引、类型和 `Rc` owner token，不 clone 完整声明或函数体。
 - 参数与 local 必须在首条 instruction 之前声明；重复名称、跨 builder handle、const global 写入、
   空名称和严格边界上的 `Nil` 都返回 `CalxBuildError`。
+  unreleased strict 规则也拒绝无元素类型 List 与 Nil/List 常量；控制签名使用相同类型准入，
+  错误不会提交部分 body。兼容变化见 [strict 值域](strict-value-domain.md)。
 - builder API 没有 `Dynamic` 类型入口，不会为缺失的类型或初始值进行隐式推断。
 
 `CalxBuildError` 使用稳定诊断 code `CALX_PROGRAM_BUILD` 和 `build` phase。失败操作不会提交部分

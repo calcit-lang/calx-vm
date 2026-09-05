@@ -1,11 +1,23 @@
 ## Calx VM
 
-> Calcit runner can be slow being a dynamic language. Calx VM trying to provide some helper tools for faster computation of very simple but repeated tasks. Ideally Calcit should use WASM for CPU heavy computations.
+Calx is an experimental compilation target for statically typed Calcit
+computational kernels. It provides a validated stack VM, explicit host
+boundaries, and source-aware traps. Performance decisions use source-backed
+end-to-end evidence, including compilation, input conversion, and execution.
+
+Calx 是 Calcit 静态计算子集的实验性编译目标，提供验证后的栈式 VM、显式宿主边界与源码诊断。
+性能决策以真实源码的编译、输入转换和执行总成本为依据。它目前面向有限 kernel 的 Rust embedding。
 
 The 0.3 design moves performance-sensitive programs toward a strict typed
 profile: no `Dynamic` local/global/import contracts and no implicit `nil` for
 uninitialized or void state. Dynamic behavior remains an explicit legacy
 compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
+
+Unreleased strict admission now also rejects body Nil constants, unparameterized
+List values, and Nil/List/Link control signatures, including dead code. This
+tightens 0.4.0 acceptance; use the [strict value contract and migration guide](docs/strict-value-domain.md).
+The next work is tracked by [#61](https://github.com/calcit-lang/calx-vm/issues/61)
+and the [roadmap](docs/roadmap.md).
 
 ### Usages
 
