@@ -5,6 +5,15 @@
 - 关联 Issue：#31
 - 前置：RFC 0001、#30 source-aware diagnostics
 
+> 后续修订（unreleased after 0.4.0）：下文记录 0.3/0.4 边界设计的历史契约。
+> strict 已进一步禁止 List 声明、Nil/List 常量和 Nil/List/Link 控制签名；
+> 当前规则及迁移以 [strict 值域](../docs/strict-value-domain.md) 为准。
+> 本文提到的 typed local 默认值方案已由实际实现的 Uninitialized/read-before-set trap 取代。
+>
+> Later amendment (unreleased after 0.4.0): this RFC records the historical boundary design.
+> The linked strict value contract supersedes List admission, body Nil constants, control-signature
+> admission, and the proposed local defaults (implemented as Uninitialized with read-before-set traps).
+
 ## 摘要 / Summary
 
 Calx 将增加显式 `CalxProgram` 模块元数据，用于声明函数内 local、模块 global 与宿主

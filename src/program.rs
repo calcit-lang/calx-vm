@@ -7,8 +7,8 @@ use crate::{Calx, CalxError, CalxFunc, CalxSyntax, CalxType, ValidationError};
 
 /// A boundary contract retained by parsed and legacy metadata.
 ///
-/// Strict programs only accept `Known` values whose type is neither `Nil` nor
-/// the not-yet-executable `Link` placeholder.
+/// Strict programs only accept `Known` concrete scalar/F64Buffer types.
+/// `Nil`, unparameterized `List`, and the `Link` placeholder are legacy-only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub enum CalxBoundaryType {
   Known(CalxType),
@@ -403,7 +403,33 @@ fn validate_functions(functions: &[CalxFunc], imports: &[CalxImportDecl]) -> Res
         None,
       ));
     }
-    for syntax in function.syntax.iter() {
+    for (index, syntax) in function.syntax.iter().enumerate() {
+      // Profile admission applies even in unreachable code. A dead stack's
+      // polymorphism must not admit values or control types outside strict.
+      let check_type = |value_type, context| {
+        validate_strict_type(
+          value_type,
+          context,
+          Some(function.name.clone()),
+          function.source_spans.get(index).cloned().flatten(),
+        )
+      };
+      match syntax {
+        CalxSyntax::Const(value) => check_type(value.value_type(), "constant")?,
+        CalxSyntax::Block {
+          params_types, ret_types, ..
+        } => {
+          for value_type in params_types.iter().chain(ret_types.iter()) {
+            check_type(*value_type, "control signature")?;
+          }
+        }
+        CalxSyntax::If { ret_types, .. } => {
+          for value_type in ret_types.iter() {
+            check_type(*value_type, "control signature")?;
+          }
+        }
+        _ => {}
+      }
       if let CalxSyntax::CallImport(name) = syntax {
         if !import_names.contains(name.as_ref()) {
           return Err(CalxProgramError::new(
@@ -515,6 +541,11 @@ pub(crate) fn validate_strict_type(
       function,
       span,
     )),
-    CalxType::Bool | CalxType::I64 | CalxType::F64 | CalxType::F64Buffer | CalxType::Str | CalxType::List => Ok(()),
+    CalxType::List => Err(CalxProgramError::new(
+      format!("strict {boundary_kind} cannot use List without an element type; use F64Buffer for homogeneous numeric data or an explicit legacy VM"),
+      function,
+      span,
+    )),
+    CalxType::Bool | CalxType::I64 | CalxType::F64 | CalxType::F64Buffer | CalxType::Str => Ok(()),
   }
 }
