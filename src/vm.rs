@@ -756,12 +756,10 @@ impl CalxVM {
         return Ok(true);
       }
       ReturnCall(idx) => {
-        // println!("frame size: {}", self.frames.len());
         let Some(f) = self.funcs.get(*idx) else {
           return Err(self.gen_err(format!("invalid function index for return-call: {idx}")));
         };
 
-        // println!("examine stack: {:?}", self.stack);
         let instrs = &f.instrs;
         let ret_types = f.ret_types.clone();
         let f_name = f.name.clone();
@@ -770,20 +768,24 @@ impl CalxVM {
         self.check_before_pop_n(n)?;
 
         let args_at = self.stack.len() - n;
-        let mut locals = self.stack.split_off(args_at).into_iter().map(CalxSlot::Value).collect::<Vec<_>>();
+        // A tail call replaces values, not the locals allocation. Move the
+        // arguments out of the operand tail while retaining the caller's prefix.
+        // Clearing first releases old buffers and prevents stale initialized slots.
+        // Capacity follows the widest layout in this tail-call chain; ordinary
+        // returns and entry resets keep their existing frame-release behavior.
+        self.top_frame.locals.clear();
+        self.top_frame.locals.extend(self.stack.drain(args_at..).map(CalxSlot::Value));
         if self.strict {
-          locals.extend(std::iter::repeat_n(CalxSlot::Uninitialized, f.locals.len()));
+          self
+            .top_frame
+            .locals
+            .extend(std::iter::repeat_n(CalxSlot::Uninitialized, f.locals.len()));
         }
-        let next_size = self.top_frame.initial_stack_size;
-        self.stack.truncate(next_size);
-        self.top_frame = CalxFrame {
-          name: f_name,
-          initial_stack_size: next_size,
-          locals,
-          pointer: 0,
-          instrs: instrs.to_owned(),
-          ret_types,
-        };
+        self.stack.truncate(self.top_frame.initial_stack_size);
+        self.top_frame.name = f_name;
+        self.top_frame.pointer = 0;
+        self.top_frame.instrs = instrs.to_owned();
+        self.top_frame.ret_types = ret_types;
 
         // start in new frame
         return Ok(true);
@@ -1540,6 +1542,83 @@ impl CalxError {
 mod tests {
   use super::*;
   use crate::{CalxImportDecl, CalxType};
+
+  #[test]
+  fn tail_call_capacity_grows_for_wider_layout_then_stays_bounded() {
+    let parsed = crate::parse_program(
+      "capacity.cirru",
+      r#"fn main (-> i64)
+  const 1
+  const 2
+  const 3
+  return-call wide
+
+fn wide (i64 i64 i64 -> i64)
+  local $a i64
+  local $b i64
+  local $c i64
+  local $d i64
+  local $e i64
+  const 0
+  return-call narrow
+
+fn narrow (i64 -> i64)
+  const 1
+  const 2
+  const 3
+  return-call wide"#,
+    )
+    .unwrap();
+    let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
+    vm.reset_entry_state(vec![]).unwrap();
+    let mut widest_capacity = 0;
+    for transition in 0..500 {
+      while !matches!(vm.top_frame.instrs[vm.top_frame.pointer], CalxInstr::ReturnCall(_)) {
+        if !vm.step().unwrap() {
+          vm.top_frame.pointer += 1;
+        }
+      }
+      let previous_pointer = vm.top_frame.locals.as_ptr();
+      let previous_capacity = vm.top_frame.locals.capacity();
+      assert!(vm.step().unwrap());
+      let required = vm.top_frame.locals.len();
+      if required <= previous_capacity {
+        assert_eq!(vm.top_frame.locals.as_ptr(), previous_pointer);
+        assert_eq!(vm.top_frame.locals.capacity(), previous_capacity);
+      }
+      if transition == 0 {
+        widest_capacity = vm.top_frame.locals.capacity();
+      }
+      assert_eq!(vm.top_frame.locals.capacity(), widest_capacity);
+      assert!(vm.frames.is_empty());
+      assert!(vm.stack.is_empty());
+      if vm.top_frame.name.as_ref() == "wide" {
+        assert_eq!(required, 8);
+        assert!(vm.top_frame.locals[3..].iter().all(|slot| *slot == CalxSlot::Uninitialized));
+      } else {
+        assert_eq!(required, 1);
+      }
+    }
+  }
+
+  #[test]
+  fn tail_call_operand_underflow_does_not_clear_the_current_frame() {
+    let parsed = crate::parse_program(
+      "underflow.cirru",
+      "fn main (-> i64)\n  const 1\n  return-call identity\nfn identity (i64 -> i64)\n  local.get 0\n  return",
+    )
+    .unwrap();
+    let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
+    vm.reset_entry_state(vec![]).unwrap();
+    // Bypass validated execution to exercise the runtime guard before any mutation.
+    vm.top_frame.pointer = 1;
+    let before = vm.top_frame.clone();
+    let error = vm.step().unwrap_err();
+    assert_eq!(vm.top_frame, before);
+    assert!(vm.stack.is_empty());
+    assert_eq!(error.diagnostic().function, Some("main"));
+    assert_eq!(error.diagnostic().span.unwrap().start.line, 3);
+  }
 
   fn first_buffer_value(values: &[Calx]) -> Result<Calx, CalxError> {
     let [Calx::F64Buffer(buffer)] = values else {
