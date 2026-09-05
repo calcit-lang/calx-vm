@@ -13,8 +13,8 @@ profile: no `Dynamic` local/global/import contracts and no implicit `nil` for
 uninitialized or void state. Dynamic behavior remains an explicit legacy
 compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
 
-Unreleased strict admission now also rejects body Nil constants, unparameterized
-List values, and Nil/List/Link control signatures, including dead code. This
+Unreleased strict admission now also rejects body Nil constants, all List
+values, and Nil/List/Link control signatures, including dead code. This
 tightens 0.4.0 acceptance; use the [strict value contract and migration guide](docs/strict-value-domain.md).
 The next work is tracked by [#61](https://github.com/calcit-lang/calx-vm/issues/61)
 and the [roadmap](docs/roadmap.md).

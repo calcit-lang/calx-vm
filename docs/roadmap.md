@@ -44,7 +44,7 @@ check/explain/trace 复用这些阶段，便于诊断和理解程序。
 怎样保留错误语义；bounds/conversion/host-result 守卫不可仅凭速度目标删除。
 不把机器 crossover 固定成 correctness gate，也不在 VM trap 后自动重跑 Calcit。
 
-#33 JSON inspect、#34 Wasm mapping、#35 教程继续开放为非阻塞后续；已有教学工具继续维护。
+后续任务 #33 JSON inspect、#34 Wasm mapping、#35 教程继续开放为非阻塞后续；已有教学工具继续维护。
 本轮编译实验不加入 Calcit 0.13.78 release gate。版本发布必须有明确已发布依赖和对应验证，
 实验 revision 仅作为复现证据，不冒充正式版本。
 
@@ -61,7 +61,8 @@ the F64Buffer dot-product slice (#50–#53), initial standalone performance evid
 (#39), and check/explain/trace (#26/#32). Keep these accepted phases closed. Their finite kernel results
 do not establish a universal Calcit speedup.
 
-Next: implement #59's closed strict value domain; use #60 to profile per-tail-call allocation and,
+Issue #59's closed strict value domain is implemented in this change and remains unreleased.
+Next, use #60 to profile per-tail-call allocation and,
 if warranted, reuse frame-local capacity with layout/ownership/trap/trace tests and identical-source
 before/after evidence. A later workload must have a named consumer. Nominal/generic lowering depends
 on Calcit #842/#843/#797 proof/call contracts; unknown types fail before lowering instead of becoming Dynamic.

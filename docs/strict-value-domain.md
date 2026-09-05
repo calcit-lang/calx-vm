@@ -3,7 +3,8 @@
 Status: implemented on the development branch, unreleased after 0.4.0.
 Tracking: [#59](https://github.com/calcit-lang/calx-vm/issues/59),
 [#61](https://github.com/calcit-lang/calx-vm/issues/61).
-Source of truth: `src/program.rs`, `src/builder.rs`, and `tests/strict_value_domain_tests.rs`.
+Source of truth: `src/program.rs`, `src/builder.rs`, `src/validator.rs`,
+`tests/strict_value_domain_tests.rs`, and `tests/f64_buffer_tests.rs`.
 
 ## 中文
 
@@ -19,6 +20,9 @@ host binding、常量以及 block/loop/if 签名。所有这些位置只接受 `
 parser 可继续读取 legacy 数据；转为 `CalxProgram` 时检查 strict 值域，错误保留函数和可用的
 source span，诊断类别为 `CALX_VALIDATION`。直接构造 Rust IR 经相同门禁。ProgramBuilder
 使用同一规则，常量错误在 emission 前返回 `CALX_PROGRAM_BUILD`，不会留下半条指令。
+其中 CalxProgram 检查常量的类型准入；F64Buffer 是准入类型，但其 constant 形式仍由后续
+`ValidatedProgram` 的 validator 拒绝（builder 会提前拒绝）。F64Buffer global 则由
+CalxProgram 的 global 检查与 builder 拒绝。类型准入和特定指令限制是不同阶段。
 这没有增加 runtime 类型分支，也没有移除 host 返回值、入口参数或 buffer bounds/conversion 守卫。
 
 从 0.4.0 迁移：
@@ -49,7 +53,11 @@ relax this program-wide value-domain rule.
 
 Parsed and direct Rust inputs share the CalxProgram gate. Failures preserve function/source
 origin under CALX_VALIDATION. ProgramBuilder reuses the type rule and rejects invalid constants
-atomically before emission under CALX_PROGRAM_BUILD. No runtime branch is added, and entry,
+atomically before emission under CALX_PROGRAM_BUILD. CalxProgram checks constant type admission;
+F64Buffer is an admitted type, but its constant form is rejected later by the ValidatedProgram
+validator (and earlier by the builder). F64Buffer globals are rejected by CalxProgram's global
+checks and the builder. Type admission and instruction-specific restrictions are distinct stages.
+No runtime branch is added, and entry,
 host-result, buffer bounds, and conversion checks remain in place.
 
 Migration from 0.4.0: remove unused Nil constants; model void through zero results and
