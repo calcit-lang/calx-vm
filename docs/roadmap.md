@@ -48,6 +48,29 @@ check/explain/trace 复用这些阶段，便于诊断和理解程序。
 本轮编译实验不加入 Calcit 0.13.78 release gate。版本发布必须有明确已发布依赖和对应验证，
 实验 revision 仅作为复现证据，不冒充正式版本。
 
+保留的延期候选（原 M4；尚未立项，不是取消）：
+
+- 最小线性内存：64 KiB page、load/store、越界 trap、memory.size/grow；
+- select、br_table、只读 table 和 call_indirect；
+- 版本化 binary container：magic、edition、section、长度校验和兼容测试；
+- 控制流图、栈高度图及 source-to-instruction 可视化；
+- 浏览器 Wasm/Wasmtime 对照 harness。
+
+每项须先说明具体 consumer 或教学问题、现有能力为何不足，再建立独立 issue/RFC；
+不能仅因列在候选中就扩大当前版本。线性内存和 binary container 不预占 RFC 文件名或编号。
+
+长期验收原则继续有效：
+
+- 优化前先有正确性 corpus；每条公开 opcode 必须有执行或明确拒绝的测试。
+- 每个优化 PR 说明假设、基准 workload、噪声控制与回归；同时看 debug、release、端到端成本。
+- 热点候选包括 dispatch、frame 切换、值 clone、宿主边界和类型检查，#60 只是当前选择。
+- 不为单点微基准扩大 unsafe 或分叉语义；引入 unsafe 必须有 profile 必要性、局部边界证明和回归。
+- guest 普通错误返回诊断/trap；保持 source mapping、有限 trace 和可复现的公开输入检查。
+- Wasm 交集须链接规范规则、测试证据及有意差异；差分工具留在开发工具层，不给核心引入重量级 runtime。
+
+协作约定仍为中英文分区 Issue/PR，记录范围、依赖、验收与兼容性；RFC 保留动机、具体语义、
+替代方案、测试计划和未决问题。完整旧阶段计划可查 Git 历史，当前已完成项以以上 issue 索引为入口。
+
 ## English
 
 Calx targets static Calcit computational subsets with measurable end-to-end benefits.
@@ -75,3 +98,27 @@ No new VM pool, automatic offload, JIT/SIMD, general collection system, replacem
 scheduler is planned. Preserve bounds/conversion/host-result guards and no Calcit retry after traps.
 Never turn machine-specific crossover measurements into correctness gates. #33/#34/#35 remain open,
 nonblocking follow-ups. This experimental work does not block Calcit 0.13.78.
+
+Deferred candidates from the former M4 remain discoverable: minimal linear memory
+(64 KiB pages, checked load/store, size/grow), select/br_table/read-only tables/call_indirect,
+a versioned binary container, control-flow/stack/source visualizations, and a browser-Wasm/Wasmtime
+comparison harness. These are not cancelled or approved implementation work. Each needs a concrete
+consumer or teaching question and its own issue/RFC; do not reserve RFC filenames or numbers early.
+
+Durable acceptance rules remain: establish correctness corpora before optimization; test execution
+or explicit rejection for every public opcode; record hypotheses, workloads, noise control, regressions,
+and debug/release/end-to-end costs. Consider dispatch, frames, cloning, boundaries, and type checks;
+#60 is the current selection, not the entire optimization space. Unsafe requires profiling evidence,
+local boundary proofs, and regression tests; a microbenchmark alone cannot justify semantic forks.
+Preserve guest traps, source mapping, bounded traces, and reproducible input checks. Wasm intersection
+claims need specification/test evidence and intentional-difference notes, with heavyweight reference
+runtimes confined to development tooling. Keep separate Chinese/English collaboration records and
+RFC motivation, semantics, alternatives, tests, and open questions. Git history retains the original
+stage plans; the completed-issue index above is the current discovery entry.
+
+## Specification references / 规范参考
+
+- [WebAssembly Core Specification](https://webassembly.github.io/spec/core/)
+- [Validation Algorithm](https://webassembly.github.io/spec/core/appendix/algorithm.html)
+- [Specification, reference interpreter, and tests](https://github.com/WebAssembly/spec)
+- [Testsuite mirror](https://github.com/WebAssembly/testsuite)
