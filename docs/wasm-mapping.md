@@ -67,7 +67,7 @@ small VM-level overlap deterministic:
 | `i.shl`, `i.shr` | `i64.shl`, signed `i64.shr_s` | same masked shift-count behavior for tested operands | `shared_i64_operations_wrap_mask_and_trap_like_wasm` |
 | `block`, `loop`, `br`, `br-if` | structured control and labels | same typed-stack/label intent; Calx lowering and internal branch representation differ | opcode and validator matrices |
 | numeric truthiness | integer Wasm conditions | intentional difference: Calx treats zero as false and nonzero as true for I64/F64; this is not emitted from a non-Bool Calcit condition | `calx_numeric_truthiness_is_an_intentional_control_difference` |
-| `f64-buffer.len` | no current Calcit emission; VM result is I64 while Calcit declares Number/F64 | no opaque-buffer counterpart | Calx extension at VM level; out of the current producer subset | `tests/f64_buffer_tests.rs`; tracked by [calcit#889](https://github.com/calcit-lang/calcit/issues/889) |
+| VM `f64-buffer.len` (not currently emitted because its I64 result cannot satisfy Calcit Number/F64) | no opaque-buffer counterpart | Calx extension at VM level; out of the current producer subset | `tests/f64_buffer_tests.rs`; tracked by [calcit#889](https://github.com/calcit-lang/calcit/issues/889) |
 
 ### Explicitly out of scope
 
@@ -151,7 +151,7 @@ Calcit `Number` lowering 为 F64，因此当前 compiler 不使用 Calx I64 算�
 | `i.shl`、`i.shr` | `i64.shl`、signed `i64.shr_s` | 对已测操作数具有相同 masked shift-count 行为 | `shared_i64_operations_wrap_mask_and_trap_like_wasm` |
 | `block`、`loop`、`br`、`br-if` | structured control 与 label | typed-stack/label 意图相同；Calx lowering 与内部 branch 表示不同 | opcode/validator matrices |
 | numeric truthiness | Wasm integer condition | intentional difference：Calx 以 I64/F64 的零为 false、非零为 true；Calcit compiler 不从非 Bool condition 产生该路径 | `calx_numeric_truthiness_is_an_intentional_control_difference` |
-| `f64-buffer.len` | 当前 Calcit 不生成；VM 结果是 I64，而 Calcit 声明为 Number/F64 | 无 opaque-buffer 对应 | VM 层是 Calx extension；不在当前 producer 子集 | `tests/f64_buffer_tests.rs`；由 [calcit#889](https://github.com/calcit-lang/calcit/issues/889) 追踪 |
+| VM `f64-buffer.len`（当前不生成，因为 I64 结果无法满足 Calcit Number/F64） | 无 opaque-buffer 对应 | VM 层是 Calx extension；不在当前 producer 子集 | `tests/f64_buffer_tests.rs`；由 [calcit#889](https://github.com/calcit-lang/calcit/issues/889) 追踪 |
 
 ### 明确不在范围内
 

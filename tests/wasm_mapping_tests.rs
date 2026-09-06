@@ -31,6 +31,29 @@ fn shared_i64_operations_wrap_mask_and_trap_like_wasm() -> TestResult {
   assert_eq!(
     run(
       r#"fn main (-> i64)
+  const 9223372036854775807
+  const 2
+  i.mul
+  return"#,
+      vec![],
+    )?,
+    CalxRunResult::Value(Calx::I64(-2))
+  );
+
+  assert_eq!(
+    run(
+      r#"fn main (-> i64)
+  const -9223372036854775808
+  i.neg
+  return"#,
+      vec![],
+    )?,
+    CalxRunResult::Value(Calx::I64(i64::MIN))
+  );
+
+  assert_eq!(
+    run(
+      r#"fn main (-> i64)
   const 1
   const 65
   i.shl
@@ -38,6 +61,18 @@ fn shared_i64_operations_wrap_mask_and_trap_like_wasm() -> TestResult {
       vec![],
     )?,
     CalxRunResult::Value(Calx::I64(2))
+  );
+
+  assert_eq!(
+    run(
+      r#"fn main (-> i64)
+  const -8
+  const 65
+  i.shr
+  return"#,
+      vec![],
+    )?,
+    CalxRunResult::Value(Calx::I64(-4))
   );
 
   assert_eq!(
@@ -142,6 +177,24 @@ fn calx_numeric_truthiness_is_an_intentional_control_difference() -> TestResult 
     vm.run_typed(vec![Calx::I64(0)]).map_err(|error| error.to_string())?,
     CalxRunResult::Value(Calx::I64(20))
   );
+
+  let mut f64_vm = strict_vm(
+    r#"fn main (f64 -> i64)
+  local.get 0
+  if (-> i64)
+    do
+      const 11
+    do
+      const 20
+  return"#,
+  )?;
+  for (input, expected) in [(0.0, 20), (-0.0, 20), (2.5, 11), (-2.5, 11)] {
+    assert_eq!(
+      f64_vm.run_typed(vec![Calx::F64(input)]).map_err(|error| error.to_string())?,
+      CalxRunResult::Value(Calx::I64(expected)),
+      "unexpected F64 truthiness for {input}"
+    );
+  }
   Ok(())
 }
 
@@ -213,7 +266,7 @@ fn f64_buffer_and_checked_indexing_are_calx_extensions() -> TestResult {
     CalxRunResult::Value(Calx::F64(5.0))
   );
 
-  for invalid in [-1.0, 1.5, f64::NAN, f64::INFINITY] {
+  for invalid in [-1.0, 1.5, f64::NAN, f64::INFINITY, 9_223_372_036_854_775_808.0] {
     let error = vm
       .run_typed(vec![Calx::f64_buffer_adopt(vec![3.0, 5.0, 8.0]), Calx::F64(invalid)])
       .expect_err("invalid Calx buffer index must trap");
