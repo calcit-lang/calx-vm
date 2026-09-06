@@ -3,7 +3,7 @@
 > 适用版本：0.3 / 0.5 开发基线
 > 状态：每次增加、删除或改变 opcode 时必须同步更新
 
-本矩阵把 [`instruction-set.md`](instruction-set.md) 的语义说明映射到 parser、validator、lowering、interpreter 和自动测试。它不表示 Calx 与 WebAssembly 二进制兼容。
+本矩阵把 [`instruction-set.md`](instruction-set.md) 的语义说明映射到 parser、validator、lowering、interpreter 和自动测试。它不表示 Calx 与 WebAssembly 二进制兼容；实际 Calcit kernel 交集与有意差异见 [`wasm-mapping.md`](wasm-mapping.md)。
 
 状态：
 
@@ -24,11 +24,11 @@
 
 | Opcode | Parser | Validator | Lowering | Interpreter | 自动测试 | 状态与说明 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `local.new` | 直接 | 直接，产生 Dynamic local | 直接 | 直接 | `matrix/local-stack` | 支持 |
+| `local.new` | 直接 | legacy 产生 Dynamic local；strict module 使用 typed `local` declaration | 直接 | 直接 | `matrix/local-stack`, `strict-value-domain/*` | legacy source 支持；不由 Calcit lowering 产生 |
 | `local.get` | 直接 | 直接 | 直接 | 直接 | `matrix/local-stack`, `validator/local` | 支持 |
 | `local.set` | 直接 | 直接 | 直接 | 直接 | `matrix/local-stack`, `validator/local` | 支持 |
 | `local.tee` | 直接 | 直接 | 直接 | 直接 | `matrix/local-stack`, `semantics/local-tee` | 支持 |
-| `global.new` | 直接 | 直接，产生 Dynamic global | 直接 | 直接 | `matrix/local-stack` | 支持 |
+| `global.new` | 直接 | legacy 产生 Dynamic global；strict module 使用 typed top-level `global` | 直接 | 直接 | `matrix/local-stack`, `typed-runtime/*` | legacy source 支持；不由 Calcit lowering 产生 |
 | `global.get` | 直接 | 直接 | 直接 | 直接 | `matrix/local-stack`, `semantics/global` | 支持 |
 | `global.set` | 直接 | 直接 | 直接 | 直接 | `matrix/local-stack`, `semantics/global` | 支持 |
 | `const` | 直接 | 直接 | 直接 | 直接 | `matrix/*`, `demos` | 支持标量；list literal 拒绝 |
@@ -56,8 +56,8 @@
 | `f64-buffer.len` | 直接 | `F64Buffer -> I64` | 直接 | checked length | `f64-buffer/parser-runtime`, `demos` | 支持；global/literal 拒绝 |
 | `f64.to-i64-index` | 直接 | `F64 -> I64` | 直接 | checked half-open domain | `f64-buffer/conversion`, `cli/golden` | 支持；非法数值 trap |
 | `f64-buffer.get` | 直接 | `F64Buffer I64 -> F64` | 直接 | checked bounds | `f64-buffer/bounds`, `cli/golden` | 支持；负数/越界 trap |
-| `add` | 直接 | 同型 `i64/f64` 或 Dynamic | 直接 | wrapping i64 / f64 | `matrix/float`, `demos` | 部分静态支持 |
-| `mul` | 直接 | 同型 `i64/f64` 或 Dynamic | 直接 | wrapping i64 / f64 | `matrix/float` | 部分静态支持 |
+| `add` | 直接 | strict 为同型 `i64/f64`；Dynamic 只在 legacy path | 直接 | wrapping i64 / f64 | `matrix/float`, `demos`, `wasm-mapping/*` | strict/legacy 分层支持 |
+| `mul` | 直接 | strict 为同型 `i64/f64`；Dynamic 只在 legacy path | 直接 | wrapping i64 / f64 | `matrix/float`, `wasm-mapping/*` | strict/legacy 分层支持 |
 | `div` | 直接 | `f64 f64 -> f64` | 直接 | IEEE 754 | `matrix/float` | 支持 f64 |
 | `neg` | 直接 | `f64 -> f64` | 直接 | IEEE 754 | `matrix/float`, `demos` | 支持 f64 |
 | `block` | 结构化 | control frame | `Nop` + branch targets | 内部指令 | `matrix/control`, `validator/control`, `demos` | 支持 |
@@ -68,7 +68,7 @@
 | `do` | 结构化 branch body | 不适用 | 不适用 | 不适用 | `matrix/control`, `parser/malformed` | 只允许作为 `if` branch wrapper |
 | `call` | 直接 | 函数签名 | indexed `Call` | 直接 | `matrix/control`, `validator/call`, `demos` | 支持 |
 | `return-call` | 直接 | 参数与结果签名 | indexed `ReturnCall` | 直接 | `matrix/control`, `semantics/return` | 支持 |
-| `call-import` | 直接 | arity + Dynamic result | 直接 | host callback | `matrix/control`, `demos` | 部分静态支持 |
+| `call-import` | 直接 | strict 使用 exact typed signature；legacy tuple 只有 arity + Dynamic result | 直接 | host callback 与 concrete boundary recheck | `matrix/control`, `typed-runtime/*` | strict/legacy 分层支持 |
 | `return` | 直接 | function result types | 直接 | frame return | `matrix/*`, `semantics/return` | 支持 |
 | `unreachable` | 直接 | unreachable stack | 直接 | trap | `semantics/traps`, `validator/unreachable` | 支持 |
 | `nop` | 直接 | 直接 | 直接 | 直接 | `matrix/diagnostic` | 支持 |

@@ -16,8 +16,8 @@ compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
 The 0.5.0 strict contract also rejects body Nil constants, all List
 values, and Nil/List/Link control signatures, including dead code. This
 tightens 0.4.0 acceptance; use the [strict value contract and migration guide](docs/strict-value-domain.md).
-This checkout prepares 0.5.0; consumers must confirm the version is published before
-upgrading. See [0.5.0 release scope and migration](docs/releases/0.5.0.md).
+Version 0.5.0 is published; consumers should use that exact release rather than an
+unreleased revision. See [0.5.0 release scope and migration](docs/releases/0.5.0.md).
 The next work is tracked by [#61](https://github.com/calcit-lang/calx-vm/issues/61)
 and the [roadmap](docs/roadmap.md).
 
@@ -28,14 +28,14 @@ Version 0.5.0 retains the end-to-end strict path introduced before this release:
 Typed modules use declared locals/globals, stable indexed imports, exact host
 signatures, explicit void results, and non-nil Uninitialized slot state. The path
 includes F64 comparisons and the source-aware `ProgramBuilder` API required by the
-Calcit translator experiment. Native Calcit bindings should consume published
-crate versions; follow the release availability gate above before upgrading.
+Calcit translator experiment. Native Calcit bindings should consume exact
+published crate versions.
 
 0.4.0 提供端到端 strict path：声明式 typed locals/globals、稳定索引的 imports、
 精确 host signatures、显式 void 结果和不借用 nil 的 Uninitialized slot state；同时
 加入 F64 comparisons，以及 Calcit translator 实验需要的 source-aware `ProgramBuilder`
-API。0.5.0 收紧 strict 准入并复用尾调 frame 的 locals；本 checkout 正在准备发布，
-消费者应确认 crates.io 已提供目标版本后再升级。迁移范围见[0.5.0 说明](docs/releases/0.5.0.md)。
+API。0.5.0 收紧 strict 准入并复用尾调 frame 的 locals；该版本现已正式发布，
+消费者应使用精确 release，而不是未发布 revision。迁移范围见[0.5.0 说明](docs/releases/0.5.0.md)。
 
 #### 0.4：严格 F64Buffer
 
@@ -61,7 +61,7 @@ the source path with `calx check demos/f64-buffer.cirru`; runtime buffers enter
 through typed entry arguments or host imports.
 
 ```bash
-# After 0.5.0 is published:
+# Published 0.5.0:
 cargo install calx_vm --version 0.5.0
 calx hello.cirru
 calx run hello.cirru
@@ -212,6 +212,10 @@ The current experimental instruction contract is documented in
 [`docs/instruction-set.md`](docs/instruction-set.md).
 The per-opcode parser/validator/lowering/interpreter/test audit is maintained in
 [`docs/instruction-matrix.md`](docs/instruction-matrix.md).
+The bounded mapping between the exercised Calcit/Calx semantics and their
+nearest WebAssembly core concepts is documented in
+[`docs/wasm-mapping.md`](docs/wasm-mapping.md); it is not a binary or runtime
+compatibility claim.
 Typed validation and trap boundaries are specified in
 [`RFCs/0001-validation-and-traps.md`](RFCs/0001-validation-and-traps.md).
 Typed local, global, and host import module contracts are specified in
