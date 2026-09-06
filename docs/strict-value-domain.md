@@ -1,6 +1,7 @@
 # Strict value domain / strict 值域
 
-Status: implemented on the development branch, unreleased after 0.4.0.
+Status: implemented; included in the 0.5.0 release candidate. See
+[release scope and availability](releases/0.5.0.md) before upgrading a consumer.
 Tracking: [#59](https://github.com/calcit-lang/calx-vm/issues/59),
 [#61](https://github.com/calcit-lang/calx-vm/issues/61).
 Source of truth: `src/program.rs`, `src/builder.rs`, `src/validator.rs`,
@@ -65,7 +66,7 @@ CalxRunResult::Void; retain separate Uninitialized slots and read-before-write t
 batches, construct F64Buffer explicitly at the host entry/import boundary. Existing heterogeneous
 programs use the explicit CalxVM::new legacy path or validate/convert at the host boundary.
 Current Calcit scalar/F64Buffer lowering already uses the accepted subset; its ABI and dependency
-version do not change in this PR.
+edition does not change with this contract; consumer dependency upgrades follow publication.
 
 The CLI still selects its profile from module declarations, so declaration-free legacy programs
 may use the compatibility path. Compilers use ProgramBuilder → CalxProgram → ValidatedProgram
