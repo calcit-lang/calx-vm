@@ -65,7 +65,7 @@ Migration from 0.4.0: remove unused Nil constants; model void through zero resul
 CalxRunResult::Void; retain separate Uninitialized slots and read-before-write traps. For numeric
 batches, construct F64Buffer explicitly at the host entry/import boundary. Existing heterogeneous
 programs use the explicit CalxVM::new legacy path or validate/convert at the host boundary.
-Current Calcit scalar/F64Buffer lowering already uses the accepted subset; its ABI and dependency
+Current Calcit scalar/F64Buffer lowering already uses the accepted subset; its ABI
 edition does not change with this contract; consumer dependency upgrades follow publication.
 
 The CLI still selects its profile from module declarations, so declaration-free legacy programs
