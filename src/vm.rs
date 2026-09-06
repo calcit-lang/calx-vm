@@ -771,8 +771,8 @@ impl CalxVM {
         // A tail call replaces values, not the locals allocation. Move the
         // arguments out of the operand tail while retaining the caller's prefix.
         // Clearing first releases old buffers and prevents stale initialized slots.
-        // Capacity follows the widest layout in this tail-call chain; ordinary
-        // returns and entry resets keep their existing frame-release behavior.
+        // Capacity follows the widest layout in this tail-call chain; entry
+        // resets can retain it for the next run without retaining old values.
         self.top_frame.locals.clear();
         self.top_frame.locals.extend(self.stack.drain(args_at..).map(CalxSlot::Value));
         if self.strict {
@@ -1025,7 +1025,19 @@ impl CalxVM {
       .find_func("main")
       .map(|main| (main.name.clone(), main.instrs.clone(), main.ret_types.clone(), main.locals.len()))
       .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("main function is required".to_string())))?;
-    let mut locals: Vec<CalxSlot> = args.into_iter().map(CalxSlot::Value).collect();
+    let required = args
+      .len()
+      .checked_add(if self.strict { local_count } else { 0 })
+      .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("entry locals size overflow".to_string())))?;
+    // A trapped ordinary call leaves main at the bottom of `frames`; tail calls
+    // retain the entry allocation in `top_frame` because they do not push frames.
+    let mut locals = match self.frames.first_mut() {
+      Some(entry_frame) => mem::take(&mut entry_frame.locals),
+      None => mem::take(&mut self.top_frame.locals),
+    };
+    locals.clear();
+    locals.reserve(required);
+    locals.extend(args.into_iter().map(CalxSlot::Value));
     if self.strict {
       locals.extend(std::iter::repeat_n(CalxSlot::Uninitialized, local_count));
     }
@@ -1542,6 +1554,90 @@ impl CalxError {
 mod tests {
   use super::*;
   use crate::{CalxImportDecl, CalxType};
+
+  #[test]
+  fn entry_reset_reuses_locals_capacity_and_releases_strict_values() {
+    let parsed = crate::parse_program(
+      "entry-capacity.cirru",
+      "fn main (f64-buffer -> f64-buffer)\n  local $scratch i64\n  local.get 0\n  return",
+    )
+    .unwrap();
+    let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
+    let old: Rc<[f64]> = Rc::from([1.0]);
+    let replacement: Rc<[f64]> = Rc::from([2.0]);
+
+    vm.reset_entry_state(vec![Calx::F64Buffer(old.clone())]).unwrap();
+    assert_eq!(Rc::strong_count(&old), 2);
+    vm.top_frame.locals[1] = CalxSlot::Value(Calx::I64(99));
+    let previous_pointer = vm.top_frame.locals.as_ptr();
+    let previous_capacity = vm.top_frame.locals.capacity();
+
+    vm.reset_entry_state(vec![Calx::F64Buffer(replacement.clone())]).unwrap();
+    assert_eq!(vm.top_frame.locals.as_ptr(), previous_pointer);
+    assert_eq!(vm.top_frame.locals.capacity(), previous_capacity);
+    assert_eq!(Rc::strong_count(&old), 1);
+    assert!(matches!(
+      &vm.top_frame.locals[..],
+      [CalxSlot::Value(Calx::F64Buffer(values)), CalxSlot::Uninitialized] if Rc::ptr_eq(values, &replacement)
+    ));
+  }
+
+  #[test]
+  fn trapped_entry_run_retains_capacity_but_not_initialized_values() {
+    let parsed = crate::parse_program(
+      "entry-trap-capacity.cirru",
+      "fn main (i64 -> i64)\n  local $missing i64\n  local.get $missing\n  return",
+    )
+    .unwrap();
+    let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
+
+    let first = vm.run_typed(vec![Calx::I64(1)]).unwrap_err();
+    assert!(first.message.contains("read before set for local"), "{first}");
+    let previous_pointer = vm.top_frame.locals.as_ptr();
+    let previous_capacity = vm.top_frame.locals.capacity();
+    vm.top_frame.locals[1] = CalxSlot::Value(Calx::I64(99));
+
+    let second = vm.run_typed(vec![Calx::I64(2)]).unwrap_err();
+    assert!(second.message.contains("read before set for local"), "{second}");
+    assert_eq!(vm.top_frame.locals.as_ptr(), previous_pointer);
+    assert_eq!(vm.top_frame.locals.capacity(), previous_capacity);
+    assert_eq!(vm.top_frame.locals, vec![CalxSlot::Value(Calx::I64(2)), CalxSlot::Uninitialized]);
+  }
+
+  #[test]
+  fn trapped_callee_run_reuses_the_entry_frame_locals() {
+    let parsed = crate::parse_program(
+      "entry-callee-trap-capacity.cirru",
+      r#"fn main (i64 -> i64)
+  local $entry i64
+  local.get 0
+  local.set $entry
+  call helper
+  return
+
+fn helper (-> i64)
+  unreachable"#,
+    )
+    .unwrap();
+    let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
+
+    let first = vm.run_typed(vec![Calx::I64(1)]).unwrap_err();
+    assert!(first.message.contains("unreachable instruction"), "{first}");
+    assert_eq!(vm.frames.len(), 1);
+    let previous_pointer = vm.frames[0].locals.as_ptr();
+    let previous_capacity = vm.frames[0].locals.capacity();
+    vm.frames[0].locals[1] = CalxSlot::Value(Calx::I64(99));
+
+    let second = vm.run_typed(vec![Calx::I64(2)]).unwrap_err();
+    assert!(second.message.contains("unreachable instruction"), "{second}");
+    assert_eq!(vm.frames.len(), 1);
+    assert_eq!(vm.frames[0].locals.as_ptr(), previous_pointer);
+    assert_eq!(vm.frames[0].locals.capacity(), previous_capacity);
+    assert_eq!(
+      vm.frames[0].locals,
+      vec![CalxSlot::Value(Calx::I64(2)), CalxSlot::Value(Calx::I64(2))]
+    );
+  }
 
   #[test]
   fn tail_call_capacity_grows_for_wider_layout_then_stays_bounded() {
