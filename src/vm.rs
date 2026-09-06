@@ -1029,7 +1029,12 @@ impl CalxVM {
       .len()
       .checked_add(if self.strict { local_count } else { 0 })
       .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("entry locals size overflow".to_string())))?;
-    let mut locals = mem::take(&mut self.top_frame.locals);
+    // A trapped ordinary call leaves main at the bottom of `frames`; tail calls
+    // retain the entry allocation in `top_frame` because they do not push frames.
+    let mut locals = match self.frames.first_mut() {
+      Some(entry_frame) => mem::take(&mut entry_frame.locals),
+      None => mem::take(&mut self.top_frame.locals),
+    };
     locals.clear();
     locals.reserve(required);
     locals.extend(args.into_iter().map(CalxSlot::Value));
@@ -1597,6 +1602,41 @@ mod tests {
     assert_eq!(vm.top_frame.locals.as_ptr(), previous_pointer);
     assert_eq!(vm.top_frame.locals.capacity(), previous_capacity);
     assert_eq!(vm.top_frame.locals, vec![CalxSlot::Value(Calx::I64(2)), CalxSlot::Uninitialized]);
+  }
+
+  #[test]
+  fn trapped_callee_run_reuses_the_entry_frame_locals() {
+    let parsed = crate::parse_program(
+      "entry-callee-trap-capacity.cirru",
+      r#"fn main (i64 -> i64)
+  local $entry i64
+  local.get 0
+  local.set $entry
+  call helper
+  return
+
+fn helper (-> i64)
+  unreachable"#,
+    )
+    .unwrap();
+    let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
+
+    let first = vm.run_typed(vec![Calx::I64(1)]).unwrap_err();
+    assert!(first.message.contains("unreachable instruction"), "{first}");
+    assert_eq!(vm.frames.len(), 1);
+    let previous_pointer = vm.frames[0].locals.as_ptr();
+    let previous_capacity = vm.frames[0].locals.capacity();
+    vm.frames[0].locals[1] = CalxSlot::Value(Calx::I64(99));
+
+    let second = vm.run_typed(vec![Calx::I64(2)]).unwrap_err();
+    assert!(second.message.contains("unreachable instruction"), "{second}");
+    assert_eq!(vm.frames.len(), 1);
+    assert_eq!(vm.frames[0].locals.as_ptr(), previous_pointer);
+    assert_eq!(vm.frames[0].locals.capacity(), previous_capacity);
+    assert_eq!(
+      vm.frames[0].locals,
+      vec![CalxSlot::Value(Calx::I64(2)), CalxSlot::Value(Calx::I64(2))]
+    );
   }
 
   #[test]
