@@ -13,26 +13,29 @@ profile: no `Dynamic` local/global/import contracts and no implicit `nil` for
 uninitialized or void state. Dynamic behavior remains an explicit legacy
 compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
 
-Unreleased strict admission now also rejects body Nil constants, all List
+The 0.5.0 strict contract also rejects body Nil constants, all List
 values, and Nil/List/Link control signatures, including dead code. This
 tightens 0.4.0 acceptance; use the [strict value contract and migration guide](docs/strict-value-domain.md).
+This checkout prepares 0.5.0; consumers must confirm the version is published before
+upgrading. See [0.5.0 release scope and migration](docs/releases/0.5.0.md).
 The next work is tracked by [#61](https://github.com/calcit-lang/calx-vm/issues/61)
 and the [roadmap](docs/roadmap.md).
 
 ### Usages
 
-Version 0.4.0 provides an end-to-end strict path:
+Version 0.5.0 retains the end-to-end strict path introduced before this release:
 `CalxProgram -> ValidatedProgram -> CalxVM::from_program -> run_typed`.
 Typed modules use declared locals/globals, stable indexed imports, exact host
-signatures, explicit void results, and non-nil Uninitialized slot state. It also
-adds F64 comparisons and the source-aware `ProgramBuilder` API required by the
-Calcit translator experiment. Native Calcit bindings should use this stable
-crate version instead of a git hash.
+signatures, explicit void results, and non-nil Uninitialized slot state. The path
+includes F64 comparisons and the source-aware `ProgramBuilder` API required by the
+Calcit translator experiment. Native Calcit bindings should consume published
+crate versions; follow the release availability gate above before upgrading.
 
 0.4.0 提供端到端 strict path：声明式 typed locals/globals、稳定索引的 imports、
 精确 host signatures、显式 void 结果和不借用 nil 的 Uninitialized slot state；同时
 加入 F64 comparisons，以及 Calcit translator 实验需要的 source-aware `ProgramBuilder`
-API。Calcit native binding 应使用这个稳定 crate 版本，不要引用 git hash。
+API。0.5.0 收紧 strict 准入并复用尾调 frame 的 locals；本 checkout 正在准备发布，
+消费者应确认 crates.io 已提供目标版本后再升级。迁移范围见[0.5.0 说明](docs/releases/0.5.0.md)。
 
 #### 0.4：严格 F64Buffer
 
@@ -58,7 +61,8 @@ the source path with `calx check demos/f64-buffer.cirru`; runtime buffers enter
 through typed entry arguments or host imports.
 
 ```bash
-cargo install calx-vm
+# After 0.5.0 is published:
+cargo install calx_vm --version 0.5.0
 calx hello.cirru
 calx run hello.cirru
 calx check hello.cirru

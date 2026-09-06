@@ -2,7 +2,8 @@
 
 Tracking: [#61](https://github.com/calcit-lang/calx-vm/issues/61).
 Status: experimental. Published baseline: 0.4.0. Next work uses the existing
-0.5 compilation milestone; version numbers here do not promise a release date.
+0.5 compilation milestone. The 0.5.0 release candidate covers the strict-domain,
+tail-call reuse and bounded-trace slice, not every deferred milestone item.
 
 ## 中文
 
@@ -24,10 +25,12 @@ check/explain/trace 复用这些阶段，便于诊断和理解程序。
 
 接下来按依赖推进：
 
-1. [#59](https://github.com/calcit-lang/calx-vm/issues/59)：封闭 strict 值域，拒绝没有元素证明的 List、
-   Nil 常量与控制签名漏洞。规则见 [strict 值域与迁移](strict-value-domain.md)，此项是当前实现。
-2. [#60](https://github.com/calcit-lang/calx-vm/issues/60)：先测 ReturnCall 的逐次 locals 分配；
-   profile 支持时复用当前 frame 容量，验证不同调用布局、引用释放、trap 与 trace，再做相同源码前后对照。
+1. [#59](https://github.com/calcit-lang/calx-vm/issues/59)：strict 值域封闭已合并，拒绝没有元素证明的
+   List、Nil 常量与控制签名漏洞。规则见 [strict 值域与迁移](strict-value-domain.md)。
+2. [#60](https://github.com/calcit-lang/calx-vm/issues/60)：ReturnCall locals 复用与布局/引用/trap/trace
+   回归已合并；[standalone 对照](https://github.com/calcit-lang/calcit-calx-bench/pull/10)也已合并。
+   当前准备 [0.5.0 发布](releases/0.5.0.md)，随后由 Calcit/harness 消费正式版本并验证。
+   本机微基准不代替端到端发布消费链，#60 继续开放。
 3. 按真实 consumer 需求选择第二种 buffer 访存 workload；扩展 nominal/generic lowering 前先完成
    Calcit #842/#843/#797 的类型证明与 call contract。未知类型必须在 lowering 前失败，不能降成 Dynamic。
 
@@ -84,10 +87,11 @@ the F64Buffer dot-product slice (#50–#53), initial standalone performance evid
 (#39), and check/explain/trace (#26/#32). Keep these accepted phases closed. Their finite kernel results
 do not establish a universal Calcit speedup.
 
-Issue #59's closed strict value domain is implemented in this change and remains unreleased.
-Next, use #60 to profile per-tail-call allocation and,
-if warranted, reuse frame-local capacity with layout/ownership/trap/trace tests and identical-source
-before/after evidence. A later workload must have a named consumer. Nominal/generic lowering depends
+Issue #59's closed strict value domain and #60's frame-local capacity reuse are merged,
+including layout/ownership/trap/trace tests. Standalone paired evidence is merged too.
+Prepare the 0.5.0 release, then adopt published versions in Calcit/harness and validate consumers;
+keep #60 open until that chain is verified. This release does not complete all milestone candidates.
+A later workload must have a named consumer. Nominal/generic lowering depends
 on Calcit #842/#843/#797 proof/call contracts; unknown types fail before lowering instead of becoming Dynamic.
 
 The VM owns execution mechanisms and correctness, Calcit owns compiler/ABI/cache semantics, and
