@@ -16,8 +16,10 @@
 
 ## 值与真假规则
 
-当前值类型为 `nil`、`bool`、`i64`、`f64`、`str`、`list` 与不可变 `f64-buffer`。
-`link` 只有类型和指令占位，没有运行时值。
+运行时 enum 仍包含 legacy adapter 所需的 `nil`、`str` 与 `list`；strict typed program
+只允许 `bool`、`i64`、`f64` 与不可变 `f64-buffer`，void 由 `CalxRunResult::Void` 表示。
+`Dynamic`、Nil/List/Link boundary 与 Nil/List constant 均在 strict validation 中拒绝；
+`link` 只有 legacy 类型/指令占位，没有运行时值。
 
 0.3 module parser 已支持 function-prefix `local $name TYPE`、top-level
 `global $name (const|mut TYPE) INITIALIZER` 与 `import-fn NAME (PARAMS... -> [RESULT])`。
@@ -26,7 +28,7 @@
 typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` 返回显式 Void/Value；
 旧源码仍由独立 legacy adapter 执行，不会在 strict 失败后静默 fallback。
 
-控制条件和 `assert` 统一调用 `Calx::truthy`：
+Calx VM 控制条件和 `assert` 调用 `Calx::truthy`；下表也覆盖 legacy values：
 
 | 值 | 结果 |
 | --- | --- |
@@ -34,7 +36,9 @@ typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` �
 | `true`、非零整数、非零浮点、字符串、列表 | true |
 | `f64-buffer` | 拒绝；不能作为控制条件或 `assert` 输入 |
 
-这是 Calx/Calcit 风格扩展，不是 WebAssembly 条件语义。后续 typed validator 必须显式决定允许哪些条件类型，不能依赖隐式的 Rust 类型分支。
+这是 Calx VM 扩展，不是 WebAssembly 条件语义。Calcit→Calx eligibility 另外要求
+Calcit `if` 条件已经静态证明为 Bool，因此不会从非 Bool Calcit condition 产生 numeric
+truthiness。逐项边界见 [`wasm-mapping.md`](wasm-mapping.md)。
 
 ## 指令矩阵
 
@@ -55,7 +59,7 @@ typed module 的 CLI run/check/explain 走 strict path，调用 `run_typed()` �
 | 重载数值 | `add`, `mul` | 部分支持 | 同类型 `i64` 或 `f64`；整数采用 wrapping 语义 |
 | 浮点 | `div`, `neg` | 部分支持 | 仅 `f64`；沿用 IEEE 754/Rust 基础运算结果 |
 | 结构化控制 | `block`, `loop`, `if`, `br`, `br-if` | 支持 | typed operand/control stack；label 参数/结果与不可达栈多态在 lowering 前验证 |
-| 函数 | `call`, `return-call`, `return` | 支持 | 参数与返回类型在 lowering 前验证；动态 local/import 仍可能保留 runtime 检查 |
+| 函数 | `call`, `return-call`, `return` | 支持 | strict 参数与返回类型在 lowering 前验证，host boundary 仍按 concrete value 复核；Dynamic 只属于 legacy adapter |
 | 宿主 | `call-import` | 支持 strict/legacy | strict import 声明 concrete 参数及 zero/single result；legacy tuple 只有 arity 与 Dynamic result |
 | trap | `unreachable` | 支持 | 返回 VM trap，不触发 Rust panic |
 | 宿主安全 | `quit` | 支持 | 返回 VM trap，不允许 guest 直接终止宿主进程 |
@@ -127,4 +131,6 @@ Cirru/guest 程序不得触发以下宿主行为：
 - WebAssembly 数值执行规则：<https://webassembly.github.io/spec/core/exec/numerics.html>
 - WebAssembly 验证算法：<https://webassembly.github.io/spec/core/appendix/algorithm.html>
 
-Calx 指令名没有带 `i64` 前缀，且包含动态值和教学指令；因此只能逐条声明语义交集，不能仅凭相似命名声称兼容。
+Calx 指令名没有带 `i64` 前缀，legacy adapter 仍包含动态值和教学指令；strict Calcit
+kernel 则使用封闭值域。因此只能按 [`wasm-mapping.md`](wasm-mapping.md) 逐项声明有界
+语义交集，不能仅凭相似命名声称兼容。
