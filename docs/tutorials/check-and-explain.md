@@ -1,5 +1,7 @@
 # 使用 `calx check` 与 `calx explain`
 
+新用户请先沿 [核心 strict 教程](README.md) 完成编写、检查、解释、运行和诊断。本页保留 legacy demo 的观察方式。
+
 Calx 的教学工具把程序处理过程拆成可观察的阶段：
 
 ```text
@@ -31,7 +33,8 @@ validation error in main at syntax[2]: expected I64, found F64
 operand stack: []
 ```
 
-当前位置是函数内扁平 `CalxSyntax` index；Cirru source span 和稳定诊断码仍是后续工作。
+当前位置是函数内扁平 `CalxSyntax` index。现在 CLI 同时输出 `CALX_VALIDATION` 与 Cirru source span，
+例如 `file:line:column`；完整契约见 [源码诊断](../diagnostics.md)。上面的短片段只用于说明类型错配。
 
 ## 解释验证与 lowering
 
@@ -65,7 +68,8 @@ Calx parser 目前为绝对跳转 lowering 把 `if` 的 else 分支放在扁平 
 operand: [Dynamic, I64] -> [Dynamic]
 ```
 
-此类操作仍保留 interpreter 的运行时类型检查。函数签名、常量和有类型的 block label 则显示为 `I64`、`F64`、`Bool` 等已知类型。
+上述 Dynamic 行为只描述 legacy path；推荐的 strict module/ProgramBuilder 路径拒绝未知类型，不能以 Dynamic 充当静态证明。
+legacy 操作仍保留 interpreter 的运行时类型检查。函数签名、常量和有类型的 block label 则显示为 `I64`、`F64`、`Bool` 等已知类型。
 
 ## 运行兼容性
 
