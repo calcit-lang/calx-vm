@@ -75,6 +75,10 @@ Cirru, expanded syntax, typed operand/control-stack transitions, and lowered
 instructions; use `--function NAME` to focus on one function. 中文教程见
 [`docs/tutorials/check-and-explain.md`](docs/tutorials/check-and-explain.md)。
 
+完整的六篇 strict 入门教程（含 CI 验证的命令、输出和错误案例）见
+[核心教程 / Core tutorials](docs/tutorials/README.md)。
+The six-part strict tutorial sequence includes executable commands, checked output excerpts, and failure cases.
+
 it starts with a `main` function:
 
 ```cirru
