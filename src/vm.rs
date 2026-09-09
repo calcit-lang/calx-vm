@@ -307,8 +307,7 @@ impl CalxVM {
         "legacy VM cannot use run_typed_entry(); construct it with CalxVM::from_program".to_string(),
       ));
     }
-    let function = self.find_func(entry).ok_or_else(|| missing_entry_error(entry))?;
-    validate_runtime_args(function, entry, &args)?;
+    self.validate_entry(entry, &args)?;
     self.run_inner_entry(entry, args)
   }
 
@@ -340,11 +339,14 @@ impl CalxVM {
         "legacy VM cannot use run_traced_entry(); construct it with CalxVM::from_program".to_string(),
       )));
     }
-    let function = self
-      .find_func(entry)
-      .ok_or_else(|| CalxTraceError::Runtime(missing_entry_error(entry)))?;
-    validate_runtime_args(function, entry, &args).map_err(CalxTraceError::Runtime)?;
+    self.validate_entry(entry, &args).map_err(CalxTraceError::Runtime)?;
     self.run_inner_observed(entry, args, Some(observer), limit)
+  }
+
+  fn validate_entry(&self, entry: &str, args: &[Calx]) -> Result<(), CalxError> {
+    let function = self.find_func(entry).ok_or_else(|| missing_entry_error(entry))?;
+    validate_runtime_args(function, entry, args)?;
+    validate_entry_results(function)
   }
 
   fn run_inner(&mut self, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
@@ -1491,12 +1493,12 @@ fn missing_entry_error(entry: &str) -> CalxError {
 }
 
 fn validate_runtime_args(function: &CalxFunc, entry: &str, args: &[Calx]) -> Result<(), CalxError> {
+  let subject = if entry == "main" {
+    "main".to_string()
+  } else {
+    format!("entry `{entry}`")
+  };
   if args.len() != function.params_types.len() {
-    let subject = if entry == "main" {
-      "main".to_string()
-    } else {
-      format!("entry `{entry}`")
-    };
     return Err(CalxError::new_raw(format!(
       "{subject} expected {} argument(s), found {}",
       function.params_types.len(),
@@ -1505,16 +1507,21 @@ fn validate_runtime_args(function: &CalxFunc, entry: &str, args: &[Calx]) -> Res
   }
   for (index, (value, expected)) in args.iter().zip(function.params_types.iter()).enumerate() {
     if value.value_type() != *expected {
-      let subject = if entry == "main" {
-        "main".to_string()
-      } else {
-        format!("entry `{entry}`")
-      };
       return Err(CalxError::new_raw(format!(
         "{subject} argument {index} expected {expected:?}, found {:?}",
         value.value_type()
       )));
     }
+  }
+  Ok(())
+}
+
+fn validate_entry_results(function: &CalxFunc) -> Result<(), CalxError> {
+  if function.ret_types.len() > 1 {
+    return Err(CalxError::new_raw(format!(
+      "typed entry result supports zero or one value, found {}",
+      function.ret_types.len()
+    )));
   }
   Ok(())
 }

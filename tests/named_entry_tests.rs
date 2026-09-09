@@ -247,3 +247,73 @@ fn reload (-> i64)
     .is_some_and(|span| span.source.as_ref() == "named-entry.cirru")));
   Ok(())
 }
+
+#[test]
+fn traced_named_entry_rejects_an_unknown_name_without_events() -> Result<(), String> {
+  let mut vm = strict_vm(
+    r#"fn init (-> i64)
+  const 1
+  return"#,
+    CalxHostBindings::new(),
+  )?;
+  let mut events = Events::default();
+  let error = vm
+    .run_traced_entry("missing", vec![], 8, &mut events)
+    .expect_err("an unknown traced entry must fail before execution");
+  assert!(matches!(
+    error,
+    CalxTraceError::Runtime(ref inner) if inner.message == "typed entry `missing` was not found"
+  ));
+  assert!(events.0.is_empty());
+  Ok(())
+}
+
+#[test]
+fn legacy_vm_rejects_both_named_entry_apis() {
+  let mut vm = CalxVM::new(vec![], vec![], Default::default());
+  let typed = vm
+    .run_typed_entry("main", vec![])
+    .expect_err("legacy execution must reject the typed named API");
+  assert_eq!(
+    typed.message,
+    "legacy VM cannot use run_typed_entry(); construct it with CalxVM::from_program"
+  );
+
+  let mut events = Events::default();
+  let traced = vm
+    .run_traced_entry("main", vec![], 8, &mut events)
+    .expect_err("legacy execution must reject the traced named API");
+  assert!(matches!(
+    traced,
+    CalxTraceError::Runtime(ref inner)
+      if inner.message == "legacy VM cannot use run_traced_entry(); construct it with CalxVM::from_program"
+  ));
+  assert!(events.0.is_empty());
+}
+
+#[test]
+fn named_entry_rejects_multiple_results_before_execution() -> Result<(), String> {
+  let mut vm = strict_vm(
+    r#"fn pair (-> i64 i64)
+  const 1
+  const 2
+  return"#,
+    CalxHostBindings::new(),
+  )?;
+
+  let error = vm
+    .run_typed_entry("pair", vec![])
+    .expect_err("embedding results must reject multiple values before execution");
+  assert_eq!(error.message, "typed entry result supports zero or one value, found 2");
+
+  let mut events = Events::default();
+  let traced = vm
+    .run_traced_entry("pair", vec![], 8, &mut events)
+    .expect_err("traced embedding results must reject multiple values before execution");
+  assert!(matches!(
+    traced,
+    CalxTraceError::Runtime(ref inner) if inner.message == "typed entry result supports zero or one value, found 2"
+  ));
+  assert!(events.0.is_empty());
+  Ok(())
+}
