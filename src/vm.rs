@@ -140,6 +140,17 @@ pub struct CalxVM {
   result: Option<CalxRunResult>,
 }
 
+fn entry_frame(function: &CalxFunc) -> CalxFrame {
+  CalxFrame {
+    name: function.name.clone(),
+    initial_stack_size: 0,
+    instrs: function.instrs.clone(),
+    pointer: 0,
+    locals: vec![],
+    ret_types: function.ret_types.clone(),
+  }
+}
+
 impl std::fmt::Debug for CalxVM {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("CalxVM Instance")
@@ -180,6 +191,10 @@ impl CalxVM {
   }
 
   /// Instantiate a program that has already passed strict validation.
+  ///
+  /// The program may omit `main` when callers use the named-entry APIs. The
+  /// compatibility wrappers [`Self::run_typed`] and [`Self::run_traced`] still
+  /// require an entry named `main` when invoked.
   pub fn from_validated_program(program: ValidatedProgram, mut bindings: CalxHostBindings) -> Result<Self, CalxProgramError> {
     let (functions, globals, imports) = program.into_parts();
     let mut typed_imports = Vec::with_capacity(imports.len());
@@ -202,19 +217,14 @@ impl CalxVM {
       ));
     }
 
-    let main_frame = match functions.iter().find(|function| function.name.as_ref() == "main") {
-      Some(main) => CalxFrame {
-        name: main.name.clone(),
-        initial_stack_size: 0,
-        instrs: main.instrs.clone(),
-        pointer: 0,
-        locals: vec![],
-        ret_types: main.ret_types.clone(),
-      },
-      None => {
-        return Err(CalxProgramError::new("main function is required for strict execution", None, None));
-      }
-    };
+    // Named strict execution selects and resets the exact entry before every
+    // run. Keep `main` as the initial inspection frame when it exists, without
+    // requiring program-level consumers to synthesize one.
+    let main_frame = functions
+      .iter()
+      .find(|function| function.name.as_ref() == "main")
+      .map(entry_frame)
+      .unwrap_or_default();
 
     Ok(Self {
       stack: vec![],
@@ -283,13 +293,23 @@ impl CalxVM {
         "legacy VM cannot use run_typed(); construct it with CalxVM::from_program".to_string(),
       ));
     }
-    let main = self
-      .funcs
-      .iter()
-      .find(|function| function.name.as_ref() == "main")
-      .ok_or_else(|| CalxError::new_raw("main function is required".to_string()))?;
-    validate_runtime_args(main, &args)?;
-    self.run_inner(args)
+    self.run_typed_entry("main", args)
+  }
+
+  /// Execute one explicitly named entry from a validated strict program.
+  ///
+  /// The selected function's exact parameter and result contract remains the
+  /// execution boundary. Missing names never fall back to `main` or another
+  /// function.
+  pub fn run_typed_entry(&mut self, entry: &str, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
+    if !self.strict {
+      return Err(CalxError::new_raw(
+        "legacy VM cannot use run_typed_entry(); construct it with CalxVM::from_program".to_string(),
+      ));
+    }
+    let function = self.find_func(entry).ok_or_else(|| missing_entry_error(entry))?;
+    validate_runtime_args(function, entry, &args)?;
+    self.run_inner_entry(entry, args)
   }
 
   /// Execute with an observer over real VM transitions and a hard event limit.
@@ -299,18 +319,40 @@ impl CalxVM {
   /// still return an explicit void/value result for tracing.
   pub fn run_traced(&mut self, args: Vec<Calx>, limit: usize, observer: &mut dyn VmObserver) -> Result<CalxRunResult, CalxTraceError> {
     if self.strict {
-      let main = self
-        .funcs
-        .iter()
-        .find(|function| function.name.as_ref() == "main")
-        .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("main function is required".to_string())))?;
-      validate_runtime_args(main, &args).map_err(CalxTraceError::Runtime)?;
+      return self.run_traced_entry("main", args, limit, observer);
     }
-    self.run_inner_observed(args, Some(observer), limit)
+    self.run_inner_observed("main", args, Some(observer), limit)
+  }
+
+  /// Trace one explicitly named entry from a validated strict program.
+  ///
+  /// This shares entry selection, argument validation, reset behavior, and the
+  /// interpreter loop with [`Self::run_typed_entry`].
+  pub fn run_traced_entry(
+    &mut self,
+    entry: &str,
+    args: Vec<Calx>,
+    limit: usize,
+    observer: &mut dyn VmObserver,
+  ) -> Result<CalxRunResult, CalxTraceError> {
+    if !self.strict {
+      return Err(CalxTraceError::Runtime(CalxError::new_raw(
+        "legacy VM cannot use run_traced_entry(); construct it with CalxVM::from_program".to_string(),
+      )));
+    }
+    let function = self
+      .find_func(entry)
+      .ok_or_else(|| CalxTraceError::Runtime(missing_entry_error(entry)))?;
+    validate_runtime_args(function, entry, &args).map_err(CalxTraceError::Runtime)?;
+    self.run_inner_observed(entry, args, Some(observer), limit)
   }
 
   fn run_inner(&mut self, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
-    match self.run_inner_observed(args, None, 0) {
+    self.run_inner_entry("main", args)
+  }
+
+  fn run_inner_entry(&mut self, entry: &str, args: Vec<Calx>) -> Result<CalxRunResult, CalxError> {
+    match self.run_inner_observed(entry, args, None, 0) {
       Ok(result) => Ok(result),
       Err(CalxTraceError::Runtime(error)) => Err(error),
       Err(CalxTraceError::LimitExceeded { .. }) => unreachable!("unobserved execution has no trace limit"),
@@ -319,11 +361,12 @@ impl CalxVM {
 
   fn run_inner_observed(
     &mut self,
+    entry: &str,
     args: Vec<Calx>,
     mut observer: Option<&mut dyn VmObserver>,
     limit: usize,
   ) -> Result<CalxRunResult, CalxTraceError> {
-    self.reset_entry_state(args)?;
+    self.reset_entry_state(entry, args)?;
     self.stack.clear();
     let mut step_count = 0;
     loop {
@@ -1020,11 +1063,18 @@ impl CalxVM {
     self.stack.push(x)
   }
 
-  fn reset_entry_state(&mut self, args: Vec<Calx>) -> Result<(), CalxTraceError> {
+  fn reset_entry_state(&mut self, entry: &str, args: Vec<Calx>) -> Result<(), CalxTraceError> {
     let (name, instrs, ret_types, local_count) = self
-      .find_func("main")
-      .map(|main| (main.name.clone(), main.instrs.clone(), main.ret_types.clone(), main.locals.len()))
-      .ok_or_else(|| CalxTraceError::Runtime(CalxError::new_raw("main function is required".to_string())))?;
+      .find_func(entry)
+      .map(|function| {
+        (
+          function.name.clone(),
+          function.instrs.clone(),
+          function.ret_types.clone(),
+          function.locals.len(),
+        )
+      })
+      .ok_or_else(|| CalxTraceError::Runtime(missing_entry_error(entry)))?;
     let required = args
       .len()
       .checked_add(if self.strict { local_count } else { 0 })
@@ -1432,18 +1482,36 @@ fn validate_host_binding(declaration: &CalxImportDecl, binding: &CalxHostBinding
   Ok(())
 }
 
-fn validate_runtime_args(function: &CalxFunc, args: &[Calx]) -> Result<(), CalxError> {
+fn missing_entry_error(entry: &str) -> CalxError {
+  if entry == "main" {
+    CalxError::new_raw("main function is required".to_string())
+  } else {
+    CalxError::new_raw(format!("typed entry `{entry}` was not found"))
+  }
+}
+
+fn validate_runtime_args(function: &CalxFunc, entry: &str, args: &[Calx]) -> Result<(), CalxError> {
   if args.len() != function.params_types.len() {
+    let subject = if entry == "main" {
+      "main".to_string()
+    } else {
+      format!("entry `{entry}`")
+    };
     return Err(CalxError::new_raw(format!(
-      "main expected {} argument(s), found {}",
+      "{subject} expected {} argument(s), found {}",
       function.params_types.len(),
       args.len()
     )));
   }
   for (index, (value, expected)) in args.iter().zip(function.params_types.iter()).enumerate() {
     if value.value_type() != *expected {
+      let subject = if entry == "main" {
+        "main".to_string()
+      } else {
+        format!("entry `{entry}`")
+      };
       return Err(CalxError::new_raw(format!(
-        "main argument {index} expected {expected:?}, found {:?}",
+        "{subject} argument {index} expected {expected:?}, found {:?}",
         value.value_type()
       )));
     }
@@ -1566,13 +1634,13 @@ mod tests {
     let old: Rc<[f64]> = Rc::from([1.0]);
     let replacement: Rc<[f64]> = Rc::from([2.0]);
 
-    vm.reset_entry_state(vec![Calx::F64Buffer(old.clone())]).unwrap();
+    vm.reset_entry_state("main", vec![Calx::F64Buffer(old.clone())]).unwrap();
     assert_eq!(Rc::strong_count(&old), 2);
     vm.top_frame.locals[1] = CalxSlot::Value(Calx::I64(99));
     let previous_pointer = vm.top_frame.locals.as_ptr();
     let previous_capacity = vm.top_frame.locals.capacity();
 
-    vm.reset_entry_state(vec![Calx::F64Buffer(replacement.clone())]).unwrap();
+    vm.reset_entry_state("main", vec![Calx::F64Buffer(replacement.clone())]).unwrap();
     assert_eq!(vm.top_frame.locals.as_ptr(), previous_pointer);
     assert_eq!(vm.top_frame.locals.capacity(), previous_capacity);
     assert_eq!(Rc::strong_count(&old), 1);
@@ -1666,7 +1734,7 @@ fn narrow (i64 -> i64)
     )
     .unwrap();
     let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
-    vm.reset_entry_state(vec![]).unwrap();
+    vm.reset_entry_state("main", vec![]).unwrap();
     let mut widest_capacity = 0;
     for transition in 0..500 {
       while !matches!(vm.top_frame.instrs[vm.top_frame.pointer], CalxInstr::ReturnCall(_)) {
@@ -1705,7 +1773,7 @@ fn narrow (i64 -> i64)
     )
     .unwrap();
     let mut vm = CalxVM::from_program(parsed.into_program().unwrap(), CalxHostBindings::new()).unwrap();
-    vm.reset_entry_state(vec![]).unwrap();
+    vm.reset_entry_state("main", vec![]).unwrap();
     // Bypass validated execution to exercise the runtime guard before any mutation.
     vm.top_frame.pointer = 1;
     let before = vm.top_frame.clone();

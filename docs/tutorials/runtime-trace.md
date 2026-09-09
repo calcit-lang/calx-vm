@@ -23,6 +23,10 @@ function、instruction 与 source span；这能安全检查意外循环，而不
 普通 `calx run`、`CalxVM::run` 与 `CalxVM::run_typed` 不创建 trace event 或复制逐步 stack snapshot；只有显式
 `calx trace` 或 `CalxVM::run_traced` 才承担该诊断开销。
 
+Rust embedding 若要从 multi-entry `ValidatedProgram` 选择实际执行入口，应调用
+`CalxVM::run_traced_entry("entry-name", args, limit, observer)`。这与 CLI 的 `--function` 输出过滤不同：
+named API 会真正从所选函数开始执行，并与 `run_typed_entry` 共享严格签名检查与 reset 语义。
+
 ## English
 
 When `check` or `explain` succeeds but a result or trap remains unexpected, run:
@@ -47,3 +51,9 @@ is rejected before execution.
 
 Normal `calx run`, `CalxVM::run`, and `CalxVM::run_typed` do not construct trace events or copy per-step stack
 snapshots. Only explicit `calx trace` or `CalxVM::run_traced` pays that diagnostic cost.
+
+Rust embeddings that need to select the executed entry from a multi-entry
+`ValidatedProgram` use `CalxVM::run_traced_entry("entry-name", args, limit,
+observer)`. Unlike the CLI `--function` output filter, the named API actually
+starts at the selected function and shares strict signature checks and reset
+semantics with `run_typed_entry`.

@@ -149,6 +149,31 @@ through `ValidatedProgram::try_from_program` or `CalxVM::from_program` before
 execution. See [`docs/program-builder.md`](docs/program-builder.md) for the API,
 source-origin, atomic-error, and compatibility contracts.
 
+### Named strict entries / 严格具名入口
+
+一个 `ValidatedProgram` 可以包含多个独立入口，不需要为 embedding API 合成 `main` dispatcher。
+`CalxVM::run_typed_entry("init", args)` 按准确函数名选择入口，并在执行前校验该函数的完整参数签名；
+`run_traced_entry` 使用相同的选择、校验、reset 和 interpreter loop，同时保留 trace event limit。
+unknown entry 会直接返回结构化错误，不回退到 `main` 或其他函数。每次运行都会清空 operand stack、frames、
+locals 和上一结果；VM globals 继续遵循同一实例内持久化的既有语义。
+
+现有 `run_typed(args)` 与 `run_traced(args, ...)` 保持兼容，分别委托给名为 `main` 的入口。legacy dynamic
+VM 不能调用 named strict API；调用方必须从 `CalxProgram -> ValidatedProgram` 路径构造 strict VM。
+
+A `ValidatedProgram` may expose multiple independent entries without a
+synthetic `main` dispatcher. `CalxVM::run_typed_entry("init", args)` selects an
+exact function and validates its complete parameter signature before
+execution. `run_traced_entry` shares the same selection, validation, reset, and
+interpreter loop while retaining the trace event limit. An unknown entry
+returns a structured error and never falls back to `main` or another function.
+Each run clears the operand stack, frames, locals, and prior result; globals
+retain the existing per-VM persistence semantics.
+
+Existing `run_typed(args)` and `run_traced(args, ...)` remain compatibility
+wrappers for the entry named `main`. Legacy dynamic VMs cannot call the named
+strict APIs; construct a strict VM through the `CalxProgram ->
+ValidatedProgram` path.
+
 ### Syntax Sugar
 
 Code of:
