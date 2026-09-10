@@ -3,7 +3,8 @@
 Tracking: [#61](https://github.com/calcit-lang/calx-vm/issues/61).
 Status: experimental. Published baseline: 0.5.1. The 0.5 series covers the
 strict-domain, locals-reuse, bounded-trace and named-entry slices, not every
-deferred milestone item.
+deferred milestone item. Issue #75 is the next 0.6.0 candidate slice and gives
+Tag its own strict identity instead of aliasing it to Str.
 
 ## 中文
 
@@ -31,10 +32,10 @@ check/explain/trace 复用这些阶段，便于诊断和理解程序。
    `calcit-calx-program/1` compilation unit 与 whole-program eligibility；
    [PR #949](https://github.com/calcit-lang/calcit/pull/949) 已合并首个 checked lifecycle-program
    lowering，复用 calx_vm 0.5.1 的严格具名入口。
-2. Calcit [#950](https://github.com/calcit-lang/calcit/issues/950) 是下一项 compiler-owned 门槛：
-   为不可变整程序 artifact 增加 revision-safe、有界 cache，并在每次请求重新挂载 typed callbacks。
-   它不要求 calx-vm 缓存 VM/live state，也不授权新增 opcode 或 runtime mode。
-3. 下一项 VM strict-core slice 必须来自 #943 的已分类覆盖和具名 consumer。未知类型必须在 lowering
+2. Calcit [#950](https://github.com/calcit-lang/calcit/issues/950) 的 revision-safe、有界 program artifact
+   cache 与 String strict lowering 已完成；第一阶段 compiler foundation 已在 #943 收口。
+3. [#75](https://github.com/calcit-lang/calx-vm/issues/75) 是下一项 VM strict-core slice：把历史上的
+   `:tag -> Str` 修正为独立 Tag，并在发布后由 Calcit 以精确版本采用。未知类型必须在 lowering
    前失败，不能降成 Dynamic；没有消费需求时不预先增加 nominal values、collections 或 buffer write。
 4. [#33](https://github.com/calcit-lang/calx-vm/issues/33) 的版本化 JSON inspect 继续延期，直到
    program tooling 提供具名 consumer 与精确字段契约。
@@ -93,12 +94,11 @@ the F64Buffer dot-product slice (#50–#53), initial standalone performance evid
 tail/entry locals reuse (#59/#60/#66), and exact named strict entries (#70). Keep these accepted phases
 closed. Their finite kernel results do not establish a universal Calcit speedup.
 
-Calcit #943 now provides mechanically checked language coverage, the versioned
-`calcit-calx-program/1` compilation unit, and whole-program eligibility. Calcit PR #949 has merged the
-first checked lifecycle-program lowering slice against calx_vm 0.5.1 exact named entries. The next
-compiler-owned gate is Calcit #950: a bounded, revision-safe cache for immutable whole-program artifacts
-that reattaches current typed callbacks. It does not make calx-vm own VM/live-state caching and does not
-authorize a new opcode or runtime mode.
+Calcit #943 completed mechanically checked language coverage, the versioned
+`calcit-calx-program/1` compilation unit, whole-program eligibility/lowering, a bounded revision-safe
+artifact cache, and strict String lowering. Issue #75 is the next 0.6.0 candidate slice: correct the
+historical `:tag -> Str` alias by giving Tag an independent strict identity, then let Calcit adopt an
+exact published version. This adds no coercion, dispatch, nominal data, collection system, or runtime mode.
 
 Any next VM strict-core slice must follow classified #943 coverage and a named consumer. Unknown types
 fail before lowering instead of becoming Dynamic. Do not pre-emptively add nominal values, collections,

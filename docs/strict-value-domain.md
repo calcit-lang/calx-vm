@@ -2,16 +2,23 @@
 
 Status: implemented and published in 0.5.0. See the
 [release scope and verification](releases/0.5.0.md).
+The Tag/String identity correction is a 0.6.0 release candidate tracked in
+[#75](https://github.com/calcit-lang/calx-vm/issues/75); consumers must wait for
+an exact published version before adopting it.
 Tracking: [#59](https://github.com/calcit-lang/calx-vm/issues/59),
 [#61](https://github.com/calcit-lang/calx-vm/issues/61).
 Source of truth: `src/program.rs`, `src/builder.rs`, `src/validator.rs`,
-`tests/strict_value_domain_tests.rs`, and `tests/f64_buffer_tests.rs`.
+`tests/strict_value_domain_tests.rs`, `tests/tag_value_tests.rs`, and `tests/f64_buffer_tests.rs`.
 
 ## 中文
 
 `ValidatedProgram` 的 strict 保证覆盖整个可执行值域：函数参数/结果、local、global、import、
-host binding、常量以及 block/loop/if 签名。所有这些位置只接受 `Bool`、`I64`、`F64`、`Str` 和
+host binding、常量以及 block/loop/if 签名。所有这些位置只接受 `Bool`、`I64`、`F64`、`Str`、`Tag` 和
 `F64Buffer`。F64Buffer 继续遵守 RFC 0004 的附加限制：不能作为 global 或 constant。
+
+`Str` 与 `Tag` 是两个 concrete type。Cirru `|text` 解析为 `Calx::Str("text")`，`:name`
+解析为 `Calx::Tag("name")`；Display 分别保留 `|` 与 `:` 前缀。相同文本不能跨类型满足函数、local、
+global、control 或 typed host boundary。Tag 暂不增加相等、排序、哈希、dispatch 或隐式 String 转换。
 
 `List` 只有外层类型标签，没有元素类型合同。空 List 或碰巧同质的 List 也不能成为静态证明，
 所以 strict 直接拒绝所有 List，而不递归扫描元素。`Nil`、`Link` 与 Dynamic 同样不准入。
@@ -34,6 +41,10 @@ CalxProgram 的 global 检查与 builder 拒绝。类型准入和特定指令限
 - 需要异质数据的现有程序显式保留在 `CalxVM::new` legacy 路径，或在宿主先验证/转换再进入 strict。
 - Calcit 现有 scalar/F64Buffer lowering 已限定此子集；本次不修改其 ABI edition 或依赖版本。
 
+从 0.5.1 迁移到候选 0.6.0：历史上的 `:name -> Calx::Str("name")` 别名已移除；声明 `tag`
+并传递 `Calx::Tag`。依赖旧的无前缀 String Display 输出时，改为显式处理 value；新的 Display
+使用 `|text`，确保与 `:tag` 输出可区分。该行为在正式发布前仅是 main 上的候选契约。
+
 CLI 当前按 module declarations 选择执行模式；没有声明的旧程序仍可能进入 legacy。该兼容行为
 不会把 legacy 验证当作 strict 证明。编译器直接使用
 `ProgramBuilder → CalxProgram → ValidatedProgram → run_typed`。
@@ -44,8 +55,13 @@ operand stack 或提高吞吐。未来优化须保留公开输入守卫、source
 ## English
 
 Strict admission covers parameters/results, locals, globals, imports, host bindings,
-constants, and block/loop/if signatures. It admits Bool, I64, F64, Str, and F64Buffer;
+constants, and block/loop/if signatures. It admits Bool, I64, F64, Str, Tag, and F64Buffer;
 RFC 0004 still excludes F64Buffer globals and constants.
+
+Str and Tag are distinct concrete types. Cirru `|text` parses as `Calx::Str("text")`, while
+`:name` parses as `Calx::Tag("name")`; Display retains `|` and `:` respectively. Equal text
+does not satisfy the other type at function, local, global, control, or typed host boundaries.
+This slice adds no Tag equality, ordering, hashing, dispatch, or implicit String conversion.
 
 List has no element-type contract. Neither an empty list nor an accidentally homogeneous
 runtime list supplies static proof, so all Lists are rejected without recursively inspecting
@@ -67,6 +83,12 @@ batches, construct F64Buffer explicitly at the host entry/import boundary. Exist
 programs use the explicit CalxVM::new legacy path or validate/convert at the host boundary.
 Current Calcit scalar/F64Buffer lowering already uses the accepted subset; its ABI
 edition does not change with this contract; consumer dependency upgrades follow publication.
+
+Migration from 0.5.1 to the 0.6.0 candidate removes the historical
+`:name -> Calx::Str("name")` alias. Declare `tag` and pass `Calx::Tag` instead. Code that
+depended on prefix-free String Display should handle the value explicitly; Display now emits
+`|text` so it remains distinguishable from `:tag`. This is a main-branch candidate contract
+until an exact release is published.
 
 The CLI still selects its profile from module declarations, so declaration-free legacy programs
 may use the compatibility path. Compilers use ProgramBuilder → CalxProgram → ValidatedProgram

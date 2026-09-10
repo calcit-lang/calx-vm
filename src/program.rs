@@ -546,6 +546,6 @@ pub(crate) fn validate_strict_type(
       function,
       span,
     )),
-    CalxType::Bool | CalxType::I64 | CalxType::F64 | CalxType::F64Buffer | CalxType::Str => Ok(()),
+    CalxType::Bool | CalxType::I64 | CalxType::F64 | CalxType::F64Buffer | CalxType::Str | CalxType::Tag => Ok(()),
   }
 }
