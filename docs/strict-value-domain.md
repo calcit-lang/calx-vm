@@ -1,7 +1,7 @@
 # Strict value domain / strict 值域
 
-Status: implemented; included in the 0.5.0 release candidate. See
-[release scope and availability](releases/0.5.0.md) before upgrading a consumer.
+Status: implemented and published in 0.5.0. See the
+[release scope and verification](releases/0.5.0.md).
 Tracking: [#59](https://github.com/calcit-lang/calx-vm/issues/59),
 [#61](https://github.com/calcit-lang/calx-vm/issues/61).
 Source of truth: `src/program.rs`, `src/builder.rs`, `src/validator.rs`,

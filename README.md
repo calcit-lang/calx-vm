@@ -16,8 +16,7 @@ compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
 The 0.5.0 strict contract also rejects body Nil constants, all List
 values, and Nil/List/Link control signatures, including dead code. This
 tightens 0.4.0 acceptance; use the [strict value contract and migration guide](docs/strict-value-domain.md).
-This checkout prepares 0.5.1; consumers must confirm the version is published
-before upgrading. It adds explicit named strict-entry execution without changing
+Version 0.5.1 is published. It adds explicit named strict-entry execution without changing
 the 0.5 strict value contract. See [0.5.1 release scope](docs/releases/0.5.1.md).
 The next work is tracked by [#61](https://github.com/calcit-lang/calx-vm/issues/61)
 and the [roadmap](docs/roadmap.md).
@@ -38,8 +37,8 @@ published crate versions.
 精确 host signatures、显式 void 结果和不借用 nil 的 Uninitialized slot state；同时
 加入 F64 comparisons，以及 Calcit translator 实验需要的 source-aware `ProgramBuilder`
 API。0.5.0 收紧 strict 准入并复用尾调 frame 的 locals；0.5.1 在不改变该值域合同的前提下增加
-`run_typed_entry` 与 `run_traced_entry`，允许 validated program 按准确名称执行入口。当前 checkout
-正在准备发布，消费者应确认 crates.io 可用后再使用精确版本。范围见[0.5.1 说明](docs/releases/0.5.1.md)。
+`run_typed_entry` 与 `run_traced_entry`，允许 validated program 按准确名称执行入口。0.5.1 已发布，
+消费者应固定使用精确版本。范围见[0.5.1 说明](docs/releases/0.5.1.md)。
 
 #### 0.4：严格 F64Buffer
 
@@ -65,7 +64,6 @@ the source path with `calx check demos/f64-buffer.cirru`; runtime buffers enter
 through typed entry arguments or host imports.
 
 ```bash
-# After 0.5.1 is published:
 cargo install calx_vm --version 0.5.1
 calx hello.cirru
 calx run hello.cirru

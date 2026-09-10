@@ -1,9 +1,9 @@
 # Calx compilation roadmap / Calx 编译目标路线图
 
 Tracking: [#61](https://github.com/calcit-lang/calx-vm/issues/61).
-Status: experimental. Published baseline: 0.4.0. Next work uses the existing
-0.5 compilation milestone. The 0.5.0 release candidate covers the strict-domain,
-tail-call reuse and bounded-trace slice, not every deferred milestone item.
+Status: experimental. Published baseline: 0.5.1. The 0.5 series covers the
+strict-domain, locals-reuse, bounded-trace and named-entry slices, not every
+deferred milestone item.
 
 ## 中文
 
@@ -19,20 +19,25 @@ check/explain/trace 复用这些阶段，便于诊断和理解程序。
 - #36/#38：Calcit closed-call-graph eligibility、scalar lowering、golden 与 differential corpus；
 - #50–#53：独立 F64Buffer、checked index/bounds、ABI /2 和真实 dot-product 编译；
 - #39：第一阶段 standalone 性能证据、公平 cached Calcit 基线、revision-safe artifact cache 与 copy-boundary 成本；
-- #26/#32：check/explain 与有界 trace。
+- #26/#32/#34/#35：check/explain、有界 trace、Wasm 静态交集映射与可执行教程；
+- #59/#60/#66：strict 值域封闭、tail-call 与 entry locals 容量复用；
+- #70：严格具名入口，供整程序 lowering 按准确 lifecycle entry 执行。
 
 这些已验收阶段保持关闭。首轮报告证明有限 kernel 可获益，并不代表任意 Calcit 程序都适合 Calx。
 
 接下来按依赖推进：
 
-1. [#59](https://github.com/calcit-lang/calx-vm/issues/59)：strict 值域封闭已合并，拒绝没有元素证明的
-   List、Nil 常量与控制签名漏洞。规则见 [strict 值域与迁移](strict-value-domain.md)。
-2. [#60](https://github.com/calcit-lang/calx-vm/issues/60)：ReturnCall locals 复用与布局/引用/trap/trace
-   回归已合并；[standalone 对照](https://github.com/calcit-lang/calcit-calx-bench/pull/10)也已合并。
-   当前准备 [0.5.0 发布](releases/0.5.0.md)，随后由 Calcit/harness 消费正式版本并验证。
-   本机微基准不代替端到端发布消费链，#60 继续开放。
-3. 按真实 consumer 需求选择第二种 buffer 访存 workload；扩展 nominal/generic lowering 前先完成
-   Calcit #842/#843/#797 的类型证明与 call contract。未知类型必须在 lowering 前失败，不能降成 Dynamic。
+1. Calcit [#943](https://github.com/calcit-lang/calcit/issues/943) 已建立可机械检查的语言覆盖、
+   `calcit-calx-program/1` compilation unit 与 whole-program eligibility；
+   [PR #949](https://github.com/calcit-lang/calcit/pull/949) 已合并首个 checked lifecycle-program
+   lowering，复用 calx_vm 0.5.1 的严格具名入口。
+2. Calcit [#950](https://github.com/calcit-lang/calcit/issues/950) 是下一项 compiler-owned 门槛：
+   为不可变整程序 artifact 增加 revision-safe、有界 cache，并在每次请求重新挂载 typed callbacks。
+   它不要求 calx-vm 缓存 VM/live state，也不授权新增 opcode 或 runtime mode。
+3. 下一项 VM strict-core slice 必须来自 #943 的已分类覆盖和具名 consumer。未知类型必须在 lowering
+   前失败，不能降成 Dynamic；没有消费需求时不预先增加 nominal values、collections 或 buffer write。
+4. [#33](https://github.com/calcit-lang/calx-vm/issues/33) 的版本化 JSON inspect 继续延期，直到
+   program tooling 提供具名 consumer 与精确字段契约。
 
 职责与边界：
 
@@ -47,7 +52,7 @@ check/explain/trace 复用这些阶段，便于诊断和理解程序。
 怎样保留错误语义；bounds/conversion/host-result 守卫不可仅凭速度目标删除。
 不把机器 crossover 固定成 correctness gate，也不在 VM trap 后自动重跑 Calcit。
 
-后续任务 #33 JSON inspect、#34 Wasm mapping、#35 教程继续开放为非阻塞后续；已有教学工具继续维护。
+本轮确认 #34 Wasm mapping 与 #35 教程已经完成；已有教学工具继续维护。#33 JSON inspect 仍是非阻塞延期项。
 本轮编译实验不加入 Calcit 0.13.78 release gate。版本发布必须有明确已发布依赖和对应验证，
 实验 revision 仅作为复现证据，不冒充正式版本。
 
@@ -84,15 +89,21 @@ traps. check/explain/trace reuse those stages.
 Completed foundations include semantic/input-safety tests, typed validation and source diagnostics
 (#22/#24/#29/#30), strict boundaries and builders (#31/#37/#45), scalar compilation (#36/#38),
 the F64Buffer dot-product slice (#50–#53), initial standalone performance evidence and artifact caching
-(#39), and check/explain/trace (#26/#32). Keep these accepted phases closed. Their finite kernel results
-do not establish a universal Calcit speedup.
+(#39), check/explain/bounded trace/Wasm mapping/tutorials (#26/#32/#34/#35), strict value closure and
+tail/entry locals reuse (#59/#60/#66), and exact named strict entries (#70). Keep these accepted phases
+closed. Their finite kernel results do not establish a universal Calcit speedup.
 
-Issue #59's closed strict value domain and #60's frame-local capacity reuse are merged,
-including layout/ownership/trap/trace tests. Standalone paired evidence is merged too.
-Prepare the 0.5.0 release, then adopt published versions in Calcit/harness and validate consumers;
-keep #60 open until that chain is verified. This release does not complete all milestone candidates.
-A later workload must have a named consumer. Nominal/generic lowering depends
-on Calcit #842/#843/#797 proof/call contracts; unknown types fail before lowering instead of becoming Dynamic.
+Calcit #943 now provides mechanically checked language coverage, the versioned
+`calcit-calx-program/1` compilation unit, and whole-program eligibility. Calcit PR #949 has merged the
+first checked lifecycle-program lowering slice against calx_vm 0.5.1 exact named entries. The next
+compiler-owned gate is Calcit #950: a bounded, revision-safe cache for immutable whole-program artifacts
+that reattaches current typed callbacks. It does not make calx-vm own VM/live-state caching and does not
+authorize a new opcode or runtime mode.
+
+Any next VM strict-core slice must follow classified #943 coverage and a named consumer. Unknown types
+fail before lowering instead of becoming Dynamic. Do not pre-emptively add nominal values, collections,
+or buffer writes when no consumer requires them. Versioned JSON inspect remains deferred in #33 until
+program tooling names a consumer and an exact field contract.
 
 The VM owns execution mechanisms and correctness, Calcit owns compiler/ABI/cache semantics, and
 calcit-calx-bench owns measurements and raw evidence. Ecosystem discovery lives in the external Wiki;
@@ -100,8 +111,8 @@ repository documents/tests remain the contract sources. The calcit-calx module r
 
 No new VM pool, automatic offload, JIT/SIMD, general collection system, replacement type system, or
 scheduler is planned. Preserve bounds/conversion/host-result guards and no Calcit retry after traps.
-Never turn machine-specific crossover measurements into correctness gates. #33/#34/#35 remain open,
-nonblocking follow-ups. This experimental work does not block Calcit 0.13.78.
+Never turn machine-specific crossover measurements into correctness gates. #34 and #35 are complete;
+issue #33 remains a deferred, nonblocking follow-up. This experimental work does not block Calcit 0.13.78.
 
 Deferred candidates from the former M4 remain discoverable: minimal linear memory
 (64 KiB pages, checked load/store, size/grow), select/br_table/read-only tables/call_indirect,
