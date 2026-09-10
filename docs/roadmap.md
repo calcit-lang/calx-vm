@@ -52,7 +52,7 @@ check/explain/trace 复用这些阶段，便于诊断和理解程序。
 怎样保留错误语义；bounds/conversion/host-result 守卫不可仅凭速度目标删除。
 不把机器 crossover 固定成 correctness gate，也不在 VM trap 后自动重跑 Calcit。
 
-#34 Wasm mapping 与 #35 教程已经完成；已有教学工具继续维护。#33 JSON inspect 仍是非阻塞延期项。
+本轮确认 #34 Wasm mapping 与 #35 教程已经完成；已有教学工具继续维护。#33 JSON inspect 仍是非阻塞延期项。
 本轮编译实验不加入 Calcit 0.13.78 release gate。版本发布必须有明确已发布依赖和对应验证，
 实验 revision 仅作为复现证据，不冒充正式版本。
 
@@ -112,7 +112,7 @@ repository documents/tests remain the contract sources. The calcit-calx module r
 No new VM pool, automatic offload, JIT/SIMD, general collection system, replacement type system, or
 scheduler is planned. Preserve bounds/conversion/host-result guards and no Calcit retry after traps.
 Never turn machine-specific crossover measurements into correctness gates. #34 and #35 are complete;
-#33 remains a deferred, nonblocking follow-up. This experimental work does not block Calcit 0.13.78.
+issue #33 remains a deferred, nonblocking follow-up. This experimental work does not block Calcit 0.13.78.
 
 Deferred candidates from the former M4 remain discoverable: minimal linear memory
 (64 KiB pages, checked load/store, size/grow), select/br_table/read-only tables/call_indirect,
