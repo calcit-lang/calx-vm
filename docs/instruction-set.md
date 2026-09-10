@@ -1,6 +1,6 @@
 # Calx 指令语义与实现状态
 
-> 适用版本：0.3 / 0.5 开发分支
+> 适用版本：0.3 / 0.5，以及未发布的 0.6.0 release candidate
 > 状态：实验性语义基线
 
 本文记录当前可由 Cirru 源码使用的 Calx 指令、运行语义及与 WebAssembly 的主要差异。它是测试和后续验证器的输入，不承诺二进制兼容或长期 API 稳定。
@@ -16,8 +16,10 @@
 
 ## 值与真假规则
 
-运行时 enum 仍包含 legacy adapter 所需的 `nil`、`str` 与 `list`；strict typed program
-只允许 `bool`、`i64`、`f64` 与不可变 `f64-buffer`，void 由 `CalxRunResult::Void` 表示。
+运行时 enum 仍包含 legacy adapter 所需的 `nil` 与 `list`；`str` 和 `tag` 是彼此独立的 concrete
+value。strict typed program 只允许 `bool`、`i64`、`f64`、`str`、`tag` 与不可变
+`f64-buffer`，void 由 `CalxRunResult::Void` 表示。`|text` / `:name` 的 parser 与 Display 前缀保持
+一致，不进行 Tag/String coercion。
 `Dynamic`、Nil/List/Link boundary 与 Nil/List constant 均在 strict validation 中拒绝；
 `link` 只有 legacy 类型/指令占位，没有运行时值。
 
@@ -33,7 +35,7 @@ Calx VM 控制条件和 `assert` 调用 `Calx::truthy`；下表也覆盖 legacy 
 | 值 | 结果 |
 | --- | --- |
 | `nil`、`false`、整数 `0`、浮点 `0.0` | false |
-| `true`、非零整数、非零浮点、字符串、列表 | true |
+| `true`、非零整数、非零浮点、字符串、tag、列表 | true |
 | `f64-buffer` | 拒绝；不能作为控制条件或 `assert` 输入 |
 
 这是 Calx VM 扩展，不是 WebAssembly 条件语义。Calcit→Calx eligibility 另外要求

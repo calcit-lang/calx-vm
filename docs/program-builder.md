@@ -57,6 +57,9 @@ let validated = ValidatedProgram::try_from_program(program)?;
   unreleased strict 规则也拒绝无元素类型 List 与 Nil/List 常量；控制签名使用相同类型准入，
   错误不会提交部分 body。兼容变化见 [strict 值域](strict-value-domain.md)。
 - builder API 没有 `Dynamic` 类型入口，不会为缺失的类型或初始值进行隐式推断。
+- `CalxType::Tag` / `Calx::Tag` 与 `CalxType::Str` / `Calx::Str` 是独立合同；builder
+  不做 Tag/String coercion，initializer、local、调用或 import 不匹配会由 builder/program validator
+  明确拒绝。
 
 `CalxBuildError` 使用稳定诊断 code `CALX_PROGRAM_BUILD` 和 `build` phase。失败操作不会提交部分
 声明或半个 structured control region，因此 translator 可以把错误直接映射成整个 closed call
@@ -123,10 +126,15 @@ source diagnostic。
 
 ## 兼容性说明
 
-这是新增的 Rust source API，不改变现有 Cirru parser、CLI 格式或 legacy dynamic embedding。
+这是新增的 Rust source API；Cirru token 与 CLI 格式保持不变，legacy dynamic embedding 也仍是
+独立兼容路径。但 0.6 candidate 会改变既有 token 的解析值语义：`:name` 不再产生 Str，而是 Tag。
 `CalxProgram` 与 builder handle 都不是稳定的序列化格式；0.3 开发期间允许在 semver minor 版本中
 继续收紧方法和诊断字段。需要长期保存的编译产物应保存 Calcit source/typed snapshot 与 toolchain
 版本，并在加载时重新构造、验证和 lowering。
+
+0.6 release candidate 在不新增 opcode 的前提下增加 `CalxType::Tag` 与 `Calx::Tag`。新 type variant
+追加在已有 encoded discriminant 之后；但 `:name` 从旧有 Str alias 改为真正 Tag，仍属于 pre-1.0
+minor compatibility boundary。正式 consumer 应等待发布版本并固定精确版本。
 
 对 Calcit → Calx 首批子集，建议严格遵循：
 

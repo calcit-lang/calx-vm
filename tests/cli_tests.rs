@@ -147,6 +147,18 @@ fn typed_tag_run_keeps_tag_identity_in_cli_output() {
 }
 
 #[test]
+fn cli_display_keeps_equal_tag_and_string_text_unambiguous() {
+  let source = fixture("tests/fixtures/tag-str-display.cirru");
+  let output = calx(&[source.to_str().expect("UTF-8 fixture path")]);
+  let stdout = output_text(&output.stdout);
+
+  assert!(output.status.success(), "{}", output_text(&output.stderr));
+  let lines: Vec<&str> = stdout.lines().collect();
+  assert!(lines.contains(&"|same"), "{stdout}");
+  assert!(lines.contains(&":same"), "{stdout}");
+}
+
+#[test]
 fn typed_modules_use_the_strict_check_and_runtime_path() {
   let source = fixture("tests/fixtures/typed-module.cirru");
   let checked = calx(&["check", source.to_str().expect("UTF-8 fixture path")]);

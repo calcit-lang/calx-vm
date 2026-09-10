@@ -122,6 +122,7 @@ fn concrete_entry_values_still_validate_and_execute() {
     ("i64", Calx::I64(42)),
     ("f64", Calx::F64(1.5)),
     ("str", Calx::Str(Rc::from("typed"))),
+    ("tag", Calx::Tag(Rc::from("typed"))),
     ("f64-buffer", Calx::f64_buffer_copy_from_slice(&[1.0, 2.0])),
   ] {
     let source = format!("fn main (($x {name}) -> {name})\n  local.get $x");
