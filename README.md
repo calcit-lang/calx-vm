@@ -18,6 +18,9 @@ values, and Nil/List/Link control signatures, including dead code. This
 tightens 0.4.0 acceptance; use the [strict value contract and migration guide](docs/strict-value-domain.md).
 Version 0.5.1 is published. It adds explicit named strict-entry execution without changing
 the 0.5 strict value contract. See [0.5.1 release scope](docs/releases/0.5.1.md).
+The next 0.6.0 candidate distinguishes `Tag` from `Str` throughout strict programs; see
+[the candidate scope](docs/releases/0.6.0.md). Calcit consumers must wait for an exact
+published version before adopting this behavior.
 The next work is tracked by [#61](https://github.com/calcit-lang/calx-vm/issues/61)
 and the [roadmap](docs/roadmap.md).
 
@@ -39,6 +42,8 @@ published crate versions.
 API。0.5.0 收紧 strict 准入并复用尾调 frame 的 locals；0.5.1 在不改变该值域合同的前提下增加
 `run_typed_entry` 与 `run_traced_entry`，允许 validated program 按准确名称执行入口。0.5.1 已发布，
 消费者应固定使用精确版本。范围见[0.5.1 说明](docs/releases/0.5.1.md)。
+下一候选版本 0.6.0 会在 strict program 全链路区分 `Tag` 与 `Str`；正式发布前，下游不得用 path
+override 代替精确发布版本。候选范围见 [0.6.0 说明](docs/releases/0.6.0.md)。
 
 #### 0.4：严格 F64Buffer
 

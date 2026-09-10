@@ -20,6 +20,8 @@ pub enum CalxType {
   List,
   /// TODO
   Link,
+  /// immutable tag value, distinct from Str
+  Tag,
 }
 
 impl FromStr for CalxType {
@@ -35,6 +37,7 @@ impl FromStr for CalxType {
       "str" => Ok(CalxType::Str),
       "list" => Ok(CalxType::List),
       "link" => Ok(CalxType::Link),
+      "tag" => Ok(CalxType::Tag),
       _ => Err(format!("unknown type: {s}")),
     }
   }

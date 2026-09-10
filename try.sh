@@ -29,7 +29,7 @@ check_demo() {
   fi
 }
 
-run_demo demos/hello.cirru "hello world"
+run_demo demos/hello.cirru "|hello world"
 run_demo demos/sum.cirru $'\n500000500000\n'
 run_demo demos/assert.cirru ": Nil"
 run_demo demos/nested.cirru $'\n7\n'
@@ -39,3 +39,4 @@ run_demo demos/fibonacci.cirru $'\n5702887\n'
 run_demo demos/if.cirru $'\n11\n3\n20\n3\n'
 run_demo demos/fibo-if.cirru $'\n5702887\n'
 check_demo demos/f64-buffer.cirru "[calx check] ok: 1 function(s), 7 syntax instruction(s), strict typed"
+run_demo demos/tag.cirru 'Value(Tag("ready"))'

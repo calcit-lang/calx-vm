@@ -132,7 +132,18 @@ fn legacy_run_invocation_remains_supported() {
   let stdout = output_text(&output.stdout);
 
   assert!(output.status.success(), "{}", output_text(&output.stderr));
-  assert!(stdout.lines().any(|line| line == "hello world"), "{stdout}");
+  assert!(stdout.lines().any(|line| line == "|hello world"), "{stdout}");
+}
+
+#[test]
+fn typed_tag_run_keeps_tag_identity_in_cli_output() {
+  let source = fixture("demos/tag.cirru");
+  let output = calx(&[source.to_str().expect("UTF-8 fixture path")]);
+  let stdout = output_text(&output.stdout);
+
+  assert!(output.status.success(), "{}", output_text(&output.stderr));
+  assert!(stdout.contains("Value(Tag(\"ready\"))"), "{stdout}");
+  assert!(!stdout.contains("Value(Str(\"ready\"))"), "{stdout}");
 }
 
 #[test]

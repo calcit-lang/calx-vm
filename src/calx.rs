@@ -20,8 +20,10 @@ pub enum Calx {
   F64(f64),
   /// Immutable, shared, homogeneous f64 storage.
   F64Buffer(Rc<[f64]>),
-  // TODO
+  /// Immutable string value.
   Str(Rc<str>),
+  /// Immutable tag value, distinct from a string with the same text.
+  Tag(Rc<str>),
   /// TODO
   List(Vec<Calx>),
   // to simultate linked structures
@@ -41,8 +43,10 @@ impl FromStr for Calx {
         let Some(s0) = s.chars().next() else {
           return Err(String::from("unknown empty string"));
         };
-        if s0 == '|' || s0 == ':' {
+        if s0 == '|' {
           Ok(Calx::Str(Rc::from(&s[1..s.len()])))
+        } else if s0 == ':' {
+          Ok(Calx::Tag(Rc::from(&s[1..s.len()])))
         } else if FLOAT_PATTERN.is_match(s) {
           match s.parse::<f64>() {
             Ok(u) => Ok(Calx::F64(u)),
@@ -95,6 +99,7 @@ impl Calx {
       Calx::F64(_) => CalxType::F64,
       Calx::F64Buffer(_) => CalxType::F64Buffer,
       Calx::Str(_) => CalxType::Str,
+      Calx::Tag(_) => CalxType::Tag,
       Calx::List(_) => CalxType::List,
     }
   }
@@ -112,6 +117,7 @@ impl Calx {
       Calx::F64(n) => *n != 0.0,
       Calx::F64Buffer(_) => true,
       Calx::Str(_) => true,
+      Calx::Tag(_) => true,
       Calx::List(_) => true,
       // Calx::Link(_, _, _) => true,
     }
@@ -126,7 +132,8 @@ impl fmt::Display for Calx {
       Calx::I64(n) => f.write_str(&n.to_string()),
       Calx::F64(n) => f.write_str(&n.to_string()),
       Calx::F64Buffer(values) => write!(f, "#<f64-buffer len={}>", values.len()),
-      Calx::Str(s) => f.write_str(s),
+      Calx::Str(s) => write!(f, "|{s}"),
+      Calx::Tag(tag) => write!(f, ":{tag}"),
       Calx::List(xs) => {
         f.write_str("(")?;
         let mut at_head = true;
@@ -154,6 +161,7 @@ impl fmt::Debug for Calx {
       Self::F64(value) => f.debug_tuple("F64").field(value).finish(),
       Self::F64Buffer(values) => f.debug_struct("F64Buffer").field("len", &values.len()).finish(),
       Self::Str(value) => f.debug_tuple("Str").field(value).finish(),
+      Self::Tag(value) => f.debug_tuple("Tag").field(value).finish(),
       Self::List(values) => f.debug_tuple("List").field(values).finish(),
     }
   }
