@@ -100,7 +100,7 @@ artifact cache, and strict String lowering. Issue #75 is the next 0.6.0 candidat
 historical `:tag -> Str` alias by giving Tag an independent strict identity, then let Calcit adopt an
 exact published version. This adds no coercion, dispatch, nominal data, collection system, or runtime mode.
 
-Any next VM strict-core slice must follow classified #943 coverage and a named consumer. Unknown types
+Any next VM strict-core slice must follow classified coverage from Calcit #943 and a named consumer. Unknown types
 fail before lowering instead of becoming Dynamic. Do not pre-emptively add nominal values, collections,
 or buffer writes when no consumer requires them. Versioned JSON inspect remains deferred in #33 until
 program tooling names a consumer and an exact field contract.

@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use calx_vm::{
-  parse_program, Calx, CalxHostBinding, CalxHostBindings, CalxMutability, CalxRunResult, CalxType, CalxVM, FunctionBuilder,
-  ProgramBuilder,
+  parse_program, Calx, CalxBuildErrorKind, CalxHostBinding, CalxHostBindings, CalxMutability, CalxRunResult, CalxType, CalxVM,
+  FunctionBuilder, ProgramBuilder,
 };
 
 fn echo_tag(values: &[Calx]) -> Result<Calx, calx_vm::CalxError> {
@@ -25,12 +25,14 @@ fn parses_and_renders_tag_and_string_without_aliasing() -> Result<(), String> {
   assert_eq!(tag, Calx::Tag(Rc::from("ready")));
   assert_eq!(string.value_type(), CalxType::Str);
   assert_eq!(tag.value_type(), CalxType::Tag);
+  assert_ne!(string, tag);
   assert_eq!(string.to_string(), "|ready");
   assert_eq!(tag.to_string(), ":ready");
   assert_eq!(string.to_string().parse::<Calx>()?, string);
   assert_eq!(tag.to_string().parse::<Calx>()?, tag);
   assert_eq!(format!("{string:?}"), "Str(\"ready\")");
   assert_eq!(format!("{tag:?}"), "Tag(\"ready\")");
+  assert_eq!("str".parse::<CalxType>()?, CalxType::Str);
   assert_eq!("tag".parse::<CalxType>()?, CalxType::Tag);
   Ok(())
 }
@@ -125,6 +127,14 @@ fn main (($input tag) -> tag)
     CalxRunResult::Value(Calx::Tag(Rc::from("ok")))
   );
 
+  let mut wrong_signature = CalxHostBindings::new();
+  wrong_signature.insert(
+    Rc::from("echo-tag"),
+    CalxHostBinding::value(vec![CalxType::Str], CalxType::Tag, echo_tag).map_err(|error| error.to_string())?,
+  );
+  let error = CalxVM::from_program(program.clone(), wrong_signature).expect_err("Str and Tag host signatures must not unify");
+  assert!(error.message.contains("signature mismatch"), "{error}");
+
   let mut wrong_bindings = CalxHostBindings::new();
   wrong_bindings.insert(
     Rc::from("echo-tag"),
@@ -140,6 +150,13 @@ fn main (($input tag) -> tag)
 
 #[test]
 fn builder_admits_tag_declarations_constants_and_control() -> Result<(), String> {
+  let mut invalid = ProgramBuilder::new();
+  let error = invalid
+    .global("$mode", CalxType::Str, CalxMutability::Const, Calx::Tag(Rc::from("dev")))
+    .expect_err("a Tag initializer cannot satisfy a String global");
+  assert_eq!(error.kind, CalxBuildErrorKind::InvalidInitializer);
+  assert!(error.message.contains("expected Str, found Tag"), "{error}");
+
   let mut builder = ProgramBuilder::new();
   let fallback = builder
     .global("$fallback", CalxType::Tag, CalxMutability::Const, Calx::Tag(Rc::from("cold")))
