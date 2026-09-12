@@ -16,17 +16,16 @@ compatibility path. See [RFC 0002](RFCs/0002-typed-boundaries.md).
 The 0.5.0 strict contract also rejects body Nil constants, all List
 values, and Nil/List/Link control signatures, including dead code. This
 tightens 0.4.0 acceptance; use the [strict value contract and migration guide](docs/strict-value-domain.md).
-Version 0.5.1 is published. It adds explicit named strict-entry execution without changing
-the 0.5 strict value contract. See [0.5.1 release scope](docs/releases/0.5.1.md).
-The next 0.6.0 candidate distinguishes `Tag` from `Str` throughout strict programs; see
-[the candidate scope](docs/releases/0.6.0.md). Calcit consumers must wait for an exact
-published version before adopting this behavior.
+Version 0.6.0 is the current release candidate. It gives `:name` an independent `Tag`
+strict identity instead of aliasing it to `Str` text, without adding coercion, collections,
+or runtime modes. See [0.6.0 release scope](docs/releases/0.6.0.md). Calcit consumers adopt
+the exact published version only after release verification.
 The next work is tracked by [#61](https://github.com/calcit-lang/calx-vm/issues/61)
 and the [roadmap](docs/roadmap.md).
 
 ### Usages
 
-Version 0.5.1 retains the end-to-end strict path introduced before this release:
+Version 0.6.0 retains the end-to-end strict path introduced before this release:
 `CalxProgram -> ValidatedProgram -> CalxVM::from_program -> run_typed`.
 Typed modules use declared locals/globals, stable indexed imports, exact host
 signatures, explicit void results, and non-nil Uninitialized slot state. The path
@@ -42,8 +41,9 @@ published crate versions.
 API。0.5.0 收紧 strict 准入并复用尾调 frame 的 locals；0.5.1 在不改变该值域合同的前提下增加
 `run_typed_entry` 与 `run_traced_entry`，允许 validated program 按准确名称执行入口。0.5.1 已发布，
 消费者应固定使用精确版本。范围见[0.5.1 说明](docs/releases/0.5.1.md)。
-下一候选版本 0.6.0 会在 strict program 全链路区分 `Tag` 与 `Str`；正式发布前，下游不得用 path
-override 代替精确发布版本。候选范围见 [0.6.0 说明](docs/releases/0.6.0.md)。
+0.6.0 是当前 release candidate：在 strict program 全链路区分 `Tag` 与 `Str`，不再把 `:name`
+别名成字符串；正式发布前，下游不得用 path override 代替精确发布版本。范围见
+[0.6.0 说明](docs/releases/0.6.0.md)。
 
 #### 0.4：严格 F64Buffer
 
@@ -69,7 +69,7 @@ the source path with `calx check demos/f64-buffer.cirru`; runtime buffers enter
 through typed entry arguments or host imports.
 
 ```bash
-cargo install calx_vm --version 0.5.1
+cargo install calx_vm --version 0.6.0
 calx hello.cirru
 calx run hello.cirru
 calx check hello.cirru
